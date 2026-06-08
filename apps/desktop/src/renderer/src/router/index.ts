@@ -41,7 +41,8 @@ const router = createRouter({
     {
       path: '/settings',
       name: 'settings',
-      component: () => import('@renderer/views/SettingsView.vue')
+      component: () => import('@renderer/views/SettingsView.vue'),
+      meta: { fullscreen: true }
     }
   ]
 })
