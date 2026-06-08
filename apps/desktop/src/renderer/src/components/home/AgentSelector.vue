@@ -1,15 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useI18n } from 'vue-i18n'
 
-const { t } = useI18n()
-const selected = ref('custom-high')
+const selected = ref('claude-code')
 
 const options = [
-  { value: 'custom-high', label: `${t('composer.agent')} ${t('composer.high')}` },
   { value: 'claude-code', label: 'Claude Code' },
   { value: 'codex', label: 'Codex' },
-  { value: 'gemini-cli', label: 'Gemini CLI' }
+  { value: 'gemini-cli', label: 'Gemini CLI' },
+  { value: 'cursor', label: 'Cursor' }
 ]
 
 const currentLabel = () => options.find(o => o.value === selected.value)?.label || ''

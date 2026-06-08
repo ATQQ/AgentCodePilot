@@ -50,7 +50,10 @@ export default {
     useExistingFolder: '使用现有文件夹',
     noProject: '不使用项目',
     enterProject: '进入项目工作',
-    localMode: '本地模式'
+    setupWorkspace: '创建工作空间',
+    workspaceName: 'Workspace Name',
+    filterFolders: '筛选文件夹...',
+    addFolder: '添加文件夹'
   },
   settings: {
     title: '设置',
