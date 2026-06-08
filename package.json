@@ -1,0 +1,25 @@
+{
+  "name": "agent-code-pilot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AgentCodePilot - AI coding agent desktop application",
+  "scripts": {
+    "dev": "pnpm -C apps/desktop dev",
+    "build": "pnpm -C apps/desktop build",
+    "build:mac": "pnpm -C apps/desktop build:mac",
+    "lint": "pnpm -C apps/desktop lint",
+    "format": "pnpm -C apps/desktop format",
+    "typecheck": "pnpm -C apps/desktop typecheck"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild",
+      "electron-winstaller"
+    ]
+  }
+}
