@@ -1,5 +1,9 @@
 # 桌面编程 Agent 技术方案与实施路径
 
+## 相关文档
+
+- [桌面编程 Agent MVP 执行计划](./desktop-agent-execution-plan.md)
+
 ## 1. 目标与定位
 
 本项目第一版目标是交付一个面向编程场景的桌面 Agent 应用，交互形态参考 Cursor Agents、Codex Desktop、Claude Desktop。
