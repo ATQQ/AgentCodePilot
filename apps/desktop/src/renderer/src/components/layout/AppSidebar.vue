@@ -5,8 +5,12 @@ import {
   EditPen,
   Search,
   MagicStick,
-  Setting
+  Setting,
+  FolderOpened,
+  ChatDotRound,
+  Folder
 } from '@element-plus/icons-vue'
+import { mockProjects, mockWorkspaces, mockConversations } from '@renderer/mock/data'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -16,13 +20,6 @@ const topNavItems = [
   { name: 'new-chat', path: '/', icon: EditPen, labelKey: 'sidebar.newChat' },
   { name: 'search', path: '/search', icon: Search, labelKey: 'sidebar.search' },
   { name: 'skills', path: '/skills', icon: MagicStick, labelKey: 'sidebar.skills' }
-]
-
-const mockProjects = [
-  { id: 'proj-1', name: 'claude-code-best-practice' },
-  { id: 'proj-2', name: 'demo-shared-lib' },
-  { id: 'proj-3', name: 'demo-checker' },
-  { id: 'proj-4', name: 'easypicker2-client' }
 ]
 
 function navigate(path: string): void {
@@ -59,7 +56,7 @@ function isActive(path: string): boolean {
             :key="proj.id"
             class="nav-item nav-item--sub"
           >
-            <span class="project-icon">&#xE8B7;</span>
+            <el-icon :size="13"><FolderOpened /></el-icon>
             <span>{{ proj.name }}</span>
           </button>
         </div>
@@ -67,12 +64,31 @@ function isActive(path: string): boolean {
 
       <div class="sidebar-section">
         <div class="section-title">{{ t('sidebar.workspaces') }}</div>
-        <div class="section-empty">{{ t('sidebar.noWorkspaces') }}</div>
+        <div class="section-list">
+          <button
+            v-for="ws in mockWorkspaces"
+            :key="ws.id"
+            class="nav-item nav-item--sub"
+          >
+            <el-icon :size="13"><Folder /></el-icon>
+            <span>{{ ws.name }}</span>
+          </button>
+        </div>
       </div>
 
       <div class="sidebar-section">
         <div class="section-title">{{ t('sidebar.conversations') }}</div>
-        <div class="section-empty">{{ t('sidebar.noChats') }}</div>
+        <div class="section-list">
+          <button
+            v-for="conv in mockConversations"
+            :key="conv.id"
+            class="nav-item nav-item--sub"
+          >
+            <el-icon :size="13"><ChatDotRound /></el-icon>
+            <span>{{ conv.title }}</span>
+            <span class="conv-time">{{ conv.updatedAt }}</span>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -137,12 +153,6 @@ function isActive(path: string): boolean {
   gap: 1px;
 }
 
-.section-empty {
-  padding: var(--spacing-xs) var(--spacing-md);
-  font-size: var(--font-size-sm);
-  color: var(--sidebar-section-title);
-}
-
 .sidebar-footer {
   padding: var(--spacing-sm);
   border-top: 1px solid var(--sidebar-border);
@@ -187,9 +197,10 @@ function isActive(path: string): boolean {
   font-size: var(--font-size-xs);
 }
 
-.project-icon {
-  font-family: 'Material Icons', sans-serif;
-  font-size: 14px;
-  opacity: 0.6;
+.conv-time {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--sidebar-section-title);
+  flex-shrink: 0;
 }
 </style>

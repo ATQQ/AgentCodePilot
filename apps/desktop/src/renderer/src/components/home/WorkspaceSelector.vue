@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { FolderOpened, Search, Plus, Close, Folder } from '@element-plus/icons-vue'
+import { mockProjects, mockWorkspaces, mockFolders } from '@renderer/mock/data'
 
 const { t } = useI18n()
 
@@ -11,25 +12,11 @@ const showWorkspacePanel = ref(false)
 const searchQuery = ref('')
 const folderFilter = ref('')
 const selectedProject = ref<string | null>(null)
+const workspaceName = ref('')
 const workspaceFolders = ref<string[]>([])
-
-const mockProjects = [
-  { id: 'easypicker2-client', name: 'easypicker2-client' },
-  { id: 'claude-code-best-practice', name: 'claude-code-best-practice' },
-  { id: 'demo-shared-lib', name: 'demo-shared-lib' },
-  { id: 'demo-checker', name: 'demo-checker' }
-]
-
-const mockFolders = [
-  '~/projects/demo-web-app',
-  '~/projects/demo-api-server',
-  '~/projects/demo-stress-test',
-  '~/projects/demo-ops-tool',
-  '~/projects/demo-cli-tool',
-  '~/projects/demo-gateway',
-  '~/projects/demo-container',
-  '~/projects/demo-shared-lib'
-]
+const dropAbove = ref(false)
+const triggerRef = ref<HTMLElement | null>(null)
+const dropdownRef = ref<HTMLElement | null>(null)
 
 const filteredProjects = computed(() => {
   if (!searchQuery.value) return mockProjects
@@ -37,10 +24,17 @@ const filteredProjects = computed(() => {
   return mockProjects.filter(p => p.name.toLowerCase().includes(q))
 })
 
+const filteredWorkspaces = computed(() => {
+  if (!searchQuery.value) return mockWorkspaces
+  const q = searchQuery.value.toLowerCase()
+  return mockWorkspaces.filter(ws => ws.name.toLowerCase().includes(q))
+})
+
 const filteredFolders = computed(() => {
-  if (!folderFilter.value) return mockFolders
+  const folders = mockFolders.map(f => f.path)
+  if (!folderFilter.value) return folders
   const q = folderFilter.value.toLowerCase()
-  return mockFolders.filter(f => f.toLowerCase().includes(q))
+  return folders.filter(f => f.toLowerCase().includes(q))
 })
 
 function selectProject(id: string | null): void {
@@ -49,17 +43,39 @@ function selectProject(id: string | null): void {
   searchQuery.value = ''
 }
 
-function toggleDropdown(): void {
+function selectWorkspace(name: string): void {
+  selectedProject.value = name
+  showDropdown.value = false
+  searchQuery.value = ''
+}
+
+async function toggleDropdown(): Promise<void> {
   showDropdown.value = !showDropdown.value
   showAddSubmenu.value = false
   showWorkspacePanel.value = false
   searchQuery.value = ''
+
+  if (showDropdown.value) {
+    await nextTick()
+    adjustDropdownPosition()
+  }
+}
+
+function adjustDropdownPosition(): void {
+  if (!triggerRef.value || !dropdownRef.value) return
+  const triggerRect = triggerRef.value.getBoundingClientRect()
+  const dropdownHeight = dropdownRef.value.offsetHeight
+  const viewportHeight = window.innerHeight
+  const spaceBelow = viewportHeight - triggerRect.bottom - 10
+  dropAbove.value = spaceBelow < dropdownHeight && triggerRect.top > dropdownHeight
 }
 
 function openWorkspaceSetup(): void {
   showDropdown.value = false
   showWorkspacePanel.value = true
   folderFilter.value = ''
+  workspaceName.value = ''
+  workspaceFolders.value = []
 }
 
 function addFolderToWorkspace(folder: string): void {
@@ -80,14 +96,14 @@ function closeWorkspacePanel(): void {
 <template>
   <div class="workspace-selector">
     <!-- Selected project state -->
-    <button v-if="selectedProject" class="selected-project-btn" @click="toggleDropdown">
+    <button v-if="selectedProject" ref="triggerRef" class="selected-project-btn" @click="toggleDropdown">
       <el-icon :size="14"><FolderOpened /></el-icon>
       <span>{{ selectedProject }}</span>
       <span class="chevron">&#x25BE;</span>
     </button>
 
     <!-- Unselected state -->
-    <button v-else class="enter-project-btn" @click="toggleDropdown">
+    <button v-else ref="triggerRef" class="enter-project-btn" @click="toggleDropdown">
       <el-icon :size="14"><FolderOpened /></el-icon>
       <span>{{ t('project.enterProject') }}</span>
       <span class="chevron">&#x25BE;</span>
@@ -95,7 +111,7 @@ function closeWorkspacePanel(): void {
 
     <!-- Project dropdown -->
     <Transition name="fade">
-      <div v-if="showDropdown" class="project-dropdown">
+      <div v-if="showDropdown" ref="dropdownRef" class="project-dropdown" :class="{ 'drop-above': dropAbove }">
         <div class="dropdown-search">
           <el-icon :size="14" class="search-icon"><Search /></el-icon>
           <input
@@ -106,17 +122,35 @@ function closeWorkspacePanel(): void {
           />
         </div>
 
+        <!-- Projects group -->
         <div class="dropdown-list">
           <button
             v-for="proj in filteredProjects"
             :key="proj.id"
             class="dropdown-item"
-            :class="{ selected: selectedProject === proj.id }"
-            @click="selectProject(proj.id)"
+            :class="{ selected: selectedProject === proj.name }"
+            @click="selectProject(proj.name)"
           >
             <el-icon :size="14"><FolderOpened /></el-icon>
             <span class="item-label">{{ proj.name }}</span>
-            <span v-if="selectedProject === proj.id" class="check">&#x2713;</span>
+            <span v-if="selectedProject === proj.name" class="check">&#x2713;</span>
+          </button>
+        </div>
+
+        <!-- Workspaces group -->
+        <div v-if="filteredWorkspaces.length" class="dropdown-divider"></div>
+        <div v-if="filteredWorkspaces.length" class="dropdown-group-title">{{ t('sidebar.workspaces') }}</div>
+        <div v-if="filteredWorkspaces.length" class="dropdown-list">
+          <button
+            v-for="ws in filteredWorkspaces"
+            :key="ws.id"
+            class="dropdown-item"
+            :class="{ selected: selectedProject === ws.name }"
+            @click="selectWorkspace(ws.name)"
+          >
+            <el-icon :size="14"><Folder /></el-icon>
+            <span class="item-label">{{ ws.name }}</span>
+            <span class="ws-folder-count">{{ ws.folders.length }} 个文件夹</span>
           </button>
         </div>
 
@@ -162,7 +196,12 @@ function closeWorkspacePanel(): void {
       <div v-if="showWorkspacePanel" class="workspace-panel">
         <div class="panel-header">
           <button class="panel-back" @click="closeWorkspacePanel">&#x2039;</button>
-          <span class="panel-title">{{ t('project.workspaceName') }}</span>
+          <input
+            v-model="workspaceName"
+            type="text"
+            :placeholder="t('project.workspaceNamePlaceholder')"
+            class="workspace-name-input"
+          />
         </div>
 
         <!-- Current workspace folders -->
@@ -259,6 +298,25 @@ function closeWorkspacePanel(): void {
   box-shadow: var(--shadow-md);
   z-index: 1000;
   overflow: hidden;
+}
+
+.project-dropdown.drop-above,
+.workspace-panel.drop-above {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+.dropdown-group-title {
+  padding: 4px var(--spacing-md) 2px;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  color: var(--content-text-tertiary);
+}
+
+.ws-folder-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--content-text-tertiary);
 }
 
 .dropdown-search {
@@ -365,7 +423,7 @@ function closeWorkspacePanel(): void {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: var(--spacing-md) var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
   border-bottom: 1px solid var(--sidebar-border);
 }
 
@@ -377,15 +435,24 @@ function closeWorkspacePanel(): void {
   cursor: pointer;
   padding: 0 4px;
   line-height: 1;
+  flex-shrink: 0;
 }
 
 .panel-back:hover {
   color: var(--content-text);
 }
 
-.panel-title {
+.workspace-name-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--content-text);
   font-size: var(--font-size-sm);
-  color: var(--content-text-secondary);
+  outline: none;
+}
+
+.workspace-name-input::placeholder {
+  color: var(--content-text-tertiary);
 }
 
 .workspace-folders {
@@ -462,5 +529,10 @@ function closeWorkspacePanel(): void {
 .fade-leave-to {
   opacity: 0;
   transform: translateY(4px);
+}
+
+.drop-above.fade-enter-from,
+.drop-above.fade-leave-to {
+  transform: translateY(-4px);
 }
 </style>

@@ -51,7 +51,7 @@ export default {
     noProject: '不使用项目',
     enterProject: '进入项目工作',
     setupWorkspace: '创建工作空间',
-    workspaceName: 'Workspace Name',
+    workspaceNamePlaceholder: '输入工作空间名称...',
     filterFolders: '筛选文件夹...',
     addFolder: '添加文件夹'
   },

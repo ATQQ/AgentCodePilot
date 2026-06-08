@@ -34,10 +34,10 @@ function selectApproval(level: 'request' | 'auto' | 'full'): void {
   showApprovalMenu.value = false
 }
 
-const approvalLabels = {
-  request: 'composer.approval.requestApproval',
-  auto: 'composer.approval.autoApprove',
-  full: 'composer.approval.fullAccess'
+const approvalOptions = {
+  request: { label: 'composer.approval.requestApproval', icon: '✋' },
+  auto: { label: 'composer.approval.autoApprove', icon: '\u{1F64A}' },
+  full: { label: 'composer.approval.fullAccess', icon: '⚠' }
 }
 </script>
 
@@ -91,8 +91,8 @@ const approvalLabels = {
         <!-- Approval Level -->
         <div class="dropdown-wrapper">
           <button class="toolbar-btn toolbar-btn--label" @click="showApprovalMenu = !showApprovalMenu">
-            <span class="approval-icon">&#x270B;</span>
-            <span>{{ t(approvalLabels[approvalLevel]) }}</span>
+            <span class="approval-icon">{{ approvalOptions[approvalLevel].icon }}</span>
+            <span>{{ t(approvalOptions[approvalLevel].label) }}</span>
             <span class="chevron">&#x25BE;</span>
           </button>
           <Transition name="fade">
