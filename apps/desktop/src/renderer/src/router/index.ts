@@ -24,16 +24,6 @@ const router = createRouter({
       component: () => import('@renderer/views/PlaceholderView.vue')
     },
     {
-      path: '/plugins',
-      name: 'plugins',
-      component: () => import('@renderer/views/PlaceholderView.vue')
-    },
-    {
-      path: '/automations',
-      name: 'automations',
-      component: () => import('@renderer/views/PlaceholderView.vue')
-    },
-    {
       path: '/projects',
       name: 'projects',
       component: () => import('@renderer/views/PlaceholderView.vue')

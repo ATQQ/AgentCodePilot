@@ -10,53 +10,70 @@ export default {
     newChat: '新对话',
     search: '搜索',
     skills: '技能',
-    plugins: '插件',
-    automations: '自动化',
     projects: '项目',
     conversations: '对话',
-    noChats: '暂无聊天'
+    workspaces: '工作空间',
+    noChats: '暂无聊天',
+    noWorkspaces: '暂无工作空间'
   },
   home: {
     title: '我们该做什么？',
     placeholder: '尽管问',
-    enterProject: '进入项目工作',
     send: '发送'
   },
   composer: {
-    autoReview: '自动审查',
-    custom: '自定义',
-    high: '高',
-    medium: '中',
-    low: '低'
+    addMenu: {
+      addPhotosAndFiles: '添加照片和文件',
+      attachContext: '附加上下文',
+      planMode: '计划模式',
+      pursueGoals: '追求目标',
+      plugins: '插件'
+    },
+    approval: {
+      label: '请求批准',
+      title: '应如何批准操作？',
+      learnMore: '了解更多',
+      requestApproval: '请求批准',
+      requestApprovalDesc: '编辑外部文件和使用互联网时始终询问',
+      autoApprove: '替我审批',
+      autoApproveDesc: '仅对检测到的风险操作请求批准',
+      fullAccess: '完全访问权限',
+      fullAccessDesc: '可不受限制地访问互联网和您电脑上的任何文件'
+    },
+    agent: '自定义',
+    high: '高'
+  },
+  project: {
+    searchProject: '搜索项目',
+    addNewProject: '添加新项目',
+    createBlank: '新建空白项目',
+    useExistingFolder: '使用现有文件夹',
+    noProject: '不使用项目',
+    enterProject: '进入项目工作',
+    localMode: '本地模式'
   },
   settings: {
     title: '设置',
     searchPlaceholder: '搜索设置...',
-    // Categories
     personal: '个人',
     integration: '集成',
     coding: '编码',
     archived: '已归档',
-    // Personal section
     general: '常规',
     appearance: '外观',
     configuration: '配置',
     personalization: '个性化',
     keyboardShortcuts: '键盘快捷键',
-    // Integration section
     appSnapshots: '应用快照',
     mcpServers: 'MCP 服务器',
     browser: '浏览器',
     computerControl: '电脑操控',
-    // Coding section
     hooks: '钩子',
     connections: '连接',
     git: 'Git',
     environment: '环境',
     workTree: '工作树',
-    // Archived
     archivedConversations: '已归档对话',
-    // Appearance page
     theme: '主题',
     themeDesc: '使用浅色、深色，或匹配系统设置',
     light: '浅色',
@@ -80,7 +97,6 @@ export default {
     fontSmoothing: '字体平滑',
     on: '开启',
     off: '关闭',
-    // General page
     language: '语言',
     zhCN: '简体中文'
   }

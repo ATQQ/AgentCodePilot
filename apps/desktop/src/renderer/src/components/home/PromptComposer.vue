@@ -5,6 +5,11 @@ import { Plus, Top } from '@element-plus/icons-vue'
 
 const { t } = useI18n()
 const input = ref('')
+const showAddMenu = ref(false)
+const showApprovalMenu = ref(false)
+const planMode = ref(false)
+const pursueGoals = ref(false)
+const approvalLevel = ref<'request' | 'auto' | 'full'>('request')
 
 const emit = defineEmits<{
   submit: [text: string]
@@ -23,10 +28,21 @@ function handleKeydown(e: KeyboardEvent): void {
     handleSubmit()
   }
 }
+
+function selectApproval(level: 'request' | 'auto' | 'full'): void {
+  approvalLevel.value = level
+  showApprovalMenu.value = false
+}
+
+const approvalLabels = {
+  request: 'composer.approval.requestApproval',
+  auto: 'composer.approval.autoApprove',
+  full: 'composer.approval.fullAccess'
+}
 </script>
 
 <template>
-  <div class="composer" :class="{ focused: false }">
+  <div class="composer">
     <textarea
       v-model="input"
       class="composer-input"
@@ -36,15 +52,96 @@ function handleKeydown(e: KeyboardEvent): void {
     />
     <div class="composer-toolbar">
       <div class="toolbar-left">
-        <button class="toolbar-btn">
-          <el-icon :size="16"><Plus /></el-icon>
-        </button>
-        <button class="toolbar-btn toolbar-btn--accent">
-          <span class="accent-dot"></span>
-          <span>{{ t('composer.autoReview') }}</span>
-          <span class="chevron">&#8250;</span>
-        </button>
+        <!-- + Button with popup -->
+        <div class="dropdown-wrapper">
+          <button class="toolbar-btn" @click="showAddMenu = !showAddMenu">
+            <el-icon :size="16"><Plus /></el-icon>
+          </button>
+          <Transition name="fade">
+            <div v-if="showAddMenu" class="dropdown-menu" @mouseleave="showAddMenu = false">
+              <button class="menu-item">
+                <span class="menu-icon">&#x1F4CE;</span>
+                <span>{{ t('composer.addMenu.addPhotosAndFiles') }}</span>
+              </button>
+              <button class="menu-item">
+                <span class="menu-icon">&#x1F310;</span>
+                <span>{{ t('composer.addMenu.attachContext') }}</span>
+              </button>
+              <div class="menu-divider"></div>
+              <button class="menu-item menu-item--toggle" @click.stop="planMode = !planMode">
+                <span class="menu-icon">&#x2699;</span>
+                <span>{{ t('composer.addMenu.planMode') }}</span>
+                <span class="toggle-indicator" :class="{ active: planMode }"></span>
+              </button>
+              <button class="menu-item menu-item--toggle" @click.stop="pursueGoals = !pursueGoals">
+                <span class="menu-icon">&#x1F3AF;</span>
+                <span>{{ t('composer.addMenu.pursueGoals') }}</span>
+                <span class="toggle-indicator" :class="{ active: pursueGoals }"></span>
+              </button>
+              <div class="menu-divider"></div>
+              <button class="menu-item">
+                <span class="menu-icon">&#x1F9E9;</span>
+                <span>{{ t('composer.addMenu.plugins') }}</span>
+                <span class="menu-arrow">&#8250;</span>
+              </button>
+            </div>
+          </Transition>
+        </div>
+
+        <!-- Approval Level -->
+        <div class="dropdown-wrapper">
+          <button class="toolbar-btn toolbar-btn--label" @click="showApprovalMenu = !showApprovalMenu">
+            <span class="approval-icon">&#x270B;</span>
+            <span>{{ t(approvalLabels[approvalLevel]) }}</span>
+            <span class="chevron">&#x25BE;</span>
+          </button>
+          <Transition name="fade">
+            <div v-if="showApprovalMenu" class="dropdown-menu dropdown-menu--wide" @mouseleave="showApprovalMenu = false">
+              <div class="menu-header">
+                <span>{{ t('composer.approval.title') }}</span>
+                <a class="menu-link">{{ t('composer.approval.learnMore') }}</a>
+              </div>
+              <button
+                class="menu-item menu-item--desc"
+                :class="{ selected: approvalLevel === 'request' }"
+                @click="selectApproval('request')"
+              >
+                <div class="menu-item-icon">&#x270B;</div>
+                <div class="menu-item-content">
+                  <div class="menu-item-title">{{ t('composer.approval.requestApproval') }}</div>
+                  <div class="menu-item-description">{{ t('composer.approval.requestApprovalDesc') }}</div>
+                </div>
+                <span v-if="approvalLevel === 'request'" class="check-mark">&#x2713;</span>
+              </button>
+              <button
+                class="menu-item menu-item--desc"
+                :class="{ selected: approvalLevel === 'auto' }"
+                @click="selectApproval('auto')"
+              >
+                <div class="menu-item-icon">&#x1F64A;</div>
+                <div class="menu-item-content">
+                  <div class="menu-item-title">{{ t('composer.approval.autoApprove') }}</div>
+                  <div class="menu-item-description">{{ t('composer.approval.autoApproveDesc') }}</div>
+                </div>
+                <span v-if="approvalLevel === 'auto'" class="check-mark">&#x2713;</span>
+              </button>
+              <button
+                class="menu-item menu-item--desc"
+                :class="{ selected: approvalLevel === 'full' }"
+                @click="selectApproval('full')"
+              >
+                <div class="menu-item-icon">&#x26A0;</div>
+                <div class="menu-item-content">
+                  <div class="menu-item-title">{{ t('composer.approval.fullAccess') }}</div>
+                  <div class="menu-item-description">{{ t('composer.approval.fullAccessDesc') }}</div>
+                </div>
+                <span v-if="approvalLevel === 'full'" class="check-mark">&#x2713;</span>
+              </button>
+            </div>
+          </Transition>
+        </div>
       </div>
+
       <div class="toolbar-right">
         <slot name="selectors" />
         <button
@@ -66,7 +163,8 @@ function handleKeydown(e: KeyboardEvent): void {
   border-radius: var(--radius-xl);
   background: var(--composer-bg);
   transition: border-color 0.2s;
-  overflow: hidden;
+  overflow: visible;
+  position: relative;
 }
 
 .composer:focus-within {
@@ -103,7 +201,7 @@ function handleKeydown(e: KeyboardEvent): void {
 .toolbar-left {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: 2px;
 }
 
 .toolbar-right {
@@ -115,8 +213,8 @@ function handleKeydown(e: KeyboardEvent): void {
 .toolbar-btn {
   display: flex;
   align-items: center;
-  gap: var(--spacing-xs);
-  padding: 4px 8px;
+  gap: 4px;
+  padding: 5px 8px;
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
@@ -130,20 +228,17 @@ function handleKeydown(e: KeyboardEvent): void {
   background: var(--btn-ghost-hover);
 }
 
-.toolbar-btn--accent {
-  color: var(--accent-text);
+.toolbar-btn--label {
+  gap: 5px;
 }
 
-.accent-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent-color);
+.approval-icon {
+  font-size: 13px;
 }
 
 .chevron {
-  font-size: 12px;
-  opacity: 0.6;
+  font-size: 10px;
+  opacity: 0.5;
 }
 
 .send-btn {
@@ -167,5 +262,166 @@ function handleKeydown(e: KeyboardEvent): void {
 
 .send-btn:not(:disabled):hover {
   opacity: 0.85;
+}
+
+/* Dropdown */
+.dropdown-wrapper {
+  position: relative;
+}
+
+.dropdown-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  min-width: 220px;
+  background: var(--content-bg);
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--spacing-xs);
+  z-index: 1000;
+}
+
+.dropdown-menu--wide {
+  min-width: 320px;
+}
+
+.menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--content-text-secondary);
+}
+
+.menu-link {
+  color: var(--content-text-secondary);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+  padding: 8px var(--spacing-md);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--content-text);
+  font-size: var(--font-size-base);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.menu-item:hover {
+  background: var(--btn-ghost-hover);
+}
+
+.menu-item--toggle {
+  justify-content: flex-start;
+}
+
+.menu-item--desc {
+  align-items: flex-start;
+  padding: var(--spacing-md);
+}
+
+.menu-item--desc.selected {
+  background: var(--btn-ghost-hover);
+}
+
+.menu-item-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  width: 24px;
+  text-align: center;
+}
+
+.menu-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.menu-item-title {
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  color: var(--content-text);
+}
+
+.menu-item-description {
+  font-size: var(--font-size-sm);
+  color: var(--content-text-secondary);
+  margin-top: 2px;
+}
+
+.menu-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.menu-arrow {
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--content-text-tertiary);
+}
+
+.menu-divider {
+  height: 1px;
+  background: var(--sidebar-border);
+  margin: var(--spacing-xs) var(--spacing-sm);
+}
+
+.toggle-indicator {
+  margin-left: auto;
+  width: 32px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--sidebar-border);
+  position: relative;
+  transition: background 0.2s;
+}
+
+.toggle-indicator::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  transition: transform 0.2s;
+}
+
+.toggle-indicator.active {
+  background: var(--accent-color);
+}
+
+.toggle-indicator.active::after {
+  transform: translateX(14px);
+}
+
+.check-mark {
+  color: var(--content-text);
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
 }
 </style>

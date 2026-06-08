@@ -2,7 +2,6 @@
 import HomeEmptyState from '@renderer/components/home/HomeEmptyState.vue'
 import PromptComposer from '@renderer/components/home/PromptComposer.vue'
 import AgentSelector from '@renderer/components/home/AgentSelector.vue'
-import ModelSelector from '@renderer/components/home/ModelSelector.vue'
 import WorkspaceSelector from '@renderer/components/home/WorkspaceSelector.vue'
 
 function handleSubmit(text: string): void {
@@ -17,7 +16,6 @@ function handleSubmit(text: string): void {
       <div class="composer-wrapper">
         <PromptComposer @submit="handleSubmit">
           <template #selectors>
-            <ModelSelector />
             <AgentSelector />
           </template>
         </PromptComposer>

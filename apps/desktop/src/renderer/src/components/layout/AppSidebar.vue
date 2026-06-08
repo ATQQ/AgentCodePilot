@@ -5,8 +5,6 @@ import {
   EditPen,
   Search,
   MagicStick,
-  Grid,
-  Timer,
   Setting
 } from '@element-plus/icons-vue'
 
@@ -17,13 +15,11 @@ const route = useRoute()
 const topNavItems = [
   { name: 'new-chat', path: '/', icon: EditPen, labelKey: 'sidebar.newChat' },
   { name: 'search', path: '/search', icon: Search, labelKey: 'sidebar.search' },
-  { name: 'skills', path: '/skills', icon: MagicStick, labelKey: 'sidebar.skills' },
-  { name: 'plugins', path: '/plugins', icon: Grid, labelKey: 'sidebar.plugins' },
-  { name: 'automations', path: '/automations', icon: Timer, labelKey: 'sidebar.automations' }
+  { name: 'skills', path: '/skills', icon: MagicStick, labelKey: 'sidebar.skills' }
 ]
 
 const mockProjects = [
-  { id: 'proj-1', name: 'claude-code-best-practi...' },
+  { id: 'proj-1', name: 'claude-code-best-practice' },
   { id: 'proj-2', name: 'demo-shared-lib' },
   { id: 'proj-3', name: 'demo-checker' },
   { id: 'proj-4', name: 'easypicker2-client' }
@@ -63,10 +59,15 @@ function isActive(path: string): boolean {
             :key="proj.id"
             class="nav-item nav-item--sub"
           >
-            <el-icon :size="14"><Grid /></el-icon>
+            <span class="project-icon">&#xE8B7;</span>
             <span>{{ proj.name }}</span>
           </button>
         </div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="section-title">{{ t('sidebar.workspaces') }}</div>
+        <div class="section-empty">{{ t('sidebar.noWorkspaces') }}</div>
       </div>
 
       <div class="sidebar-section">
@@ -184,5 +185,11 @@ function isActive(path: string): boolean {
 .nav-item--sub {
   padding-left: var(--spacing-lg);
   font-size: var(--font-size-xs);
+}
+
+.project-icon {
+  font-family: 'Material Icons', sans-serif;
+  font-size: 14px;
+  opacity: 0.6;
 }
 </style>
