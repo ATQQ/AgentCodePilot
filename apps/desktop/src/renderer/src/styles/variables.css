@@ -1,19 +1,39 @@
 :root {
-  /* Sidebar */
+  /* Layout */
   --sidebar-width: 220px;
-  --sidebar-bg: #1e1e2e;
-  --sidebar-text: #a6adc8;
-  --sidebar-text-active: #cdd6f4;
-  --sidebar-item-hover: #313244;
-  --sidebar-item-active: #45475a;
+  --topbar-height: 36px;
+
+  /* Sidebar */
+  --sidebar-bg: #f9fafb;
+  --sidebar-border: #e5e7eb;
+  --sidebar-text: #6b7280;
+  --sidebar-text-active: #111827;
+  --sidebar-item-hover: #f3f4f6;
+  --sidebar-item-active: #e5e7eb;
+  --sidebar-section-title: #9ca3af;
 
   /* Main content */
-  --content-bg: #fafafa;
-  --content-text: #1a1a2e;
+  --content-bg: #ffffff;
+  --content-text: #111827;
   --content-text-secondary: #6b7280;
+  --content-text-tertiary: #9ca3af;
 
-  /* TopBar */
-  --topbar-height: 36px;
+  /* Composer */
+  --composer-bg: #ffffff;
+  --composer-border: #e5e7eb;
+  --composer-border-focus: #3b82f6;
+  --composer-placeholder: #9ca3af;
+
+  /* Buttons */
+  --btn-primary-bg: #111827;
+  --btn-primary-text: #ffffff;
+  --btn-secondary-bg: #f3f4f6;
+  --btn-secondary-text: #374151;
+  --btn-ghost-hover: #f3f4f6;
+
+  /* Accent */
+  --accent-color: #10b981;
+  --accent-text: #059669;
 
   /* Typography */
   --font-size-xs: 12px;
@@ -22,12 +42,7 @@
   --font-size-lg: 16px;
   --font-size-xl: 20px;
   --font-size-2xl: 28px;
-
-  /* Input */
-  --input-bg: #ffffff;
-  --input-border: #e5e7eb;
-  --input-border-focus: #6366f1;
-  --input-radius: 8px;
+  --font-size-3xl: 32px;
 
   /* Spacing */
   --spacing-xs: 4px;
@@ -35,10 +50,78 @@
   --spacing-md: 12px;
   --spacing-lg: 16px;
   --spacing-xl: 24px;
+  --spacing-2xl: 32px;
 
   /* Border radius */
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
   --radius-xl: 12px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+
+  /* Element Plus overrides */
+  --el-color-primary: #111827;
+  --el-border-color: #e5e7eb;
+  --el-border-color-light: #f3f4f6;
+  --el-fill-color-blank: #ffffff;
+  --el-text-color-primary: #111827;
+  --el-text-color-regular: #374151;
+  --el-text-color-secondary: #6b7280;
+  --el-text-color-placeholder: #9ca3af;
+  --el-bg-color: #ffffff;
+  --el-bg-color-overlay: #ffffff;
+}
+
+html.dark {
+  /* Sidebar */
+  --sidebar-bg: #18181b;
+  --sidebar-border: #27272a;
+  --sidebar-text: #a1a1aa;
+  --sidebar-text-active: #f4f4f5;
+  --sidebar-item-hover: #27272a;
+  --sidebar-item-active: #3f3f46;
+  --sidebar-section-title: #71717a;
+
+  /* Main content */
+  --content-bg: #09090b;
+  --content-text: #f4f4f5;
+  --content-text-secondary: #a1a1aa;
+  --content-text-tertiary: #71717a;
+
+  /* Composer */
+  --composer-bg: #18181b;
+  --composer-border: #27272a;
+  --composer-border-focus: #3b82f6;
+  --composer-placeholder: #71717a;
+
+  /* Buttons */
+  --btn-primary-bg: #f4f4f5;
+  --btn-primary-text: #09090b;
+  --btn-secondary-bg: #27272a;
+  --btn-secondary-text: #e4e4e7;
+  --btn-ghost-hover: #27272a;
+
+  /* Accent */
+  --accent-color: #34d399;
+  --accent-text: #6ee7b7;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4);
+
+  /* Element Plus overrides */
+  --el-color-primary: #f4f4f5;
+  --el-border-color: #27272a;
+  --el-border-color-light: #3f3f46;
+  --el-fill-color-blank: #18181b;
+  --el-text-color-primary: #f4f4f5;
+  --el-text-color-regular: #e4e4e7;
+  --el-text-color-secondary: #a1a1aa;
+  --el-text-color-placeholder: #71717a;
+  --el-bg-color: #18181b;
+  --el-bg-color-overlay: #27272a;
 }

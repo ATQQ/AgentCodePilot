@@ -1,102 +1,89 @@
 <script setup lang="ts">
 import { useRouter, useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import {
-  Plus,
-  ChatDotRound,
+  EditPen,
   Search,
   MagicStick,
-  SetUp,
-  FolderOpened,
+  Grid,
+  Timer,
   Setting
 } from '@element-plus/icons-vue'
-import SidebarNavSection from './SidebarNavSection.vue'
 
+const { t } = useI18n()
 const router = useRouter()
 const route = useRoute()
 
-const primaryItems = [
-  { name: 'new-agent', label: 'New Agent', path: '/', icon: Plus }
+const topNavItems = [
+  { name: 'new-chat', path: '/', icon: EditPen, labelKey: 'sidebar.newChat' },
+  { name: 'search', path: '/search', icon: Search, labelKey: 'sidebar.search' },
+  { name: 'skills', path: '/skills', icon: MagicStick, labelKey: 'sidebar.skills' },
+  { name: 'plugins', path: '/plugins', icon: Grid, labelKey: 'sidebar.plugins' },
+  { name: 'automations', path: '/automations', icon: Timer, labelKey: 'sidebar.automations' }
 ]
 
-const workItems = [
-  { name: 'conversations', label: 'Conversations', path: '/chat', icon: ChatDotRound },
-  { name: 'search', label: 'Search', path: '/search', icon: Search }
-]
-
-const toolItems = [
-  { name: 'skills', label: 'Skills', path: '/skills', icon: MagicStick },
-  { name: 'automations', label: 'Automations', path: '/automations', icon: SetUp },
-  { name: 'projects', label: 'Projects', path: '/projects', icon: FolderOpened }
-]
-
-const bottomItems = [
-  { name: 'settings', label: 'Settings', path: '/settings', icon: Setting }
+const mockProjects = [
+  { id: 'proj-1', name: 'claude-code-best-practi...' },
+  { id: 'proj-2', name: 'demo-shared-lib' },
+  { id: 'proj-3', name: 'demo-checker' },
+  { id: 'proj-4', name: 'easypicker2-client' }
 ]
 
 function navigate(path: string): void {
   router.push(path)
 }
 
-function isActive(item: { path: string; name: string }): boolean {
-  if (item.name === 'new-agent') return route.path === '/'
-  return route.path === item.path
+function isActive(path: string): boolean {
+  return route.path === path
 }
 </script>
 
 <template>
   <aside class="sidebar">
     <div class="sidebar-drag-area"></div>
-    <div class="sidebar-nav">
-      <SidebarNavSection>
+    <div class="sidebar-content">
+      <nav class="sidebar-nav">
         <button
-          v-for="item in primaryItems"
-          :key="item.name"
-          class="nav-item nav-item--primary"
-          :class="{ active: isActive(item) }"
-          @click="navigate(item.path)"
-        >
-          <el-icon :size="16"><component :is="item.icon" /></el-icon>
-          <span>{{ item.label }}</span>
-        </button>
-      </SidebarNavSection>
-      <SidebarNavSection>
-        <button
-          v-for="item in workItems"
+          v-for="item in topNavItems"
           :key="item.name"
           class="nav-item"
-          :class="{ active: isActive(item) }"
+          :class="{ active: isActive(item.path) }"
           @click="navigate(item.path)"
         >
-          <el-icon :size="16"><component :is="item.icon" /></el-icon>
-          <span>{{ item.label }}</span>
+          <el-icon :size="15"><component :is="item.icon" /></el-icon>
+          <span>{{ t(item.labelKey) }}</span>
         </button>
-      </SidebarNavSection>
-      <SidebarNavSection>
-        <button
-          v-for="item in toolItems"
-          :key="item.name"
-          class="nav-item"
-          :class="{ active: isActive(item) }"
-          @click="navigate(item.path)"
-        >
-          <el-icon :size="16"><component :is="item.icon" /></el-icon>
-          <span>{{ item.label }}</span>
-        </button>
-      </SidebarNavSection>
+      </nav>
+
+      <div class="sidebar-section">
+        <div class="section-title">{{ t('sidebar.projects') }}</div>
+        <div class="section-list">
+          <button
+            v-for="proj in mockProjects"
+            :key="proj.id"
+            class="nav-item nav-item--sub"
+          >
+            <el-icon :size="14"><Grid /></el-icon>
+            <span>{{ proj.name }}</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="section-title">{{ t('sidebar.conversations') }}</div>
+        <div class="section-empty">{{ t('sidebar.noChats') }}</div>
+      </div>
     </div>
-    <div class="sidebar-bottom">
-      <SidebarNavSection>
-        <button
-          v-for="item in bottomItems"
-          :key="item.name"
-          class="nav-item"
-          :class="{ active: isActive(item) }"
-          @click="navigate(item.path)"
-        >
-          <el-icon :size="16"><component :is="item.icon" /></el-icon>
-          <span>{{ item.label }}</span>
-        </button>
-      </SidebarNavSection>
+
+    <div class="sidebar-footer">
+      <button
+        class="nav-item"
+        :class="{ active: isActive('/settings') }"
+        @click="navigate('/settings')"
+      >
+        <el-icon :size="15"><Setting /></el-icon>
+        <span>{{ t('common.settings') }}</span>
+      </button>
     </div>
   </aside>
 </template>
@@ -107,6 +94,7 @@ function isActive(item: { path: string; name: string }): boolean {
   min-width: var(--sidebar-width);
   height: 100vh;
   background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -118,16 +106,45 @@ function isActive(item: { path: string; name: string }): boolean {
   -webkit-app-region: drag;
 }
 
-.sidebar-nav {
+.sidebar-content {
   flex: 1;
   overflow-y: auto;
   padding: 0 var(--spacing-sm);
 }
 
-.sidebar-bottom {
-  padding: 0 var(--spacing-sm);
-  padding-bottom: var(--spacing-sm);
-  border-top: 1px solid var(--sidebar-item-hover);
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: var(--spacing-md);
+}
+
+.sidebar-section {
+  padding: var(--spacing-sm) 0;
+}
+
+.section-title {
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  color: var(--sidebar-section-title);
+}
+
+.section-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.section-empty {
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--sidebar-section-title);
+}
+
+.sidebar-footer {
+  padding: var(--spacing-sm);
+  border-top: 1px solid var(--sidebar-border);
 }
 
 .nav-item {
@@ -135,15 +152,23 @@ function isActive(item: { path: string; name: string }): boolean {
   align-items: center;
   gap: var(--spacing-sm);
   width: 100%;
-  padding: 8px var(--spacing-md);
+  padding: 7px var(--spacing-md);
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--sidebar-text);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-sm);
   text-align: left;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .nav-item:hover {
@@ -156,8 +181,8 @@ function isActive(item: { path: string; name: string }): boolean {
   color: var(--sidebar-text-active);
 }
 
-.nav-item--primary {
-  color: var(--sidebar-text-active);
-  font-weight: 500;
+.nav-item--sub {
+  padding-left: var(--spacing-lg);
+  font-size: var(--font-size-xs);
 }
 </style>

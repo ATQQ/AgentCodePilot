@@ -4,7 +4,7 @@
 
 <style scoped>
 .top-bar {
-  height: 36px;
+  height: var(--topbar-height);
   flex-shrink: 0;
   -webkit-app-region: drag;
 }

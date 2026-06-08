@@ -14,15 +14,15 @@ function handleSubmit(text: string): void {
   <div class="home-view">
     <div class="home-center">
       <HomeEmptyState />
-      <PromptComposer @submit="handleSubmit">
-        <template #selectors>
-          <div class="selectors">
-            <AgentSelector />
+      <div class="composer-wrapper">
+        <PromptComposer @submit="handleSubmit">
+          <template #selectors>
             <ModelSelector />
-            <WorkspaceSelector />
-          </div>
-        </template>
-      </PromptComposer>
+            <AgentSelector />
+          </template>
+        </PromptComposer>
+        <WorkspaceSelector />
+      </div>
     </div>
   </div>
 </template>
@@ -41,14 +41,16 @@ function handleSubmit(text: string): void {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 32px;
+  gap: var(--spacing-2xl);
   width: 100%;
-  max-width: 720px;
+  max-width: 640px;
 }
 
-.selectors {
+.composer-wrapper {
   display: flex;
-  gap: var(--spacing-sm);
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+  width: 100%;
 }
 </style>

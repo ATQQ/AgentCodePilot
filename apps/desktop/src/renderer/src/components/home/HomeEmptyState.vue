@@ -1,7 +1,12 @@
+<script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
+</script>
+
 <template>
   <div class="empty-state">
-    <h1 class="empty-title">What should we work on?</h1>
-    <p class="empty-subtitle">Start a conversation with an AI coding agent</p>
+    <h1 class="empty-title">{{ t('home.title') }}</h1>
   </div>
 </template>
 
@@ -10,17 +15,12 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
 }
 
 .empty-title {
-  font-size: var(--font-size-2xl);
-  font-weight: 700;
+  font-size: var(--font-size-3xl);
+  font-weight: 600;
   color: var(--content-text);
-}
-
-.empty-subtitle {
-  font-size: var(--font-size-lg);
-  color: var(--content-text-secondary);
+  letter-spacing: -0.5px;
 }
 </style>

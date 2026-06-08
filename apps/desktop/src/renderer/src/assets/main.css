@@ -13,16 +13,48 @@ body {
   font-family:
     -apple-system,
     BlinkMacSystemFont,
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
     'Segoe UI',
     Roboto,
-    Oxygen,
-    Ubuntu,
-    Cantarell,
     sans-serif;
+  background: var(--content-bg);
+  color: var(--content-text);
+  transition: background 0.2s, color 0.2s;
 }
 
 #app {
   width: 100vw;
   height: 100vh;
   overflow: hidden;
+}
+
+/* Element Plus dark mode overrides */
+html.dark .el-select-dropdown {
+  background: var(--el-bg-color-overlay);
+  border-color: var(--el-border-color);
+}
+
+html.dark .el-popper {
+  background: var(--el-bg-color-overlay);
+  border-color: var(--el-border-color);
+}
+
+html.dark .el-select-dropdown__item {
+  color: var(--el-text-color-regular);
+}
+
+html.dark .el-select-dropdown__item.hover,
+html.dark .el-select-dropdown__item:hover {
+  background: var(--sidebar-item-hover);
+}
+
+html.dark .el-input__wrapper {
+  background-color: var(--el-fill-color-blank);
+  box-shadow: 0 0 0 1px var(--el-border-color) inset;
+}
+
+html.dark .el-empty__description p {
+  color: var(--el-text-color-secondary);
 }

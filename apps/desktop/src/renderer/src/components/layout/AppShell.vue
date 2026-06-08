@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import AppSidebar from './AppSidebar.vue'
-import TopBar from './TopBar.vue'
 </script>
 
 <template>
   <div class="app-shell">
     <AppSidebar />
     <div class="main-content">
-      <TopBar />
+      <div class="main-drag-area"></div>
       <div class="page-content">
         <router-view />
       </div>
@@ -29,6 +28,12 @@ import TopBar from './TopBar.vue'
   flex-direction: column;
   overflow: hidden;
   background: var(--content-bg);
+}
+
+.main-drag-area {
+  height: var(--topbar-height);
+  flex-shrink: 0;
+  -webkit-app-region: drag;
 }
 
 .page-content {
