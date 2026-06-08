@@ -28,7 +28,7 @@ import TopBar from './TopBar.vue'
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #fafafa;
+  background: var(--content-bg);
 }
 
 .page-content {

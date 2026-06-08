@@ -44,7 +44,6 @@ function handleKeydown(e: KeyboardEvent): void {
 <style scoped>
 .composer {
   width: 100%;
-  max-width: 640px;
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);

@@ -12,28 +12,38 @@ function handleSubmit(text: string): void {
 
 <template>
   <div class="home-view">
-    <HomeEmptyState />
-    <PromptComposer @submit="handleSubmit">
-      <template #selectors>
-        <div class="selectors">
-          <AgentSelector />
-          <ModelSelector />
-          <WorkspaceSelector />
-        </div>
-      </template>
-    </PromptComposer>
+    <div class="home-center">
+      <HomeEmptyState />
+      <PromptComposer @submit="handleSubmit">
+        <template #selectors>
+          <div class="selectors">
+            <AgentSelector />
+            <ModelSelector />
+            <WorkspaceSelector />
+          </div>
+        </template>
+      </PromptComposer>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .home-view {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   height: 100%;
-  gap: 32px;
   padding: var(--spacing-xl);
+  overflow: auto;
+}
+
+.home-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+  width: 100%;
+  max-width: 720px;
 }
 
 .selectors {
