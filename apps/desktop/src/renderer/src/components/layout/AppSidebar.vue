@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { useRouter, useRoute } from 'vue-router'
+import { House, ChatDotRound, Setting } from '@element-plus/icons-vue'
+import SidebarNavSection from './SidebarNavSection.vue'
 
 const router = useRouter()
 const route = useRoute()
 
 const navItems = [
-  { name: 'home', label: 'Home', path: '/' },
-  { name: 'chat', label: 'Chat', path: '/chat' },
-  { name: 'settings', label: 'Settings', path: '/settings' }
+  { name: 'home', label: 'Home', path: '/', icon: House },
+  { name: 'chat', label: 'Chat', path: '/chat', icon: ChatDotRound },
+  { name: 'settings', label: 'Settings', path: '/settings', icon: Setting }
 ]
 
 function navigate(path: string): void {
@@ -18,7 +20,7 @@ function navigate(path: string): void {
 <template>
   <aside class="sidebar">
     <div class="sidebar-drag-area"></div>
-    <nav class="sidebar-nav">
+    <SidebarNavSection>
       <button
         v-for="item in navItems"
         :key="item.name"
@@ -26,57 +28,53 @@ function navigate(path: string): void {
         :class="{ active: route.path === item.path }"
         @click="navigate(item.path)"
       >
-        {{ item.label }}
+        <el-icon :size="16"><component :is="item.icon" /></el-icon>
+        <span>{{ item.label }}</span>
       </button>
-    </nav>
+    </SidebarNavSection>
   </aside>
 </template>
 
 <style scoped>
 .sidebar {
-  width: 220px;
-  min-width: 220px;
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
   height: 100vh;
-  background: #1e1e2e;
+  background: var(--sidebar-bg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
 .sidebar-drag-area {
-  height: 36px;
+  height: var(--topbar-height);
   flex-shrink: 0;
   -webkit-app-region: drag;
 }
 
-.sidebar-nav {
-  display: flex;
-  flex-direction: column;
-  padding: 8px;
-  gap: 4px;
-}
-
 .nav-item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
   width: 100%;
-  padding: 10px 16px;
+  padding: 10px var(--spacing-lg);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: transparent;
-  color: #a6adc8;
-  font-size: 14px;
+  color: var(--sidebar-text);
+  font-size: var(--font-size-base);
   text-align: left;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
 
 .nav-item:hover {
-  background: #313244;
-  color: #cdd6f4;
+  background: var(--sidebar-item-hover);
+  color: var(--sidebar-text-active);
 }
 
 .nav-item.active {
-  background: #45475a;
-  color: #cdd6f4;
+  background: var(--sidebar-item-active);
+  color: var(--sidebar-text-active);
 }
 </style>

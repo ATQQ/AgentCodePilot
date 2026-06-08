@@ -1,0 +1,44 @@
+:root {
+  /* Sidebar */
+  --sidebar-width: 220px;
+  --sidebar-bg: #1e1e2e;
+  --sidebar-text: #a6adc8;
+  --sidebar-text-active: #cdd6f4;
+  --sidebar-item-hover: #313244;
+  --sidebar-item-active: #45475a;
+
+  /* Main content */
+  --content-bg: #fafafa;
+  --content-text: #1a1a2e;
+  --content-text-secondary: #6b7280;
+
+  /* TopBar */
+  --topbar-height: 36px;
+
+  /* Typography */
+  --font-size-xs: 12px;
+  --font-size-sm: 13px;
+  --font-size-base: 14px;
+  --font-size-lg: 16px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 28px;
+
+  /* Input */
+  --input-bg: #ffffff;
+  --input-border: #e5e7eb;
+  --input-border-focus: #6366f1;
+  --input-radius: 8px;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+
+  /* Border radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+}

@@ -1,7 +1,27 @@
+<script setup lang="ts">
+import HomeEmptyState from '@renderer/components/home/HomeEmptyState.vue'
+import PromptComposer from '@renderer/components/home/PromptComposer.vue'
+import AgentSelector from '@renderer/components/home/AgentSelector.vue'
+import ModelSelector from '@renderer/components/home/ModelSelector.vue'
+import WorkspaceSelector from '@renderer/components/home/WorkspaceSelector.vue'
+
+function handleSubmit(text: string): void {
+  console.log('Submit:', text)
+}
+</script>
+
 <template>
   <div class="home-view">
-    <h1 class="home-title">AgentCodePilot</h1>
-    <p class="home-subtitle">What should we work on?</p>
+    <HomeEmptyState />
+    <PromptComposer @submit="handleSubmit">
+      <template #selectors>
+        <div class="selectors">
+          <AgentSelector />
+          <ModelSelector />
+          <WorkspaceSelector />
+        </div>
+      </template>
+    </PromptComposer>
   </div>
 </template>
 
@@ -12,17 +32,13 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  gap: 12px;
+  gap: 32px;
+  padding: var(--spacing-xl);
 }
 
-.home-title {
-  font-size: 32px;
-  font-weight: 700;
-  color: #1a1a2e;
-}
-
-.home-subtitle {
-  font-size: 16px;
-  color: #6b7280;
+.selectors {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
 }
 </style>
