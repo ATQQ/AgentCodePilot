@@ -360,7 +360,103 @@ AgentSelector.vue
 
 不要让业务状态直接绑定 vue-element-plus-x 的内部数据结构。
 
-## 10. 推荐目录结构
+## 10. 首页布局参考
+
+第一版首页可以综合 Cursor Agent 与 Codex Desktop 的布局特点：保留左侧工作区和任务入口，同时让中央区域保持极简、聚焦输入。
+
+### 10.1 Cursor Agent 首页特征
+
+参考 Cursor Agent 首页：
+
+- 左侧侧栏作为主要导航和上下文入口。
+- 顶部提供 New Agent / Automations / Customize 等能力入口。
+- 中段展示 Repositories，帮助用户从代码仓库进入任务。
+- 下方展示最近任务、分支或云端状态。
+- 主区域留白较多，中央是主要输入框。
+- 输入框附近可以选择仓库、分支、运行位置和 Agent / Model。
+
+适合借鉴的点：
+
+- 仓库优先的工作流。
+- 新建 Agent 任务入口明确。
+- 侧栏承载项目、历史、自动化和设置。
+- 中央 Composer 承载“从自然语言开始任务”的主路径。
+
+### 10.2 Codex Desktop 首页特征
+
+参考 Codex Desktop 首页：
+
+- 左侧侧栏更克制，主要包含新对话、搜索、技能、插件、自动化、项目和设置。
+- 主区域几乎完全留白，用一个大标题引导用户输入。
+- Composer 位于视觉中心，支持自动审查、模型选择、自定义强度和进入项目工作区。
+- 底部保留设置入口。
+- 整体视觉更轻，适合降低新用户的初始压力。
+
+适合借鉴的点：
+
+- 首页空状态清晰。
+- 中央输入优先，减少干扰。
+- 会话、项目、技能和自动化在侧栏中分组。
+- 模型和模式选择直接贴近输入框。
+
+### 10.3 本项目 MVP 首页方案
+
+第一版建议采用二栏布局：
+
+```text
+┌──────────────────────────────────────────────────────┐
+│ Traffic Lights / Window Controls                     │
+├────────────────┬─────────────────────────────────────┤
+│ Sidebar        │ Main                                │
+│                │                                     │
+│ New Agent      │                                     │
+│ Conversations  │          我们该做什么？              │
+│ Search         │                                     │
+│ Skills         │      ┌───────────────────────┐      │
+│ Automations    │      │ Prompt Composer        │      │
+│                │      │ Agent / Model / Mode   │      │
+│ Projects       │      │ Workspace selector     │      │
+│ - repo A       │      └───────────────────────┘      │
+│ - repo B       │                                     │
+│                │                                     │
+│ Settings       │                                     │
+└────────────────┴─────────────────────────────────────┘
+```
+
+核心取舍：
+
+- 左侧宽度控制在 220px 到 280px。
+- 主区域保持低噪音，默认展示欢迎标题和 Composer。
+- Composer 是首页的最高优先级交互。
+- Agent、模型、运行模式和工作区选择应贴近 Composer。
+- 项目、会话、技能、自动化和设置放在侧栏。
+- 新用户无会话时展示空状态；有会话后侧栏展示最近会话和项目。
+- 第一版不做复杂 IDE 布局，代码预览、终端和 diff 通过 Drawer / Panel 延后出现。
+
+建议首页组件：
+
+```text
+HomeView.vue
+AppSidebar.vue
+SidebarNavSection.vue
+ProjectList.vue
+ConversationList.vue
+HomeEmptyState.vue
+PromptComposer.vue
+AgentModeSelector.vue
+WorkspaceSelector.vue
+ModelSelector.vue
+```
+
+### 10.4 视觉原则
+
+- 使用浅色中性背景，主区域避免过多边框。
+- 侧栏使用轻量图标和分组标题，减少层级噪音。
+- 输入框使用卡片式容器，支持多行输入、附件、语音或快捷操作扩展。
+- 默认状态不要展示过多配置项，高级能力进入设置页或下拉菜单。
+- Agent / Model / Mode 选择应短路径可达，但不抢占输入框视觉中心。
+
+## 11. 推荐目录结构
 
 ```text
 desktop-agent/
@@ -396,6 +492,7 @@ desktop-agent/
           chat.store.ts
           settings.store.ts
         views/
+          HomeView.vue
           ChatView.vue
           SettingsView.vue
         components/
@@ -409,6 +506,11 @@ desktop-agent/
             MessageBubble.vue
             Composer.vue
             ToolCallCard.vue
+          home/
+            HomeEmptyState.vue
+            PromptComposer.vue
+            WorkspaceSelector.vue
+            AgentModeSelector.vue
           workspace/
             FileTree.vue
             CodePreview.vue
@@ -447,7 +549,7 @@ desktop-agent/
         unified.ts
 ```
 
-## 11. MVP 范围
+## 12. MVP 范围
 
 第一版只保证最短闭环：
 
@@ -464,7 +566,8 @@ Vue Chat UI
 
 - electron-vite + Vue 3 初始化。
 - Element Plus + vue-element-plus-x 接入。
-- 基础三栏或两栏布局。
+- 参考 Cursor Agent / Codex Desktop 的基础两栏首页。
+- 中央首页 Composer 与空状态。
 - Agent 选择器。
 - 会话列表和消息列表。
 - Prompt 输入框与流式输出。
@@ -482,7 +585,7 @@ MVP 可以暂缓：
 - 全量文件 patch review。
 - 高级权限系统。
 
-## 12. 分阶段实施路径
+## 13. 分阶段实施路径
 
 ### 阶段 1：桌面壳与基础 UI
 
@@ -490,7 +593,9 @@ MVP 可以暂缓：
 
 - 初始化 electron-vite + Vue 3 + TypeScript。
 - 接入 Element Plus、vue-element-plus-x、Pinia、Vue Router。
-- 实现主布局、会话列表、Agent 选择器和基础 Chat 页面。
+- 实现参考 Cursor Agent / Codex Desktop 的首页布局。
+- 实现左侧导航、项目列表、会话入口、设置入口和中央 Composer。
+- 实现 Agent 选择器、模型选择器、工作区选择器和基础 Chat 页面。
 - 定义 Renderer 与 Main 之间的 IPC API 边界。
 
 输出：
@@ -498,6 +603,7 @@ MVP 可以暂缓：
 - 可启动桌面 App。
 - 可创建会话。
 - 可选择 Agent。
+- 可在首页选择项目或直接输入任务。
 - 可发送消息，但可以先使用 mock runtime。
 
 ### 阶段 2：Agent Runtime 与第一个 SDK
@@ -610,7 +716,7 @@ MVP 可以暂缓：
 - 更清晰的进程隔离。
 - 更适合生产发布的桌面应用。
 
-## 13. 安全与权限原则
+## 14. 安全与权限原则
 
 默认权限建议：
 
@@ -632,7 +738,7 @@ Agent Mode: 可写文件和执行命令，但危险操作需要确认
 Full Auto Mode: 自动执行，仅建议在隔离 workspace 或 git worktree 内使用
 ```
 
-## 14. 关键风险
+## 15. 关键风险
 
 - Agent SDK 事件模型差异大，需要可靠 Adapter 层。
 - tool call 与 streaming 的协议适配复杂，尤其是 OpenAI 与 Anthropic 的差异。
@@ -641,7 +747,7 @@ Full Auto Mode: 自动执行，仅建议在隔离 workspace 或 git worktree 内
 - SQLite、日志和配置文件需要区分用户数据目录与应用安装目录。
 - ElectronBun 有潜力，但需验证 Bun 兼容性后再进入主线。
 
-## 15. 当前建议
+## 16. 当前建议
 
 第一版按以下方向推进：
 
