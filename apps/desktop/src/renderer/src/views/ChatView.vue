@@ -2,6 +2,7 @@
 import { watch, nextTick, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import MarkdownRender from 'markstream-vue'
 import { useChatStore } from '@renderer/stores/chat.store'
 import { useAgentStore } from '@renderer/stores/agent.store'
 import PromptComposer from '@renderer/components/home/PromptComposer.vue'
@@ -12,6 +13,7 @@ const router = useRouter()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const messagesEnd = ref<HTMLElement | null>(null)
+const streamedMessageIds = ref<Set<string>>(new Set())
 
 if (!chatStore.activeConversation) {
   router.replace('/')
@@ -28,11 +30,45 @@ watch(
   () => scrollToBottom()
 )
 
-function handleSubmit(text: string): void {
-  if (!text || !chatStore.activeConversationId) return
-  chatStore.sendMessage(chatStore.activeConversationId, text)
+watch(
+  () => {
+    const msgs = chatStore.activeConversation?.messages
+    if (!msgs || msgs.length === 0) return ''
+    return msgs[msgs.length - 1].content
+  },
+  () => scrollToBottom()
+)
+
+function isStreamingMessage(msgId: string): boolean {
+  const msgs = chatStore.activeConversation?.messages
+  if (!msgs || msgs.length === 0) return false
+  const last = msgs[msgs.length - 1]
+  const streaming = chatStore.isStreaming && last.id === msgId && last.role === 'assistant'
+  if (streaming) {
+    streamedMessageIds.value.add(msgId)
+  }
+  return streaming
 }
 
+function wasStreamed(msgId: string): boolean {
+  return streamedMessageIds.value.has(msgId)
+}
+
+function handleSubmit(text: string): void {
+  if (!text || !chatStore.activeConversationId) return
+  const agentId = chatStore.activeConversation?.agentId ?? agentStore.selectedAgentId
+  chatStore.sendMessage(chatStore.activeConversationId, text, agentId)
+}
+
+function handleStop(): void {
+  if (chatStore.activeConversationId) {
+    chatStore.stopConversation(chatStore.activeConversationId)
+  }
+}
+
+function handleCancelQueue(index: number): void {
+  chatStore.cancelQueuedMessage(index)
+}
 </script>
 
 <template>
@@ -50,13 +86,38 @@ function handleSubmit(text: string): void {
           :class="msg.role"
         >
           <div class="message-role">{{ msg.role === 'user' ? t('chat.you') : agentStore.currentAgent?.name }}</div>
-          <div class="message-content">{{ msg.content }}</div>
+          <div class="message-content">
+            <template v-if="msg.role === 'assistant'">
+              <MarkdownRender
+                custom-id="chat"
+                :content="msg.content"
+                :final="!isStreamingMessage(msg.id)"
+                :smooth-streaming="isStreamingMessage(msg.id) ? 'auto' : false"
+                :fade="!isStreamingMessage(msg.id) && !wasStreamed(msg.id)"
+                :typewriter="isStreamingMessage(msg.id)"
+                :max-live-nodes="isStreamingMessage(msg.id) ? 0 : undefined"
+                :batch-rendering="true"
+                :render-batch-size="16"
+                :render-batch-delay="8"
+                :render-batch-budget-ms="4"
+              />
+            </template>
+            <template v-else>
+              {{ msg.content }}
+            </template>
+          </div>
         </div>
         <div ref="messagesEnd"></div>
       </div>
 
       <div class="chat-input-area">
-        <PromptComposer @submit="handleSubmit">
+        <PromptComposer
+          :streaming="chatStore.isStreaming"
+          :queued-messages="chatStore.currentQueuedMessages"
+          @submit="handleSubmit"
+          @stop="handleStop"
+          @cancel-queue="handleCancelQueue"
+        >
           <template #selectors>
             <AgentSelector />
           </template>
@@ -102,7 +163,7 @@ function handleSubmit(text: string): void {
 }
 
 .message {
-  max-width: 80%;
+  max-width: 85%;
 }
 
 .message.user {
@@ -121,11 +182,8 @@ function handleSubmit(text: string): void {
 }
 
 .message-content {
-  padding: var(--spacing-sm) var(--spacing-md);
-  border-radius: var(--radius-lg);
   font-size: var(--font-size-base);
   line-height: 1.5;
-  white-space: pre-wrap;
   word-break: break-word;
   -webkit-user-select: text;
   user-select: text;
@@ -133,12 +191,14 @@ function handleSubmit(text: string): void {
 }
 
 .message.user .message-content {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-lg);
   background: var(--btn-primary-bg);
   color: var(--btn-primary-text);
+  white-space: pre-wrap;
 }
 
 .message.assistant .message-content {
-  background: var(--btn-secondary-bg);
   color: var(--content-text);
 }
 
