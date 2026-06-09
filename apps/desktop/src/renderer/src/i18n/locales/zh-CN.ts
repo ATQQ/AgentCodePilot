@@ -55,6 +55,11 @@ export default {
     filterFolders: '筛选文件夹...',
     addFolder: '添加文件夹'
   },
+  chat: {
+    you: '你',
+    inputPlaceholder: '输入消息...',
+    noConversation: '暂无活跃对话'
+  },
   settings: {
     title: '设置',
     searchPlaceholder: '搜索设置...',

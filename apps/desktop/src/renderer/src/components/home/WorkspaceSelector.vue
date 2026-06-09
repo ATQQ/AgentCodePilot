@@ -2,49 +2,58 @@
 import { ref, computed, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { FolderOpened, Search, Plus, Close, Folder } from '@element-plus/icons-vue'
-import { mockProjects, mockWorkspaces, mockFolders } from '@renderer/mock/data'
+import { useWorkspaceStore } from '@renderer/stores/workspace.store'
+import { mockFolders } from '@renderer/mock/data'
 
 const { t } = useI18n()
+const workspaceStore = useWorkspaceStore()
 
 const showDropdown = ref(false)
 const showAddSubmenu = ref(false)
 const showWorkspacePanel = ref(false)
 const searchQuery = ref('')
 const folderFilter = ref('')
-const selectedProject = ref<string | null>(null)
 const workspaceName = ref('')
 const workspaceFolders = ref<string[]>([])
 const dropAbove = ref(false)
 const triggerRef = ref<HTMLElement | null>(null)
 const dropdownRef = ref<HTMLElement | null>(null)
 
+const selectedDisplayName = computed(() => {
+  if (!workspaceStore.selectedProjectId) return null
+  const proj = workspaceStore.projects.find((p) => p.id === workspaceStore.selectedProjectId)
+  if (proj) return proj.name
+  const ws = workspaceStore.workspaces.find((w) => w.id === workspaceStore.selectedProjectId)
+  return ws?.name ?? null
+})
+
 const filteredProjects = computed(() => {
-  if (!searchQuery.value) return mockProjects
+  if (!searchQuery.value) return workspaceStore.projects
   const q = searchQuery.value.toLowerCase()
-  return mockProjects.filter(p => p.name.toLowerCase().includes(q))
+  return workspaceStore.projects.filter((p) => p.name.toLowerCase().includes(q))
 })
 
 const filteredWorkspaces = computed(() => {
-  if (!searchQuery.value) return mockWorkspaces
+  if (!searchQuery.value) return workspaceStore.workspaces
   const q = searchQuery.value.toLowerCase()
-  return mockWorkspaces.filter(ws => ws.name.toLowerCase().includes(q))
+  return workspaceStore.workspaces.filter((ws) => ws.name.toLowerCase().includes(q))
 })
 
 const filteredFolders = computed(() => {
-  const folders = mockFolders.map(f => f.path)
+  const folders = mockFolders.map((f) => f.path)
   if (!folderFilter.value) return folders
   const q = folderFilter.value.toLowerCase()
-  return folders.filter(f => f.toLowerCase().includes(q))
+  return folders.filter((f) => f.toLowerCase().includes(q))
 })
 
 function selectProject(id: string | null): void {
-  selectedProject.value = id
+  workspaceStore.selectProject(id)
   showDropdown.value = false
   searchQuery.value = ''
 }
 
-function selectWorkspace(name: string): void {
-  selectedProject.value = name
+function selectWorkspace(id: string): void {
+  workspaceStore.selectProject(id)
   showDropdown.value = false
   searchQuery.value = ''
 }
@@ -85,7 +94,14 @@ function addFolderToWorkspace(folder: string): void {
 }
 
 function removeFolderFromWorkspace(folder: string): void {
-  workspaceFolders.value = workspaceFolders.value.filter(f => f !== folder)
+  workspaceFolders.value = workspaceFolders.value.filter((f) => f !== folder)
+}
+
+function saveWorkspace(): void {
+  if (workspaceName.value.trim() && workspaceFolders.value.length) {
+    workspaceStore.createWorkspace(workspaceName.value.trim(), [...workspaceFolders.value])
+  }
+  showWorkspacePanel.value = false
 }
 
 function closeWorkspacePanel(): void {
@@ -95,21 +111,18 @@ function closeWorkspacePanel(): void {
 
 <template>
   <div class="workspace-selector">
-    <!-- Selected project state -->
-    <button v-if="selectedProject" ref="triggerRef" class="selected-project-btn" @click="toggleDropdown">
+    <button v-if="selectedDisplayName" ref="triggerRef" class="selected-project-btn" @click="toggleDropdown">
       <el-icon :size="14"><FolderOpened /></el-icon>
-      <span>{{ selectedProject }}</span>
+      <span>{{ selectedDisplayName }}</span>
       <span class="chevron">&#x25BE;</span>
     </button>
 
-    <!-- Unselected state -->
     <button v-else ref="triggerRef" class="enter-project-btn" @click="toggleDropdown">
       <el-icon :size="14"><FolderOpened /></el-icon>
       <span>{{ t('project.enterProject') }}</span>
       <span class="chevron">&#x25BE;</span>
     </button>
 
-    <!-- Project dropdown -->
     <Transition name="fade">
       <div v-if="showDropdown" ref="dropdownRef" class="project-dropdown" :class="{ 'drop-above': dropAbove }">
         <div class="dropdown-search">
@@ -122,22 +135,20 @@ function closeWorkspacePanel(): void {
           />
         </div>
 
-        <!-- Projects group -->
         <div class="dropdown-list">
           <button
             v-for="proj in filteredProjects"
             :key="proj.id"
             class="dropdown-item"
-            :class="{ selected: selectedProject === proj.name }"
-            @click="selectProject(proj.name)"
+            :class="{ selected: workspaceStore.selectedProjectId === proj.id }"
+            @click="selectProject(proj.id)"
           >
             <el-icon :size="14"><FolderOpened /></el-icon>
             <span class="item-label">{{ proj.name }}</span>
-            <span v-if="selectedProject === proj.name" class="check">&#x2713;</span>
+            <span v-if="workspaceStore.selectedProjectId === proj.id" class="check">&#x2713;</span>
           </button>
         </div>
 
-        <!-- Workspaces group -->
         <div v-if="filteredWorkspaces.length" class="dropdown-divider"></div>
         <div v-if="filteredWorkspaces.length" class="dropdown-group-title">{{ t('sidebar.workspaces') }}</div>
         <div v-if="filteredWorkspaces.length" class="dropdown-list">
@@ -145,8 +156,8 @@ function closeWorkspacePanel(): void {
             v-for="ws in filteredWorkspaces"
             :key="ws.id"
             class="dropdown-item"
-            :class="{ selected: selectedProject === ws.name }"
-            @click="selectWorkspace(ws.name)"
+            :class="{ selected: workspaceStore.selectedProjectId === ws.id }"
+            @click="selectWorkspace(ws.id)"
           >
             <el-icon :size="14"><Folder /></el-icon>
             <span class="item-label">{{ ws.name }}</span>
@@ -191,7 +202,6 @@ function closeWorkspacePanel(): void {
       </div>
     </Transition>
 
-    <!-- Workspace setup panel -->
     <Transition name="fade">
       <div v-if="showWorkspacePanel" class="workspace-panel">
         <div class="panel-header">
@@ -202,9 +212,11 @@ function closeWorkspacePanel(): void {
             :placeholder="t('project.workspaceNamePlaceholder')"
             class="workspace-name-input"
           />
+          <button v-if="workspaceName.trim() && workspaceFolders.length" class="panel-save" @click="saveWorkspace">
+            &#x2713;
+          </button>
         </div>
 
-        <!-- Current workspace folders -->
         <div v-if="workspaceFolders.length" class="workspace-folders">
           <div
             v-for="folder in workspaceFolders"
@@ -219,7 +231,6 @@ function closeWorkspacePanel(): void {
           </div>
         </div>
 
-        <!-- Filter folders -->
         <div class="folder-filter">
           <input
             v-model="folderFilter"
@@ -229,7 +240,6 @@ function closeWorkspacePanel(): void {
           />
         </div>
 
-        <!-- Folder list -->
         <div class="folder-list">
           <button
             v-for="folder in filteredFolders"
@@ -285,7 +295,6 @@ function closeWorkspacePanel(): void {
   opacity: 0.5;
 }
 
-/* Dropdown */
 .project-dropdown,
 .workspace-panel {
   position: absolute;
@@ -418,7 +427,6 @@ function closeWorkspacePanel(): void {
   z-index: 1001;
 }
 
-/* Workspace panel */
 .panel-header {
   display: flex;
   align-items: center;
@@ -440,6 +448,21 @@ function closeWorkspacePanel(): void {
 
 .panel-back:hover {
   color: var(--content-text);
+}
+
+.panel-save {
+  border: none;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .workspace-name-input {

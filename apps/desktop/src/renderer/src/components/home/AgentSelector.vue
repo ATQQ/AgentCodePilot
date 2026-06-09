@@ -1,21 +1,14 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { useAgentStore } from '@renderer/stores/agent.store'
 
-const selected = ref('claude-code')
+const agentStore = useAgentStore()
 
-const options = [
-  { value: 'claude-code', label: 'Claude Code' },
-  { value: 'codex', label: 'Codex' },
-  { value: 'gemini-cli', label: 'Gemini CLI' },
-  { value: 'cursor', label: 'Cursor' }
-]
-
-const currentLabel = () => options.find(o => o.value === selected.value)?.label || ''
+const currentLabel = () => agentStore.currentAgent?.name || ''
 </script>
 
 <template>
   <div class="agent-selector">
-    <el-dropdown trigger="click" @command="(v: string) => selected = v">
+    <el-dropdown trigger="click" @command="(v: string) => agentStore.selectAgent(v)">
       <button class="agent-btn">
         <span>{{ currentLabel() }}</span>
         <span class="chevron">&#x25BE;</span>
@@ -23,11 +16,12 @@ const currentLabel = () => options.find(o => o.value === selected.value)?.label 
       <template #dropdown>
         <el-dropdown-menu>
           <el-dropdown-item
-            v-for="opt in options"
-            :key="opt.value"
-            :command="opt.value"
+            v-for="agent in agentStore.agents"
+            :key="agent.id"
+            :command="agent.id"
+            :disabled="!agent.enabled"
           >
-            {{ opt.label }}
+            {{ agent.name }}
           </el-dropdown-item>
         </el-dropdown-menu>
       </template>

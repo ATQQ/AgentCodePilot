@@ -58,3 +58,29 @@ html.dark .el-input__wrapper {
 html.dark .el-empty__description p {
   color: var(--el-text-color-secondary);
 }
+
+/* Dropdown menu dark mode */
+html.dark .el-dropdown-menu {
+  background: var(--el-bg-color-overlay);
+  border-color: var(--el-border-color);
+}
+
+html.dark .el-dropdown-menu__item {
+  color: var(--el-text-color-regular);
+}
+
+html.dark .el-dropdown-menu__item:not(.is-disabled):hover,
+html.dark .el-dropdown-menu__item:not(.is-disabled):focus {
+  background: var(--sidebar-item-hover);
+  color: var(--el-text-color-primary);
+}
+
+html.dark .el-popper.is-light {
+  background: var(--el-bg-color-overlay);
+  border-color: var(--el-border-color);
+}
+
+html.dark .el-popper.is-light .el-popper__arrow::before {
+  background: var(--el-bg-color-overlay);
+  border-color: var(--el-border-color);
+}

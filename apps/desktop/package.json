@@ -25,6 +25,7 @@
     "@element-plus/icons-vue": "^2.3.2",
     "electron-updater": "^6.3.9",
     "element-plus": "^2.14.1",
+    "pinia": "^3.0.4",
     "vue-element-plus-x": "^2.0.3",
     "vue-i18n": "^11.4.5",
     "vue-router": "^5.1.0"

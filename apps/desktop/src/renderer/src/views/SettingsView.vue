@@ -2,8 +2,8 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { useTheme } from '@renderer/composables/useTheme'
-import type { ThemeMode } from '@renderer/composables/useTheme'
+import { useSettingsStore } from '@renderer/stores/settings.store'
+import type { ThemeMode } from '@renderer/types'
 import {
   ArrowLeft,
   Setting,
@@ -22,7 +22,7 @@ import {
 
 const { t } = useI18n()
 const router = useRouter()
-const { theme } = useTheme()
+const settingsStore = useSettingsStore()
 
 const activeSection = ref('appearance')
 
@@ -137,8 +137,8 @@ function goBack(): void {
                   v-for="opt in themeOptions"
                   :key="opt.value"
                   class="theme-btn"
-                  :class="{ active: theme === opt.value }"
-                  @click="theme = opt.value"
+                  :class="{ active: settingsStore.theme === opt.value }"
+                  @click="settingsStore.setTheme(opt.value)"
                 >
                   <span class="theme-icon">{{ opt.icon }}</span>
                   <span>{{ t(opt.labelKey) }}</span>

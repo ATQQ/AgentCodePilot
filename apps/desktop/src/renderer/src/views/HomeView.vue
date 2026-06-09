@@ -1,11 +1,19 @@
 <script setup lang="ts">
+import { useRouter } from 'vue-router'
 import HomeEmptyState from '@renderer/components/home/HomeEmptyState.vue'
 import PromptComposer from '@renderer/components/home/PromptComposer.vue'
 import AgentSelector from '@renderer/components/home/AgentSelector.vue'
 import WorkspaceSelector from '@renderer/components/home/WorkspaceSelector.vue'
+import { useChatStore } from '@renderer/stores/chat.store'
+import { useAgentStore } from '@renderer/stores/agent.store'
+
+const router = useRouter()
+const chatStore = useChatStore()
+const agentStore = useAgentStore()
 
 function handleSubmit(text: string): void {
-  console.log('Submit:', text)
+  chatStore.createConversation(agentStore.selectedAgentId, text)
+  router.push('/chat')
 }
 </script>
 
