@@ -1,20 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Conversation, Message } from '@renderer/types'
-import { mockConversations } from '@renderer/mock/data'
 
 export const useChatStore = defineStore('chat', () => {
-  const conversations = ref<Conversation[]>(
-    mockConversations.map((c) => ({
-      id: c.id,
-      title: c.title,
-      agentId: 'claude-code',
-      projectId: c.projectId,
-      messages: [],
-      createdAt: c.updatedAt,
-      updatedAt: c.updatedAt
-    }))
-  )
+  const conversations = ref<Conversation[]>([])
   const activeConversationId = ref<string | null>(null)
 
   const activeConversation = computed(() =>
@@ -35,10 +24,18 @@ export const useChatStore = defineStore('chat', () => {
     activeConversationId.value = id
   }
 
-  function createConversation(agentId: string, firstMessage: string, projectId?: string | null): string {
-    const id = `conv-${Date.now()}`
+  async function createConversation(
+    agentId: string,
+    firstMessage: string,
+    projectId?: string | null
+  ): Promise<string> {
+    const result = await window.agentAPI.chat.createConversation({
+      agentId,
+      firstMessage,
+      projectId
+    })
+
     const now = new Date().toISOString()
-    const title = firstMessage.slice(0, 30) + (firstMessage.length > 30 ? '...' : '')
     const msg: Message = {
       id: `msg-${Date.now()}`,
       role: 'user',
@@ -46,16 +43,16 @@ export const useChatStore = defineStore('chat', () => {
       createdAt: now
     }
     conversations.value.unshift({
-      id,
-      title,
+      id: result.id,
+      title: result.title,
       agentId,
       projectId: projectId ?? null,
       messages: [msg],
       createdAt: now,
       updatedAt: now
     })
-    activeConversationId.value = id
-    return id
+    activeConversationId.value = result.id
+    return result.id
   }
 
   function addMessage(conversationId: string, role: 'user' | 'assistant', content: string): void {
@@ -71,6 +68,21 @@ export const useChatStore = defineStore('chat', () => {
     conv.updatedAt = now
   }
 
+  async function sendMessage(conversationId: string, content: string): Promise<void> {
+    addMessage(conversationId, 'user', content)
+
+    const reply = await window.agentAPI.chat.sendMessage({ conversationId, content })
+
+    const conv = conversations.value.find((c) => c.id === conversationId)
+    if (!conv) return
+    conv.messages.push(reply)
+    conv.updatedAt = reply.createdAt
+  }
+
+  async function stopConversation(conversationId: string): Promise<void> {
+    await window.agentAPI.chat.stop(conversationId)
+  }
+
   return {
     conversations,
     activeConversationId,
@@ -79,6 +91,8 @@ export const useChatStore = defineStore('chat', () => {
     getConversationsByProject,
     setActive,
     createConversation,
-    addMessage
+    addMessage,
+    sendMessage,
+    stopConversation
   }
 })

@@ -40,8 +40,8 @@ function openConversation(id: string): void {
   router.push('/chat')
 }
 
-function newChatForProject(projectId: string): void {
-  chatStore.createConversation(agentStore.selectedAgentId, '新对话', projectId)
+async function newChatForProject(projectId: string): Promise<void> {
+  await chatStore.createConversation(agentStore.selectedAgentId, '新对话', projectId)
   router.push('/chat')
 }
 </script>

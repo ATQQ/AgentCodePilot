@@ -8,12 +8,17 @@ import App from './App.vue'
 import router from './router'
 import i18n from './i18n'
 import { useSettingsStore } from './stores/settings.store'
+import { useAgentStore } from './stores/agent.store'
 
 const pinia = createPinia()
 const app = createApp(App)
 
 app.use(pinia).use(router).use(ElementPlus).use(i18n)
 
-useSettingsStore()
+const settingsStore = useSettingsStore()
+const agentStore = useAgentStore()
+
+settingsStore.fetchSettings()
+agentStore.fetchAgents()
 
 app.mount('#app')

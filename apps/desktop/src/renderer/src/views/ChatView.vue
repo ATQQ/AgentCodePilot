@@ -30,19 +30,7 @@ watch(
 
 function handleSubmit(text: string): void {
   if (!text || !chatStore.activeConversationId) return
-  chatStore.addMessage(chatStore.activeConversationId, 'user', text)
-  simulateMockReply(chatStore.activeConversationId)
-}
-
-function simulateMockReply(conversationId: string): void {
-  setTimeout(() => {
-    const agentName = agentStore.currentAgent?.name ?? 'Agent'
-    chatStore.addMessage(
-      conversationId,
-      'assistant',
-      `[${agentName} mock] 收到你的消息，这是一条模拟回复。后续接入真实 Agent SDK 后将替换为真实响应。`
-    )
-  }, 800)
+  chatStore.sendMessage(chatStore.activeConversationId, text)
 }
 
 </script>

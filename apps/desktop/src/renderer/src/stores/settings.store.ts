@@ -2,14 +2,6 @@ import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import type { ThemeMode, ApprovalLevel } from '@renderer/types'
 
-const THEME_STORAGE_KEY = 'agent-desktop-theme'
-
-function getStoredTheme(): ThemeMode {
-  const stored = localStorage.getItem(THEME_STORAGE_KEY)
-  if (stored === 'light' || stored === 'dark' || stored === 'system') return stored
-  return 'light'
-}
-
 function getEffectiveTheme(mode: ThemeMode): 'light' | 'dark' {
   if (mode === 'system') {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
@@ -23,14 +15,13 @@ function applyThemeToDOM(mode: ThemeMode): void {
 }
 
 export const useSettingsStore = defineStore('settings', () => {
-  const theme = ref<ThemeMode>(getStoredTheme())
+  const theme = ref<ThemeMode>('light')
   const approvalLevel = ref<ApprovalLevel>('request')
   const language = ref('zh-CN')
 
   applyThemeToDOM(theme.value)
 
   watch(theme, (newMode) => {
-    localStorage.setItem(THEME_STORAGE_KEY, newMode)
     applyThemeToDOM(newMode)
   })
 
@@ -40,13 +31,23 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   })
 
-  function setTheme(mode: ThemeMode): void {
+  async function fetchSettings(): Promise<void> {
+    const settings = await window.agentAPI.settings.get()
+    theme.value = settings.theme
+    approvalLevel.value = settings.approvalLevel
+    language.value = settings.language
+    applyThemeToDOM(settings.theme)
+  }
+
+  async function setTheme(mode: ThemeMode): Promise<void> {
     theme.value = mode
+    await window.agentAPI.settings.update({ theme: mode })
   }
 
-  function setApprovalLevel(level: ApprovalLevel): void {
+  async function setApprovalLevel(level: ApprovalLevel): Promise<void> {
     approvalLevel.value = level
+    await window.agentAPI.settings.update({ approvalLevel: level })
   }
 
-  return { theme, approvalLevel, language, setTheme, setApprovalLevel }
+  return { theme, approvalLevel, language, fetchSettings, setTheme, setApprovalLevel }
 })

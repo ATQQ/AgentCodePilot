@@ -11,8 +11,8 @@ const router = useRouter()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 
-function handleSubmit(text: string): void {
-  chatStore.createConversation(agentStore.selectedAgentId, text)
+async function handleSubmit(text: string): Promise<void> {
+  await chatStore.createConversation(agentStore.selectedAgentId, text)
   router.push('/chat')
 }
 </script>
