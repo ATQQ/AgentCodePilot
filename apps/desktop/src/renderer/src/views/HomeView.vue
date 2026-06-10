@@ -12,8 +12,10 @@ const chatStore = useChatStore()
 const agentStore = useAgentStore()
 
 async function handleSubmit(text: string): Promise<void> {
-  await chatStore.createConversation(agentStore.selectedAgentId, text)
+  const agentId = agentStore.selectedAgentId
+  const convId = await chatStore.createConversation(agentId, text)
   router.push('/chat')
+  await window.agentAPI.chat.sendMessage({ conversationId: convId, content: text, agentId })
 }
 </script>
 

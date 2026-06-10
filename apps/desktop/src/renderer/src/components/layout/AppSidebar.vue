@@ -41,8 +41,10 @@ function openConversation(id: string): void {
 }
 
 async function newChatForProject(projectId: string): Promise<void> {
-  await chatStore.createConversation(agentStore.selectedAgentId, '新对话', projectId)
+  const agentId = agentStore.selectedAgentId
+  const convId = await chatStore.createConversation(agentId, '新对话', projectId)
   router.push('/chat')
+  await window.agentAPI.chat.sendMessage({ conversationId: convId, content: '新对话', agentId })
 }
 </script>
 

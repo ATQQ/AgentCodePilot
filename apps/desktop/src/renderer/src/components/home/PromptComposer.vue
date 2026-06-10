@@ -11,8 +11,15 @@ const planMode = ref(false)
 const pursueGoals = ref(false)
 const approvalLevel = ref<'request' | 'auto' | 'full'>('request')
 
+const props = defineProps<{
+  streaming?: boolean
+  queuedMessages?: { content: string }[]
+}>()
+
 const emit = defineEmits<{
   submit: [text: string]
+  stop: []
+  cancelQueue: [index: number]
 }>()
 
 function handleSubmit(): void {
@@ -29,6 +36,14 @@ function handleKeydown(e: KeyboardEvent): void {
   }
 }
 
+function handleStop(): void {
+  emit('stop')
+}
+
+function handleCancelQueue(index: number): void {
+  emit('cancelQueue', index)
+}
+
 function selectApproval(level: 'request' | 'auto' | 'full'): void {
   approvalLevel.value = level
   showApprovalMenu.value = false
@@ -43,6 +58,15 @@ const approvalOptions = {
 
 <template>
   <div class="composer">
+    <!-- Queued messages -->
+    <div v-if="props.queuedMessages?.length" class="queued-area">
+      <div v-for="(msg, idx) in props.queuedMessages" :key="idx" class="queued-banner">
+        <span class="queued-badge">{{ idx + 1 }}</span>
+        <span class="queued-text">{{ msg.content }}</span>
+        <button class="queued-cancel" @click="handleCancelQueue(idx)">&times;</button>
+      </div>
+    </div>
+
     <textarea
       v-model="input"
       class="composer-input"
@@ -145,6 +169,15 @@ const approvalOptions = {
       <div class="toolbar-right">
         <slot name="selectors" />
         <button
+          v-if="props.streaming && !input.trim()"
+          class="stop-btn"
+          @click="handleStop"
+          :title="t('chat.stop')"
+        >
+          <span class="stop-icon"></span>
+        </button>
+        <button
+          v-else
           class="send-btn"
           :disabled="!input.trim()"
           @click="handleSubmit"
@@ -169,6 +202,68 @@ const approvalOptions = {
 
 .composer:focus-within {
   border-color: var(--composer-border-focus);
+}
+
+.queued-area {
+  border-bottom: 1px solid var(--composer-border);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  overflow: hidden;
+}
+
+.queued-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 5px var(--spacing-lg);
+  background: var(--btn-ghost-hover);
+  font-size: var(--font-size-sm);
+}
+
+.queued-banner + .queued-banner {
+  border-top: 1px solid var(--composer-border);
+}
+
+.queued-badge {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--content-text-secondary);
+  color: var(--content-bg);
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.queued-text {
+  color: var(--content-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.queued-cancel {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--content-text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.queued-cancel:hover {
+  background: var(--sidebar-border);
+  color: var(--content-text);
 }
 
 .composer-input {
@@ -262,6 +357,32 @@ const approvalOptions = {
 
 .send-btn:not(:disabled):hover {
   opacity: 0.85;
+}
+
+.stop-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--content-text);
+  background: transparent;
+  color: var(--content-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+
+.stop-btn:hover {
+  opacity: 0.7;
+}
+
+.stop-icon {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: currentColor;
 }
 
 /* Dropdown */

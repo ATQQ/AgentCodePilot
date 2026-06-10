@@ -5,7 +5,7 @@
   margin: 0;
 }
 
-ul {
+ul:not(.markstream-vue ul) {
   list-style: none;
 }
 

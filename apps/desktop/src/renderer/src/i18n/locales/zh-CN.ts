@@ -58,7 +58,9 @@ export default {
   chat: {
     you: '你',
     inputPlaceholder: '输入消息...',
-    noConversation: '暂无活跃对话'
+    noConversation: '暂无活跃对话',
+    stop: '停止生成',
+    queued: '排队中'
   },
   settings: {
     title: '设置',

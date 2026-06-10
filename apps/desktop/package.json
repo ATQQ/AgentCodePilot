@@ -25,7 +25,9 @@
     "@element-plus/icons-vue": "^2.3.2",
     "electron-updater": "^6.3.9",
     "element-plus": "^2.14.1",
+    "markstream-vue": "1.0.1-beta.5",
     "pinia": "^3.0.4",
+    "stream-monaco": "^0.0.42",
     "vue-element-plus-x": "^2.0.3",
     "vue-i18n": "^11.4.5",
     "vue-router": "^5.1.0"

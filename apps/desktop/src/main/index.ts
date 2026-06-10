@@ -4,14 +4,15 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { IPC_CHANNELS } from '../preload/types'
 import type {
+  AgentEvent,
   AgentInfo,
   ConversationInfo,
   CreateConversationPayload,
-  MessageInfo,
   SendMessagePayload,
   SettingsInfo,
   SettingsPayload
 } from '../preload/types'
+import { MockAgentAdapter } from './runtime/mock-agent'
 
 const mockAgents: AgentInfo[] = [
   { id: 'claude-code', name: 'Claude Code', enabled: true },
@@ -24,6 +25,13 @@ const mockSettings: SettingsInfo = {
   theme: 'light',
   approvalLevel: 'request',
   language: 'zh-CN'
+}
+
+const mockAgent = new MockAgentAdapter()
+let mainWindow: BrowserWindow | null = null
+
+function emitAgentEvent(event: AgentEvent): void {
+  mainWindow?.webContents.send(IPC_CHANNELS.AGENT_EVENT, event)
 }
 
 function registerIpcHandlers(): void {
@@ -41,17 +49,21 @@ function registerIpcHandlers(): void {
     }
   )
 
-  ipcMain.handle(IPC_CHANNELS.CHAT_SEND, (_e, payload: SendMessagePayload): MessageInfo => {
-    return {
-      id: `msg-${Date.now()}`,
-      role: 'assistant',
-      content: `[Mock] 收到消息: "${payload.content.slice(0, 50)}"`,
-      createdAt: new Date().toISOString()
-    }
+  ipcMain.handle(IPC_CHANNELS.CHAT_SEND, (_e, payload: SendMessagePayload): void => {
+    const messageId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    mockAgent.run(
+      {
+        conversationId: payload.conversationId,
+        messageId,
+        content: payload.content,
+        agentId: payload.agentId
+      },
+      emitAgentEvent
+    )
   })
 
-  ipcMain.handle(IPC_CHANNELS.CHAT_STOP, (): void => {
-    // no-op for now
+  ipcMain.handle(IPC_CHANNELS.CHAT_STOP, (_e, conversationId: string): void => {
+    mockAgent.stop(conversationId)
   })
 
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, (): SettingsInfo => {
@@ -66,7 +78,7 @@ function registerIpcHandlers(): void {
 }
 
 function createWindow(): void {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 900,
@@ -84,7 +96,7 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+    mainWindow!.show()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -97,6 +109,10 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
 }
 
 app.whenReady().then(() => {
