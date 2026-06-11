@@ -1,13 +1,24 @@
 import { app } from 'electron'
 import { join } from 'path'
+import { mkdirSync } from 'fs'
 import Database from 'better-sqlite3'
 
 let db: Database.Database | null = null
 
+function getDbDir(): string {
+  const home = app.getPath('home')
+  const isDev = !app.isPackaged
+  const dirName = isDev ? '.agent-desktop-app-dev' : '.agent-desktop-app'
+  return join(home, dirName)
+}
+
 export function getDatabase(): Database.Database {
   if (db) return db
 
-  const dbPath = join(app.getPath('userData'), 'agentcodepilot.db')
+  const dir = getDbDir()
+  mkdirSync(dir, { recursive: true })
+
+  const dbPath = join(dir, 'data.db')
   db = new Database(dbPath)
 
   db.pragma('journal_mode = WAL')

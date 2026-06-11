@@ -2,6 +2,7 @@ export const IPC_CHANNELS = {
   AGENTS_LIST: 'agents:list',
   CHAT_CREATE: 'chat:createConversation',
   CHAT_SEND: 'chat:sendMessage',
+  CHAT_SEND_FIRST: 'chat:sendFirstMessage',
   CHAT_STOP: 'chat:stop',
   AGENT_EVENT: 'agent:event',
   SETTINGS_GET: 'settings:get',
@@ -96,6 +97,7 @@ export interface AgentAPI {
   chat: {
     createConversation: (payload: CreateConversationPayload) => Promise<ConversationInfo>
     sendMessage: (payload: SendMessagePayload) => Promise<void>
+    sendFirstMessage: (payload: SendMessagePayload) => Promise<void>
     stop: (conversationId: string) => Promise<void>
     onAgentEvent: (callback: (event: AgentEvent) => void) => () => void
   }

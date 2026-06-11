@@ -95,9 +95,9 @@ function registerIpcHandlers(): void {
         updatedAt: now
       })
 
-      const msgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      const userMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
       repo.addMessage({
-        id: msgId,
+        id: userMsgId,
         conversationId: id,
         role: 'user',
         content: payload.firstMessage,
@@ -108,12 +108,30 @@ function registerIpcHandlers(): void {
     }
   )
 
+  ipcMain.handle(IPC_CHANNELS.CHAT_SEND_FIRST, (_e, payload: SendMessagePayload): void => {
+    const assistantMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-a`
+    const runInput = {
+      conversationId: payload.conversationId,
+      messageId: assistantMsgId,
+      content: payload.content,
+      agentId: payload.agentId,
+      cwd: payload.cwd
+    }
+
+    if (payload.agentId === 'claude-code') {
+      claudeAgent.run(runInput, emitAgentEvent)
+    } else {
+      mockAgent.run(runInput, emitAgentEvent)
+    }
+  })
+
   ipcMain.handle(IPC_CHANNELS.CHAT_SEND, (_e, payload: SendMessagePayload): void => {
-    const messageId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    const userMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    const assistantMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-a`
     const now = new Date().toISOString()
 
     repo.addMessage({
-      id: messageId,
+      id: userMsgId,
       conversationId: payload.conversationId,
       role: 'user',
       content: payload.content,
@@ -122,7 +140,7 @@ function registerIpcHandlers(): void {
 
     const runInput = {
       conversationId: payload.conversationId,
-      messageId,
+      messageId: assistantMsgId,
       content: payload.content,
       agentId: payload.agentId,
       cwd: payload.cwd

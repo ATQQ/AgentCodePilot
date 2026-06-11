@@ -58,7 +58,7 @@ async function newChatForProject(projectId: string): Promise<void> {
   const agentId = agentStore.selectedAgentId
   const convId = await chatStore.createConversation(agentId, '新对话', projectId)
   router.push('/chat')
-  await window.agentAPI.chat.sendMessage({ conversationId: convId, content: '新对话', agentId })
+  await window.agentAPI.chat.sendFirstMessage({ conversationId: convId, content: '新对话', agentId })
 }
 
 function getConvTitle(conv: Conversation): string {

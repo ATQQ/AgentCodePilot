@@ -19,6 +19,8 @@ const agentAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.CHAT_CREATE, payload),
     sendMessage: (payload: SendMessagePayload) =>
       ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND, payload),
+    sendFirstMessage: (payload: SendMessagePayload) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND_FIRST, payload),
     stop: (conversationId: string) => ipcRenderer.invoke(IPC_CHANNELS.CHAT_STOP, conversationId),
     onAgentEvent: (callback: (event: AgentEvent) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, data: AgentEvent): void =>
