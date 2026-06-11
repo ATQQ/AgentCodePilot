@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "markstream-custom-components": {
+      "source": "Simon-He95/markstream-vue",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/markstream-custom-components/SKILL.md",
+      "computedHash": "f2a715b90428541f47879b1d5213826e442dc4e50d510a9691350e1f61199556"
+    },
+    "markstream-vue": {
+      "source": "Simon-He95/markstream-vue",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/markstream-vue/SKILL.md",
+      "computedHash": "8222be29d0bed27116584e459f31724332530818a77564ed420d6ffad3174f77"
+    }
+  }
+}

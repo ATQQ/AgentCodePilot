@@ -13,6 +13,7 @@ import type {
   SettingsPayload
 } from '../preload/types'
 import { MockAgentAdapter } from './runtime/mock-agent'
+import { ClaudeAgentAdapter } from './runtime/claude-agent'
 
 const mockAgents: AgentInfo[] = [
   { id: 'claude-code', name: 'Claude Code', enabled: true },
@@ -28,6 +29,7 @@ const mockSettings: SettingsInfo = {
 }
 
 const mockAgent = new MockAgentAdapter()
+const claudeAgent = new ClaudeAgentAdapter()
 let mainWindow: BrowserWindow | null = null
 
 function emitAgentEvent(event: AgentEvent): void {
@@ -51,18 +53,22 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.CHAT_SEND, (_e, payload: SendMessagePayload): void => {
     const messageId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-    mockAgent.run(
-      {
-        conversationId: payload.conversationId,
-        messageId,
-        content: payload.content,
-        agentId: payload.agentId
-      },
-      emitAgentEvent
-    )
+    const runInput = {
+      conversationId: payload.conversationId,
+      messageId,
+      content: payload.content,
+      agentId: payload.agentId
+    }
+
+    if (payload.agentId === 'claude-code') {
+      claudeAgent.run(runInput, emitAgentEvent)
+    } else {
+      mockAgent.run(runInput, emitAgentEvent)
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.CHAT_STOP, (_e, conversationId: string): void => {
+    claudeAgent.stop(conversationId)
     mockAgent.stop(conversationId)
   })
 
