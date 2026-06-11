@@ -396,7 +396,6 @@ onUnmounted(() => {
 .sidebar-drag-area {
   height: var(--topbar-height);
   flex-shrink: 0;
-  -webkit-app-region: drag;
 }
 
 .sidebar-content {
