@@ -5,6 +5,7 @@ export interface ConversationRow {
   title: string
   agent_id: string
   project_id: string | null
+  cwd: string | null
   pinned: number
   archived: number
   created_at: string
@@ -32,14 +33,15 @@ export function createConversation(conv: {
   title: string
   agentId: string
   projectId: string | null
+  cwd: string | null
   createdAt: string
   updatedAt: string
 }): void {
   const db = getDatabase()
   db.prepare(
-    `INSERT INTO conversations (id, title, agent_id, project_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  ).run(conv.id, conv.title, conv.agentId, conv.projectId, conv.createdAt, conv.updatedAt)
+    `INSERT INTO conversations (id, title, agent_id, project_id, cwd, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(conv.id, conv.title, conv.agentId, conv.projectId, conv.cwd, conv.createdAt, conv.updatedAt)
 }
 
 export function getConversationsByProject(projectId: string): ConversationRow[] {

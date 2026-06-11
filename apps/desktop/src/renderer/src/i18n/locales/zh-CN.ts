@@ -62,7 +62,8 @@ export default {
     stop: '停止生成',
     queued: '排队中',
     copy: '复制',
-    resend: '重新编辑'
+    resend: '重新编辑',
+    thinking: '思考中'
   },
   settings: {
     title: '设置',

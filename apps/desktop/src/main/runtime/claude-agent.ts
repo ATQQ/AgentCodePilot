@@ -1,6 +1,6 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { app } from 'electron'
-import type { AgentEvent } from '../../preload/types'
+import type { AgentEvent, TokenUsage } from '../../preload/types'
 import type { AgentRunInput } from './mock-agent'
 
 export class ClaudeAgentAdapter {
@@ -17,6 +17,8 @@ export class ClaudeAgentAdapter {
       messageId: input.messageId
     })
 
+    let usage: TokenUsage | undefined
+
     try {
       const existingSessionId = this.sessionIds.get(input.conversationId)
 
@@ -29,6 +31,7 @@ export class ClaudeAgentAdapter {
           maxTurns: 20,
           permissionMode: 'bypassPermissions',
           allowDangerouslySkipPermissions: true,
+          includePartialMessages: true,
           ...(existingSessionId ? { resume: existingSessionId } : {})
         }
       })
@@ -38,18 +41,22 @@ export class ClaudeAgentAdapter {
 
         if (message.type === 'system' && message.subtype === 'init') {
           this.sessionIds.set(input.conversationId, message.session_id)
+        } else if (message.type === 'stream_event') {
+          const event = (message as { event: { type: string; delta?: { type: string; text?: string } } }).event
+          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta' && event.delta.text) {
+            emit({
+              type: 'message.delta',
+              conversationId: input.conversationId,
+              messageId: input.messageId,
+              delta: event.delta.text
+            })
+          }
         } else if (message.type === 'assistant') {
-          const content = message.message?.content
-          if (Array.isArray(content)) {
-            for (const block of content) {
-              if (block.type === 'text' && block.text) {
-                emit({
-                  type: 'message.delta',
-                  conversationId: input.conversationId,
-                  messageId: input.messageId,
-                  delta: block.text
-                })
-              }
+          const msg = (message as { message?: { usage?: { input_tokens: number; output_tokens: number } } }).message
+          if (msg?.usage) {
+            usage = {
+              inputTokens: (usage?.inputTokens ?? 0) + msg.usage.input_tokens,
+              outputTokens: (usage?.outputTokens ?? 0) + msg.usage.output_tokens
             }
           }
         } else if (message.type === 'result') {
@@ -73,7 +80,8 @@ export class ClaudeAgentAdapter {
         emit({
           type: 'message.completed',
           conversationId: input.conversationId,
-          messageId: input.messageId
+          messageId: input.messageId,
+          usage
         })
       }
     } catch (error: unknown) {

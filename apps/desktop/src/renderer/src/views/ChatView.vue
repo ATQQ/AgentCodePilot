@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch, nextTick, ref } from 'vue'
+import { watch, nextTick, ref, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import MarkdownRender from 'markstream-vue'
@@ -16,6 +16,8 @@ const messagesEnd = ref<HTMLElement | null>(null)
 const composerRef = ref<InstanceType<typeof PromptComposer> | null>(null)
 const streamedMessageIds = ref<Set<string>>(new Set())
 const copiedMessageId = ref<string | null>(null)
+const waitingSeconds = ref(0)
+let waitingTimer: ReturnType<typeof setInterval> | null = null
 
 if (!chatStore.activeConversation) {
   router.replace('/')
@@ -26,6 +28,20 @@ function scrollToBottom(): void {
     messagesEnd.value?.scrollIntoView({ behavior: 'smooth' })
   })
 }
+
+watch(
+  () => chatStore.isWaiting,
+  (waiting) => {
+    if (waiting) {
+      waitingSeconds.value = 0
+      waitingTimer = setInterval(() => { waitingSeconds.value++ }, 1000)
+      scrollToBottom()
+    } else {
+      if (waitingTimer) { clearInterval(waitingTimer); waitingTimer = null }
+    }
+  },
+  { immediate: true }
+)
 
 watch(
   () => chatStore.activeConversation?.messages.length,
@@ -40,6 +56,10 @@ watch(
   },
   () => scrollToBottom()
 )
+
+onUnmounted(() => {
+  if (waitingTimer) clearInterval(waitingTimer)
+})
 
 function isStreamingMessage(msgId: string): boolean {
   const msgs = chatStore.activeConversation?.messages
@@ -133,8 +153,17 @@ function resendMessage(content: string): void {
             <button v-if="msg.role === 'user'" class="action-btn" :title="t('chat.resend')" @click="resendMessage(msg.content)">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
             </button>
+            <span v-if="msg.usage" class="action-tokens">{{ msg.usage.inputTokens + msg.usage.outputTokens }} tokens</span>
             <span class="action-time">{{ formatTime(msg.createdAt) }}</span>
           </div>
+        </div>
+        <div v-if="chatStore.isWaiting" class="thinking-indicator">
+          <div class="thinking-dots">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </div>
+          <span class="thinking-text">{{ t('chat.thinking') }} {{ waitingSeconds }}s</span>
         </div>
         <div ref="messagesEnd"></div>
       </div>
@@ -280,10 +309,51 @@ function resendMessage(content: string): void {
   color: var(--content-text);
 }
 
+.action-tokens {
+  font-size: var(--font-size-xs);
+  color: var(--content-text-secondary);
+  user-select: none;
+}
+
 .action-time {
   font-size: var(--font-size-xs);
   color: var(--content-text-secondary);
   user-select: none;
+}
+
+.thinking-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  align-self: flex-start;
+  padding: var(--spacing-sm) 0;
+}
+
+.thinking-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--content-text-secondary);
+  animation: dot-bounce 1.4s infinite ease-in-out both;
+}
+
+.dot:nth-child(1) { animation-delay: 0s; }
+.dot:nth-child(2) { animation-delay: 0.16s; }
+.dot:nth-child(3) { animation-delay: 0.32s; }
+
+@keyframes dot-bounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+.thinking-text {
+  font-size: var(--font-size-xs);
+  color: var(--content-text-secondary);
 }
 
 .no-conversation {

@@ -25,6 +25,7 @@ export function getDatabase(): Database.Database {
   db.pragma('foreign_keys = ON')
 
   migrate(db)
+  runMigrations(db)
 
   return db
 }
@@ -36,6 +37,7 @@ function migrate(database: Database.Database): void {
       title TEXT NOT NULL,
       agent_id TEXT NOT NULL,
       project_id TEXT,
+      cwd TEXT,
       pinned INTEGER DEFAULT 0,
       archived INTEGER DEFAULT 0,
       created_at TEXT NOT NULL,
@@ -68,6 +70,13 @@ function migrate(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_conversations_project
       ON conversations(project_id, pinned DESC, updated_at DESC);
   `)
+}
+
+function runMigrations(database: Database.Database): void {
+  const cols = database.pragma('table_info(conversations)') as { name: string }[]
+  if (!cols.find((c) => c.name === 'cwd')) {
+    database.exec('ALTER TABLE conversations ADD COLUMN cwd TEXT')
+  }
 }
 
 export function closeDatabase(): void {

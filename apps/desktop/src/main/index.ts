@@ -1,5 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
+import { mkdirSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { IPC_CHANNELS } from '../preload/types'
@@ -86,11 +87,20 @@ function registerIpcHandlers(): void {
         payload.firstMessage.slice(0, 30) + (payload.firstMessage.length > 30 ? '...' : '')
       const now = new Date().toISOString()
 
+      let cwd: string | null = null
+      if (!payload.projectId) {
+        const slug = id.replace(/[^a-z0-9-]/gi, '-')
+        const baseDir = join(app.getPath('documents'), 'agent-desktop-app')
+        cwd = join(baseDir, slug)
+        mkdirSync(cwd, { recursive: true })
+      }
+
       repo.createConversation({
         id,
         title,
         agentId: payload.agentId,
         projectId: payload.projectId ?? null,
+        cwd,
         createdAt: now,
         updatedAt: now
       })
@@ -104,7 +114,7 @@ function registerIpcHandlers(): void {
         createdAt: now
       })
 
-      return { id, title }
+      return { id, title, cwd }
     }
   )
 
@@ -172,6 +182,7 @@ function registerIpcHandlers(): void {
         title: r.title,
         agentId: r.agent_id,
         projectId: r.project_id,
+        cwd: r.cwd ?? null,
         pinned: r.pinned === 1,
         archived: r.archived === 1,
         createdAt: r.created_at,

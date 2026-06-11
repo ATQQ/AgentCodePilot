@@ -280,6 +280,51 @@ onUnmounted(() => {
         </div>
       </div>
 
+      <div class="sidebar-section">
+        <div class="section-title">{{ t('sidebar.conversations') }}</div>
+        <div class="project-conversations">
+          <template v-if="chatStore.getOrphanConversations().length">
+            <div
+              v-for="conv in chatStore.getOrphanConversations()"
+              :key="conv.id"
+              class="conv-item"
+              :class="{ active: chatStore.activeConversationId === conv.id }"
+              @click="openConversation(conv.id)"
+              @contextmenu="showContextMenu($event, conv)"
+            >
+              <template v-if="renaming && renaming.id === conv.id">
+                <input
+                  ref="renameInputRef"
+                  v-model="renaming.title"
+                  class="rename-input"
+                  @click.stop
+                  @keydown="handleRenameKeydown"
+                  @blur="confirmRename"
+                />
+              </template>
+              <template v-else>
+                <button
+                  class="conv-pin-btn"
+                  :class="{ pinned: conv.pinned }"
+                  @click="handleQuickPin($event, conv)"
+                  :title="conv.pinned ? '取消置顶' : '置顶'"
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M9.828.722a.5.5 0 0 1 .354.146l4.95 4.95a.5.5 0 0 1-.707.707l-.55-.55-3.18 3.18a5.5 5.5 0 0 1-1.32 4.988.5.5 0 0 1-.707 0L5.843 11.32l-3.89 3.89a.5.5 0 0 1-.707-.708l3.89-3.89-2.824-2.823a.5.5 0 0 1 0-.707 5.5 5.5 0 0 1 4.988-1.32l3.18-3.18-.55-.55a.5.5 0 0 1 .354-.854z"/>
+                  </svg>
+                </button>
+                <span class="conv-title">{{ getConvTitle(conv) }}</span>
+                <span class="conv-time">{{ formatRelativeTime(conv.updatedAt) }}</span>
+                <button class="conv-more-btn" @click="showContextMenuFromButton($event, conv)">
+                  <el-icon :size="12"><MoreFilled /></el-icon>
+                </button>
+              </template>
+            </div>
+          </template>
+          <div v-else class="no-conversations">{{ t('sidebar.noChats') }}</div>
+        </div>
+      </div>
+
       <div v-if="workspaceStore.workspaces.length" class="sidebar-section">
         <div class="section-title">{{ t('sidebar.workspaces') }}</div>
 

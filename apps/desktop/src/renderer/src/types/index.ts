@@ -27,6 +27,7 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   createdAt: string
+  usage?: { inputTokens: number; outputTokens: number }
 }
 
 export interface Conversation {
@@ -34,6 +35,7 @@ export interface Conversation {
   title: string
   agentId: string
   projectId: string | null
+  cwd: string | null
   messages: Message[]
   createdAt: string
   updatedAt: string

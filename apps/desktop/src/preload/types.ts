@@ -58,6 +58,7 @@ export interface AgentInfo {
 export interface ConversationInfo {
   id: string
   title: string
+  cwd: string | null
 }
 
 export interface ConversationListItem {
@@ -65,6 +66,7 @@ export interface ConversationListItem {
   title: string
   agentId: string
   projectId: string | null
+  cwd: string | null
   pinned: boolean
   archived: boolean
   createdAt: string
@@ -84,10 +86,15 @@ export interface SettingsInfo {
   language: string
 }
 
+export interface TokenUsage {
+  inputTokens: number
+  outputTokens: number
+}
+
 export type AgentEvent =
   | { type: 'message.started'; conversationId: string; messageId: string }
   | { type: 'message.delta'; conversationId: string; messageId: string; delta: string }
-  | { type: 'message.completed'; conversationId: string; messageId: string }
+  | { type: 'message.completed'; conversationId: string; messageId: string; usage?: TokenUsage }
   | { type: 'message.error'; conversationId: string; error: string }
 
 export interface AgentAPI {

@@ -8,6 +8,7 @@ export const useChatStore = defineStore('chat', () => {
   const conversations = ref<Conversation[]>([])
   const activeConversationId = ref<string | null>(null)
   const streamingConversationIds = ref<Set<string>>(new Set())
+  const waitingConversationIds = ref<Set<string>>(new Set())
   const queuedMessages = ref<{ conversationId: string; content: string; agentId: string }[]>([])
 
   const activeConversation = computed(() =>
@@ -34,9 +35,23 @@ export const useChatStore = defineStore('chat', () => {
     [...conversations.value].sort((a, b) => (a.updatedAt > b.updatedAt ? -1 : 1))
   )
 
+  const isWaiting = computed(() =>
+    activeConversationId.value !== null && waitingConversationIds.value.has(activeConversationId.value)
+  )
+
   function getConversationsByProject(projectId: string): Conversation[] {
     return conversations.value
       .filter((c) => c.projectId === projectId && !c.archived)
+      .sort((a, b) => {
+        if (a.pinned && !b.pinned) return -1
+        if (!a.pinned && b.pinned) return 1
+        return a.updatedAt > b.updatedAt ? -1 : 1
+      })
+  }
+
+  function getOrphanConversations(): Conversation[] {
+    return conversations.value
+      .filter((c) => !c.projectId && !c.archived)
       .sort((a, b) => {
         if (a.pinned && !b.pinned) return -1
         if (!a.pinned && b.pinned) return 1
@@ -54,6 +69,7 @@ export const useChatStore = defineStore('chat', () => {
           title: item.title,
           agentId: item.agentId,
           projectId: item.projectId,
+          cwd: item.cwd,
           pinned: item.pinned,
           archived: item.archived,
           messages: [],
@@ -105,11 +121,13 @@ export const useChatStore = defineStore('chat', () => {
       title: result.title,
       agentId,
       projectId: projectId ?? null,
+      cwd: result.cwd,
       messages: [msg],
       createdAt: now,
       updatedAt: now
     })
     activeConversationId.value = result.id
+    waitingConversationIds.value.add(result.id)
     return result.id
   }
 
@@ -136,12 +154,14 @@ export const useChatStore = defineStore('chat', () => {
       return
     }
     addMessage(conversationId, 'user', content)
+    waitingConversationIds.value.add(conversationId)
+    const conv = conversations.value.find((c) => c.id === conversationId)
     const workspaceStore = useWorkspaceStore()
     await window.agentAPI.chat.sendMessage({
       conversationId,
       content,
       agentId,
-      cwd: workspaceStore.currentCwd
+      cwd: conv?.cwd || workspaceStore.currentCwd
     })
   }
 
@@ -166,12 +186,14 @@ export const useChatStore = defineStore('chat', () => {
     if (idx === -1) return
     const next = queuedMessages.value.splice(idx, 1)[0]
     addMessage(next.conversationId, 'user', next.content)
+    waitingConversationIds.value.add(next.conversationId)
+    const conv = conversations.value.find((c) => c.id === next.conversationId)
     const workspaceStore = useWorkspaceStore()
     window.agentAPI.chat.sendMessage({
       conversationId: next.conversationId,
       content: next.content,
       agentId: next.agentId,
-      cwd: workspaceStore.currentCwd
+      cwd: conv?.cwd || workspaceStore.currentCwd
     })
   }
 
@@ -180,6 +202,7 @@ export const useChatStore = defineStore('chat', () => {
       case 'message.started': {
         const conv = conversations.value.find((c) => c.id === event.conversationId)
         if (!conv) return
+        waitingConversationIds.value.delete(event.conversationId)
         streamingConversationIds.value.add(event.conversationId)
         conv.messages.push({
           id: event.messageId,
@@ -202,6 +225,10 @@ export const useChatStore = defineStore('chat', () => {
         const conv = conversations.value.find((c) => c.id === event.conversationId)
         if (conv) {
           conv.updatedAt = new Date().toISOString()
+          if (event.usage) {
+            const msg = conv.messages.find((m) => m.id === event.messageId)
+            if (msg) msg.usage = event.usage
+          }
         }
         streamingConversationIds.value.delete(event.conversationId)
         flushQueueForConversation(event.conversationId)
@@ -273,10 +300,12 @@ export const useChatStore = defineStore('chat', () => {
     streamingConversationId,
     streamingConversationIds,
     isStreaming,
+    isWaiting,
     isConversationStreaming,
     currentQueuedMessages,
     conversationList,
     getConversationsByProject,
+    getOrphanConversations,
     loadConversations,
     loadMessages,
     setActive,

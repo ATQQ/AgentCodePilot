@@ -18,7 +18,9 @@ async function handleSubmit(text: string): Promise<void> {
   const projectId = workspaceStore.selectedProjectId
   const convId = await chatStore.createConversation(agentId, text, projectId)
   router.push('/chat')
-  await window.agentAPI.chat.sendFirstMessage({ conversationId: convId, content: text, agentId, cwd: workspaceStore.currentCwd })
+  const conv = chatStore.activeConversation
+  const cwd = conv?.cwd || workspaceStore.currentCwd
+  await window.agentAPI.chat.sendFirstMessage({ conversationId: convId, content: text, agentId, cwd })
 }
 </script>
 
