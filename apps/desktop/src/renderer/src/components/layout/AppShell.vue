@@ -39,18 +39,17 @@ onUnmounted(() => {
 
 <template>
   <div class="app-shell">
+    <button v-if="sidebarCollapsed" class="expand-sidebar-btn" @click="toggleSidebar" title="展开侧边栏">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="2" y="3" width="12" height="10" rx="1.5" />
+        <line x1="6" y1="3" x2="6" y2="13" />
+      </svg>
+    </button>
     <Transition name="sidebar-slide">
       <AppSidebar v-show="!sidebarCollapsed" />
     </Transition>
     <div class="main-content">
-      <div class="main-drag-area">
-        <button v-if="sidebarCollapsed" class="expand-sidebar-btn" @click="toggleSidebar" title="展开侧边栏">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="2" y="3" width="12" height="10" rx="1.5" />
-            <line x1="6" y1="3" x2="6" y2="13" />
-          </svg>
-        </button>
-      </div>
+      <div class="main-drag-area"></div>
       <div class="page-content">
         <router-view />
       </div>
@@ -79,12 +78,13 @@ onUnmounted(() => {
   height: var(--topbar-height);
   flex-shrink: 0;
   -webkit-app-region: drag;
-  display: flex;
-  align-items: center;
-  padding-left: var(--spacing-sm);
 }
 
 .expand-sidebar-btn {
+  position: fixed;
+  top: 7px;
+  left: 76px;
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
