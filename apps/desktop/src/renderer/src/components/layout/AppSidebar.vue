@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, inject, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -25,6 +25,7 @@ const route = useRoute()
 const workspaceStore = useWorkspaceStore()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
+const openSearch = inject<() => void>('openSearch', () => {})
 
 const topNavItems = [
   { name: 'new-chat', path: '/', icon: EditPen, labelKey: 'sidebar.newChat' },
@@ -46,6 +47,10 @@ const renaming = ref<{ id: string; title: string } | null>(null)
 const renameInputRef = ref<HTMLInputElement | null>(null)
 
 function navigate(path: string): void {
+  if (path === '/search') {
+    openSearch()
+    return
+  }
   router.push(path)
 }
 

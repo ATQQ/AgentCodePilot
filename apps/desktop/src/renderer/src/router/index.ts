@@ -14,11 +14,6 @@ const router = createRouter({
       component: () => import('@renderer/views/ChatView.vue')
     },
     {
-      path: '/search',
-      name: 'search',
-      component: () => import('@renderer/views/PlaceholderView.vue')
-    },
-    {
       path: '/skills',
       name: 'skills',
       component: () => import('@renderer/views/PlaceholderView.vue')

@@ -7,14 +7,24 @@ import { useWorkspaceStore } from './workspace.store'
 export const useChatStore = defineStore('chat', () => {
   const conversations = ref<Conversation[]>([])
   const activeConversationId = ref<string | null>(null)
-  const streamingConversationId = ref<string | null>(null)
+  const streamingConversationIds = ref<Set<string>>(new Set())
   const queuedMessages = ref<{ conversationId: string; content: string; agentId: string }[]>([])
 
   const activeConversation = computed(() =>
     conversations.value.find((c) => c.id === activeConversationId.value) ?? null
   )
 
+  const streamingConversationId = computed(() =>
+    activeConversationId.value && streamingConversationIds.value.has(activeConversationId.value)
+      ? activeConversationId.value
+      : null
+  )
+
   const isStreaming = computed(() => streamingConversationId.value !== null)
+
+  function isConversationStreaming(conversationId: string): boolean {
+    return streamingConversationIds.value.has(conversationId)
+  }
 
   const currentQueuedMessages = computed(() =>
     queuedMessages.value.filter((m) => m.conversationId === activeConversationId.value)
@@ -121,7 +131,7 @@ export const useChatStore = defineStore('chat', () => {
     content: string,
     agentId: string
   ): Promise<void> {
-    if (isStreaming.value) {
+    if (isConversationStreaming(conversationId)) {
       queuedMessages.value.push({ conversationId, content, agentId })
       return
     }
@@ -147,12 +157,14 @@ export const useChatStore = defineStore('chat', () => {
 
   async function stopConversation(conversationId: string): Promise<void> {
     await window.agentAPI.chat.stop(conversationId)
-    streamingConversationId.value = null
+    streamingConversationIds.value.delete(conversationId)
+    flushQueueForConversation(conversationId)
   }
 
-  function flushQueue(): void {
-    if (queuedMessages.value.length === 0) return
-    const next = queuedMessages.value.shift()!
+  function flushQueueForConversation(conversationId: string): void {
+    const idx = queuedMessages.value.findIndex((m) => m.conversationId === conversationId)
+    if (idx === -1) return
+    const next = queuedMessages.value.splice(idx, 1)[0]
     addMessage(next.conversationId, 'user', next.content)
     const workspaceStore = useWorkspaceStore()
     window.agentAPI.chat.sendMessage({
@@ -168,7 +180,7 @@ export const useChatStore = defineStore('chat', () => {
       case 'message.started': {
         const conv = conversations.value.find((c) => c.id === event.conversationId)
         if (!conv) return
-        streamingConversationId.value = event.conversationId
+        streamingConversationIds.value.add(event.conversationId)
         conv.messages.push({
           id: event.messageId,
           role: 'assistant',
@@ -191,10 +203,8 @@ export const useChatStore = defineStore('chat', () => {
         if (conv) {
           conv.updatedAt = new Date().toISOString()
         }
-        if (streamingConversationId.value === event.conversationId) {
-          streamingConversationId.value = null
-        }
-        flushQueue()
+        streamingConversationIds.value.delete(event.conversationId)
+        flushQueueForConversation(event.conversationId)
         break
       }
       case 'message.error': {
@@ -202,10 +212,8 @@ export const useChatStore = defineStore('chat', () => {
         if (conv) {
           addMessage(event.conversationId, 'assistant', `[Error] ${event.error}`)
         }
-        if (streamingConversationId.value === event.conversationId) {
-          streamingConversationId.value = null
-        }
-        flushQueue()
+        streamingConversationIds.value.delete(event.conversationId)
+        flushQueueForConversation(event.conversationId)
         break
       }
     }
@@ -263,7 +271,9 @@ export const useChatStore = defineStore('chat', () => {
     activeConversationId,
     activeConversation,
     streamingConversationId,
+    streamingConversationIds,
     isStreaming,
+    isConversationStreaming,
     currentQueuedMessages,
     conversationList,
     getConversationsByProject,

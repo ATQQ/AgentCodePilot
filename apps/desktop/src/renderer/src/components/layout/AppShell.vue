@@ -1,5 +1,34 @@
 <script setup lang="ts">
+import { ref, onMounted, onUnmounted, provide } from 'vue'
 import AppSidebar from './AppSidebar.vue'
+import SearchDialog from './SearchDialog.vue'
+
+const searchVisible = ref(false)
+
+function openSearch(): void {
+  searchVisible.value = true
+}
+
+function closeSearch(): void {
+  searchVisible.value = false
+}
+
+function handleGlobalKeydown(e: KeyboardEvent): void {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    e.preventDefault()
+    searchVisible.value = !searchVisible.value
+  }
+}
+
+provide('openSearch', openSearch)
+
+onMounted(() => {
+  document.addEventListener('keydown', handleGlobalKeydown)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleGlobalKeydown)
+})
 </script>
 
 <template>
@@ -11,6 +40,7 @@ import AppSidebar from './AppSidebar.vue'
         <router-view />
       </div>
     </div>
+    <SearchDialog :visible="searchVisible" @close="closeSearch" />
   </div>
 </template>
 
