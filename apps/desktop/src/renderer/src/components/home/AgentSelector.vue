@@ -1,16 +1,31 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useAgentStore } from '@renderer/stores/agent.store'
+import claudeIcon from '@renderer/assets/claude-icon.svg'
+import codexIcon from '@renderer/assets/codex-icon.svg'
+import cursorIcon from '@renderer/assets/cursor-icon.svg'
 
 const agentStore = useAgentStore()
 
-const currentLabel = () => agentStore.currentAgent?.name || ''
+const agentIcons: Record<string, string> = {
+  'claude-code': claudeIcon,
+  'codex': codexIcon,
+  'cursor': cursorIcon
+}
+
+const currentIcon = computed(() => agentIcons[agentStore.selectedAgentId] || claudeIcon)
+
+function getAgentIcon(id: string): string {
+  return agentIcons[id] || claudeIcon
+}
 </script>
 
 <template>
   <div class="agent-selector">
     <el-dropdown trigger="click" @command="(v: string) => agentStore.selectAgent(v)">
       <button class="agent-btn">
-        <span>{{ currentLabel() }}</span>
+        <img :src="currentIcon" class="agent-icon" width="16" height="16" alt="" />
+        <span>{{ agentStore.currentAgent?.name }}</span>
         <span class="chevron">&#x25BE;</span>
       </button>
       <template #dropdown>
@@ -21,6 +36,7 @@ const currentLabel = () => agentStore.currentAgent?.name || ''
             :command="agent.id"
             :disabled="!agent.enabled"
           >
+            <img :src="getAgentIcon(agent.id)" class="dropdown-icon" width="14" height="14" alt="" />
             {{ agent.name }}
           </el-dropdown-item>
         </el-dropdown-menu>
@@ -33,7 +49,7 @@ const currentLabel = () => agentStore.currentAgent?.name || ''
 .agent-btn {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   padding: 4px 10px;
   border: none;
   border-radius: var(--radius-md);
@@ -47,6 +63,17 @@ const currentLabel = () => agentStore.currentAgent?.name || ''
 
 .agent-btn:hover {
   background: var(--btn-ghost-hover);
+}
+
+.agent-icon {
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dropdown-icon {
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
 }
 
 .chevron {
