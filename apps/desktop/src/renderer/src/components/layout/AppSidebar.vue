@@ -532,14 +532,15 @@ onUnmounted(() => {
 
 /* Conversations under project */
 .project-conversations {
-  padding-left: 20px;
+  padding: 0;
 }
 
 .conv-item {
   display: flex;
   align-items: center;
   width: 100%;
-  padding: 5px 8px;
+  padding: 6px var(--spacing-sm);
+  padding-left: 6px;
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
@@ -548,7 +549,7 @@ onUnmounted(() => {
   text-align: left;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
-  gap: 4px;
+  gap: 0;
 }
 
 .conv-item:hover {
@@ -567,49 +568,50 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  margin-left: 2px;
 }
 
 .conv-time {
   flex-shrink: 0;
   font-size: 11px;
   color: var(--sidebar-section-title);
+  margin-left: 6px;
 }
 
 .no-conversations {
-  padding: 4px 8px;
+  padding: 4px 8px 4px 26px;
   font-size: var(--font-size-xs);
   color: var(--sidebar-section-title);
 }
 
-/* Pin button on hover */
+/* Pin button in left gutter */
 .conv-pin-btn {
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
+  width: 20px;
+  min-width: 20px;
   height: 16px;
   border: none;
   border-radius: 3px;
   background: transparent;
-  color: var(--sidebar-section-title);
+  color: transparent;
   cursor: pointer;
   flex-shrink: 0;
   padding: 0;
-  transition: color 0.15s, background 0.15s;
+  transition: color 0.15s;
 }
 
 .conv-pin-btn:hover {
   color: var(--sidebar-text-active);
-  background: var(--sidebar-item-active);
 }
 
 .conv-pin-btn.pinned {
-  display: flex;
-  color: var(--sidebar-text-active);
+  color: var(--sidebar-text);
 }
 
-.conv-item:hover .conv-pin-btn {
-  display: flex;
+.conv-item:hover .conv-pin-btn:not(.pinned) {
+  color: var(--sidebar-section-title);
 }
 
 /* More button on conv item */
