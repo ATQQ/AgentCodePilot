@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Conversation, Message } from '@renderer/types'
 import type { AgentEvent } from '../../../preload/types'
+import { useWorkspaceStore } from './workspace.store'
 
 export const useChatStore = defineStore('chat', () => {
   const conversations = ref<Conversation[]>([])
@@ -25,8 +26,12 @@ export const useChatStore = defineStore('chat', () => {
 
   function getConversationsByProject(projectId: string): Conversation[] {
     return conversations.value
-      .filter((c) => c.projectId === projectId)
-      .sort((a, b) => (a.updatedAt > b.updatedAt ? -1 : 1))
+      .filter((c) => c.projectId === projectId && !c.archived)
+      .sort((a, b) => {
+        if (a.pinned && !b.pinned) return -1
+        if (!a.pinned && b.pinned) return 1
+        return a.updatedAt > b.updatedAt ? -1 : 1
+      })
   }
 
   function setActive(id: string | null): void {
@@ -87,7 +92,13 @@ export const useChatStore = defineStore('chat', () => {
       return
     }
     addMessage(conversationId, 'user', content)
-    await window.agentAPI.chat.sendMessage({ conversationId, content, agentId })
+    const workspaceStore = useWorkspaceStore()
+    await window.agentAPI.chat.sendMessage({
+      conversationId,
+      content,
+      agentId,
+      cwd: workspaceStore.currentCwd
+    })
   }
 
   function cancelQueuedMessage(index: number): void {
@@ -109,10 +120,12 @@ export const useChatStore = defineStore('chat', () => {
     if (queuedMessages.value.length === 0) return
     const next = queuedMessages.value.shift()!
     addMessage(next.conversationId, 'user', next.content)
+    const workspaceStore = useWorkspaceStore()
     window.agentAPI.chat.sendMessage({
       conversationId: next.conversationId,
       content: next.content,
-      agentId: next.agentId
+      agentId: next.agentId,
+      cwd: workspaceStore.currentCwd
     })
   }
 
@@ -164,6 +177,41 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  function togglePin(conversationId: string): void {
+    const conv = conversations.value.find((c) => c.id === conversationId)
+    if (conv) conv.pinned = !conv.pinned
+  }
+
+  function renameConversation(conversationId: string, title: string): void {
+    const conv = conversations.value.find((c) => c.id === conversationId)
+    if (conv) conv.title = title
+  }
+
+  function archiveConversation(conversationId: string): void {
+    const conv = conversations.value.find((c) => c.id === conversationId)
+    if (conv) {
+      conv.archived = true
+      if (activeConversationId.value === conversationId) {
+        activeConversationId.value = null
+      }
+    }
+  }
+
+  function deleteConversation(conversationId: string): void {
+    conversations.value = conversations.value.filter((c) => c.id !== conversationId)
+    if (activeConversationId.value === conversationId) {
+      activeConversationId.value = null
+    }
+  }
+
+  function getConversationAsMarkdown(conversationId: string): string {
+    const conv = conversations.value.find((c) => c.id === conversationId)
+    if (!conv) return ''
+    return conv.messages
+      .map((m) => `## ${m.role === 'user' ? 'User' : 'Assistant'}\n\n${m.content}`)
+      .join('\n\n---\n\n')
+  }
+
   function initAgentEventListener(): () => void {
     return window.agentAPI.chat.onAgentEvent(handleAgentEvent)
   }
@@ -183,6 +231,11 @@ export const useChatStore = defineStore('chat', () => {
     sendMessage,
     cancelQueuedMessage,
     stopConversation,
+    togglePin,
+    renameConversation,
+    archiveConversation,
+    deleteConversation,
+    getConversationAsMarkdown,
     initAgentEventListener
   }
 })

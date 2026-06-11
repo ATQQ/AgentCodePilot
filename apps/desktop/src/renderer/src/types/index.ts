@@ -19,6 +19,7 @@ export interface Workspace {
 export interface Project {
   id: string
   name: string
+  path: string
 }
 
 export interface Message {
@@ -36,6 +37,8 @@ export interface Conversation {
   messages: Message[]
   createdAt: string
   updatedAt: string
+  pinned?: boolean
+  archived?: boolean
 }
 
 export type ThemeMode = 'light' | 'dark' | 'system'

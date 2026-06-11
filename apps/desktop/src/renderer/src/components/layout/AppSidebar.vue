@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -13,6 +14,8 @@ import {
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
 import { useChatStore } from '@renderer/stores/chat.store'
 import { useAgentStore } from '@renderer/stores/agent.store'
+import { formatRelativeTime } from '@renderer/composables/useRelativeTime'
+import type { Conversation } from '@renderer/types'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -26,6 +29,17 @@ const topNavItems = [
   { name: 'search', path: '/search', icon: Search, labelKey: 'sidebar.search' },
   { name: 'skills', path: '/skills', icon: MagicStick, labelKey: 'sidebar.skills' }
 ]
+
+const contextMenu = reactive({
+  visible: false,
+  x: 0,
+  y: 0,
+  conv: null as Conversation | null,
+  showCopySubmenu: false
+})
+
+const renaming = ref<{ id: string; title: string } | null>(null)
+const renameInputRef = ref<HTMLInputElement | null>(null)
 
 function navigate(path: string): void {
   router.push(path)
@@ -46,6 +60,111 @@ async function newChatForProject(projectId: string): Promise<void> {
   router.push('/chat')
   await window.agentAPI.chat.sendMessage({ conversationId: convId, content: '新对话', agentId })
 }
+
+function getConvTitle(conv: Conversation): string {
+  if (conv.messages.length > 0) {
+    const first = conv.messages[0].content
+    return first.length > 30 ? first.slice(0, 30) + '...' : first
+  }
+  return conv.title
+}
+
+function showContextMenu(e: MouseEvent, conv: Conversation): void {
+  e.preventDefault()
+  e.stopPropagation()
+  contextMenu.visible = true
+  contextMenu.x = e.clientX
+  contextMenu.y = e.clientY
+  contextMenu.conv = conv
+  contextMenu.showCopySubmenu = false
+}
+
+function showContextMenuFromButton(e: MouseEvent, conv: Conversation): void {
+  e.stopPropagation()
+  const btn = e.currentTarget as HTMLElement
+  const rect = btn.getBoundingClientRect()
+  contextMenu.visible = true
+  contextMenu.x = rect.right
+  contextMenu.y = rect.top
+  contextMenu.conv = conv
+  contextMenu.showCopySubmenu = false
+}
+
+function closeContextMenu(): void {
+  contextMenu.visible = false
+  contextMenu.conv = null
+  contextMenu.showCopySubmenu = false
+}
+
+function handlePin(): void {
+  if (contextMenu.conv) chatStore.togglePin(contextMenu.conv.id)
+  closeContextMenu()
+}
+
+function handleRename(): void {
+  if (!contextMenu.conv) return
+  renaming.value = { id: contextMenu.conv.id, title: getConvTitle(contextMenu.conv) }
+  closeContextMenu()
+  setTimeout(() => renameInputRef.value?.focus(), 50)
+}
+
+function confirmRename(): void {
+  if (renaming.value && renaming.value.title.trim()) {
+    chatStore.renameConversation(renaming.value.id, renaming.value.title.trim())
+  }
+  renaming.value = null
+}
+
+function cancelRename(): void {
+  renaming.value = null
+}
+
+function handleRenameKeydown(e: KeyboardEvent): void {
+  if (e.key === 'Enter') confirmRename()
+  else if (e.key === 'Escape') cancelRename()
+}
+
+function handleCopyWorkDir(): void {
+  if (!contextMenu.conv) return
+  const proj = workspaceStore.projects.find((p) => p.id === contextMenu.conv!.projectId)
+  if (proj) navigator.clipboard.writeText(proj.path)
+  closeContextMenu()
+}
+
+function handleCopyConvId(): void {
+  if (contextMenu.conv) navigator.clipboard.writeText(contextMenu.conv.id)
+  closeContextMenu()
+}
+
+function handleCopyMarkdown(): void {
+  if (contextMenu.conv) {
+    const md = chatStore.getConversationAsMarkdown(contextMenu.conv.id)
+    navigator.clipboard.writeText(md)
+  }
+  closeContextMenu()
+}
+
+function handleArchive(): void {
+  if (contextMenu.conv) chatStore.archiveConversation(contextMenu.conv.id)
+  closeContextMenu()
+}
+
+function handleDelete(): void {
+  if (contextMenu.conv) chatStore.deleteConversation(contextMenu.conv.id)
+  closeContextMenu()
+}
+
+function onDocumentClick(): void {
+  if (contextMenu.visible) closeContextMenu()
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocumentClick)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', onDocumentClick)
+})
 </script>
 
 <template>
@@ -92,16 +211,33 @@ async function newChatForProject(projectId: string): Promise<void> {
 
           <div class="project-conversations">
             <template v-if="chatStore.getConversationsByProject(proj.id).length">
-              <button
+              <div
                 v-for="conv in chatStore.getConversationsByProject(proj.id)"
                 :key="conv.id"
                 class="conv-item"
-                :class="{ active: chatStore.activeConversationId === conv.id }"
+                :class="{ active: chatStore.activeConversationId === conv.id, pinned: conv.pinned }"
                 @click="openConversation(conv.id)"
+                @contextmenu="showContextMenu($event, conv)"
               >
-                <span class="conv-title">{{ conv.title }}</span>
-                <span class="conv-time">{{ conv.updatedAt }}</span>
-              </button>
+                <template v-if="renaming && renaming.id === conv.id">
+                  <input
+                    ref="renameInputRef"
+                    v-model="renaming.title"
+                    class="rename-input"
+                    @click.stop
+                    @keydown="handleRenameKeydown"
+                    @blur="confirmRename"
+                  />
+                </template>
+                <template v-else>
+                  <span v-if="conv.pinned" class="pin-icon">&#x1F4CC;</span>
+                  <span class="conv-title">{{ getConvTitle(conv) }}</span>
+                  <span class="conv-time">{{ formatRelativeTime(conv.updatedAt) }}</span>
+                  <button class="conv-more-btn" @click="showContextMenuFromButton($event, conv)">
+                    <el-icon :size="12"><MoreFilled /></el-icon>
+                  </button>
+                </template>
+              </div>
             </template>
             <div v-else class="no-conversations">{{ t('sidebar.noChats') }}</div>
           </div>
@@ -150,6 +286,60 @@ async function newChatForProject(projectId: string): Promise<void> {
         <span>{{ t('common.settings') }}</span>
       </button>
     </div>
+
+    <!-- Context Menu -->
+    <Teleport to="body">
+      <Transition name="ctx-fade">
+        <div
+          v-if="contextMenu.visible"
+          class="context-menu"
+          :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
+          @click.stop
+        >
+          <button class="ctx-item" @click="handlePin">
+            <span class="ctx-icon">&#x1F4CC;</span>
+            <span>{{ contextMenu.conv?.pinned ? '取消置顶' : '置顶' }}</span>
+          </button>
+          <button class="ctx-item" @click="handleRename">
+            <span class="ctx-icon">&#x270F;</span>
+            <span>重命名</span>
+          </button>
+          <div class="ctx-divider"></div>
+          <div class="ctx-submenu-wrapper" @mouseenter="contextMenu.showCopySubmenu = true" @mouseleave="contextMenu.showCopySubmenu = false">
+            <button class="ctx-item">
+              <span class="ctx-icon">&#x1F4CB;</span>
+              <span>复制</span>
+              <span class="ctx-arrow">&#8250;</span>
+            </button>
+            <Transition name="ctx-fade">
+              <div v-if="contextMenu.showCopySubmenu" class="ctx-submenu">
+                <button class="ctx-item" @click="handleCopyWorkDir">
+                  <span class="ctx-icon">&#x1F4C1;</span>
+                  <span>复制工作目录</span>
+                </button>
+                <button class="ctx-item" @click="handleCopyConvId">
+                  <span class="ctx-icon">&#x1F4CB;</span>
+                  <span>复制会话 ID</span>
+                </button>
+                <button class="ctx-item" @click="handleCopyMarkdown">
+                  <span class="ctx-icon">&#x1F4C4;</span>
+                  <span>复制为 Markdown</span>
+                </button>
+              </div>
+            </Transition>
+          </div>
+          <div class="ctx-divider"></div>
+          <button class="ctx-item" @click="handleArchive">
+            <span class="ctx-icon">&#x1F4E6;</span>
+            <span>归档</span>
+          </button>
+          <button class="ctx-item ctx-item--danger" @click="handleDelete">
+            <span class="ctx-icon">&#x1F5D1;</span>
+            <span>删除</span>
+          </button>
+        </div>
+      </Transition>
+    </Teleport>
   </aside>
 </template>
 
@@ -346,5 +536,139 @@ async function newChatForProject(projectId: string): Promise<void> {
   padding: 4px var(--spacing-sm);
   font-size: var(--font-size-xs);
   color: var(--sidebar-section-title);
+}
+
+/* Pin icon */
+.pin-icon {
+  font-size: 10px;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+/* More button on conv item */
+.conv-more-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--sidebar-text);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.conv-more-btn:hover {
+  background: var(--sidebar-item-active);
+}
+
+.conv-item:hover .conv-more-btn {
+  display: flex;
+}
+
+.conv-item:hover .conv-time {
+  display: none;
+}
+
+/* Rename input */
+.rename-input {
+  flex: 1;
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-sm);
+  background: var(--content-bg);
+  color: var(--content-text);
+  font-size: var(--font-size-xs);
+  padding: 2px 6px;
+  outline: none;
+}
+
+/* Context menu */
+.context-menu {
+  position: fixed;
+  min-width: 180px;
+  background: var(--content-bg);
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--spacing-xs);
+  z-index: 9999;
+}
+
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+  padding: 7px var(--spacing-md);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--content-text);
+  font-size: var(--font-size-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.ctx-item:hover {
+  background: var(--btn-ghost-hover);
+}
+
+.ctx-item--danger {
+  color: #e53e3e;
+}
+
+.ctx-item--danger:hover {
+  background: rgba(229, 62, 62, 0.08);
+}
+
+.ctx-icon {
+  width: 18px;
+  text-align: center;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.ctx-arrow {
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--content-text-tertiary);
+}
+
+.ctx-divider {
+  height: 1px;
+  background: var(--sidebar-border);
+  margin: var(--spacing-xs) var(--spacing-sm);
+}
+
+.ctx-submenu-wrapper {
+  position: relative;
+}
+
+.ctx-submenu {
+  position: absolute;
+  left: 100%;
+  top: -4px;
+  min-width: 180px;
+  background: var(--content-bg);
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--spacing-xs);
+  z-index: 10000;
+}
+
+.ctx-fade-enter-active,
+.ctx-fade-leave-active {
+  transition: opacity 0.12s, transform 0.12s;
+}
+
+.ctx-fade-enter-from,
+.ctx-fade-leave-to {
+  opacity: 0;
+  transform: scale(0.95);
 }
 </style>

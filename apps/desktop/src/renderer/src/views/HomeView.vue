@@ -6,16 +6,19 @@ import AgentSelector from '@renderer/components/home/AgentSelector.vue'
 import WorkspaceSelector from '@renderer/components/home/WorkspaceSelector.vue'
 import { useChatStore } from '@renderer/stores/chat.store'
 import { useAgentStore } from '@renderer/stores/agent.store'
+import { useWorkspaceStore } from '@renderer/stores/workspace.store'
 
 const router = useRouter()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
+const workspaceStore = useWorkspaceStore()
 
 async function handleSubmit(text: string): Promise<void> {
   const agentId = agentStore.selectedAgentId
-  const convId = await chatStore.createConversation(agentId, text)
+  const projectId = workspaceStore.selectedProjectId
+  const convId = await chatStore.createConversation(agentId, text, projectId)
   router.push('/chat')
-  await window.agentAPI.chat.sendMessage({ conversationId: convId, content: text, agentId })
+  await window.agentAPI.chat.sendMessage({ conversationId: convId, content: text, agentId, cwd: workspaceStore.currentCwd })
 }
 </script>
 
