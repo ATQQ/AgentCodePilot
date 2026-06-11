@@ -1,9 +1,11 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
+import { app } from 'electron'
 import type { AgentEvent } from '../../preload/types'
 import type { AgentRunInput } from './mock-agent'
 
 export class ClaudeAgentAdapter {
   private abortControllers = new Map<string, AbortController>()
+  private sessionIds = new Map<string, string>()
 
   async run(input: AgentRunInput, emit: (event: AgentEvent) => void): Promise<void> {
     const controller = new AbortController()
@@ -16,21 +18,27 @@ export class ClaudeAgentAdapter {
     })
 
     try {
+      const existingSessionId = this.sessionIds.get(input.conversationId)
+
       const q = query({
         prompt: input.content,
         options: {
           abortController: controller,
+          cwd: input.cwd || app.getPath('home'),
           allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'],
           maxTurns: 20,
           permissionMode: 'bypassPermissions',
-          allowDangerouslySkipPermissions: true
+          allowDangerouslySkipPermissions: true,
+          ...(existingSessionId ? { resume: existingSessionId } : {})
         }
       })
 
       for await (const message of q) {
         if (controller.signal.aborted) break
 
-        if (message.type === 'assistant') {
+        if (message.type === 'system' && message.subtype === 'init') {
+          this.sessionIds.set(input.conversationId, message.session_id)
+        } else if (message.type === 'assistant') {
           const content = message.message?.content
           if (Array.isArray(content)) {
             for (const block of content) {

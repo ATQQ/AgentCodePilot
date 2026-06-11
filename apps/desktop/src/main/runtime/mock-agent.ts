@@ -5,6 +5,7 @@ export interface AgentRunInput {
   messageId: string
   content: string
   agentId: string
+  cwd?: string
 }
 
 const MOCK_MARKDOWN_RESPONSE = `## 分析结果
