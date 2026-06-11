@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch, nextTick, ref, onUnmounted } from 'vue'
+import { watch, nextTick, ref, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import MarkdownRender from 'markstream-vue'
@@ -8,6 +8,14 @@ import { useAgentStore } from '@renderer/stores/agent.store'
 import PromptComposer from '@renderer/components/home/PromptComposer.vue'
 import AgentSelector from '@renderer/components/home/AgentSelector.vue'
 import claudeIcon from '@renderer/assets/claude-icon.svg'
+import codexIcon from '@renderer/assets/codex-icon.svg'
+import cursorIcon from '@renderer/assets/cursor-icon.svg'
+
+const agentIcons: Record<string, string> = {
+  'claude-code': claudeIcon,
+  'codex': codexIcon,
+  'cursor': cursorIcon
+}
 
 const { t } = useI18n()
 const router = useRouter()
@@ -93,6 +101,11 @@ function handleCancelQueue(index: number): void {
   chatStore.cancelQueuedMessage(index)
 }
 
+const currentAgentIcon = computed(() => {
+  const agentId = chatStore.activeConversation?.agentId ?? agentStore.selectedAgentId
+  return agentIcons[agentId] || claudeIcon
+})
+
 function formatTime(dateStr: string): string {
   const date = new Date(dateStr)
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -127,7 +140,7 @@ function resendMessage(content: string): void {
         >
           <div v-if="msg.role === 'assistant'" class="message-role">
             <span class="agent-avatar">
-              <img :src="claudeIcon" width="14" height="14" alt="Claude" />
+              <img :src="currentAgentIcon" width="14" height="14" alt="" />
             </span>
             {{ agentStore.currentAgent?.name }}
           </div>
