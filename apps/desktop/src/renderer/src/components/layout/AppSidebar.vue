@@ -9,7 +9,9 @@ import {
   Setting,
   FolderOpened,
   Folder,
-  MoreFilled
+  MoreFilled,
+  ArrowRight,
+  ArrowDown
 } from '@element-plus/icons-vue'
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
 import { useChatStore } from '@renderer/stores/chat.store'
@@ -30,6 +32,8 @@ const topNavItems = [
   { name: 'skills', path: '/skills', icon: MagicStick, labelKey: 'sidebar.skills' }
 ]
 
+const collapsedProjects = ref<Set<string>>(new Set())
+
 const contextMenu = reactive({
   visible: false,
   x: 0,
@@ -49,16 +53,27 @@ function isActive(path: string): boolean {
   return route.path === path
 }
 
+function toggleProjectCollapse(projId: string): void {
+  if (collapsedProjects.value.has(projId)) {
+    collapsedProjects.value.delete(projId)
+  } else {
+    collapsedProjects.value.add(projId)
+  }
+}
+
+function isProjectCollapsed(projId: string): boolean {
+  return collapsedProjects.value.has(projId)
+}
+
 function openConversation(id: string): void {
   chatStore.setActive(id)
   router.push('/chat')
 }
 
-async function newChatForProject(projectId: string): Promise<void> {
-  const agentId = agentStore.selectedAgentId
-  const convId = await chatStore.createConversation(agentId, '新对话', projectId)
-  router.push('/chat')
-  await window.agentAPI.chat.sendFirstMessage({ conversationId: convId, content: '新对话', agentId })
+function newChatForProject(e: MouseEvent, projectId: string): void {
+  e.stopPropagation()
+  workspaceStore.selectProject(projectId)
+  router.push('/')
 }
 
 function getConvTitle(conv: Conversation): string {
@@ -67,6 +82,11 @@ function getConvTitle(conv: Conversation): string {
     return first.length > 30 ? first.slice(0, 30) + '...' : first
   }
   return conv.title
+}
+
+function handleQuickPin(e: MouseEvent, conv: Conversation): void {
+  e.stopPropagation()
+  chatStore.togglePin(conv.id)
 }
 
 function showContextMenu(e: MouseEvent, conv: Conversation): void {
@@ -195,27 +215,30 @@ onUnmounted(() => {
           <div
             class="project-header"
             :class="{ active: workspaceStore.selectedProjectId === proj.id }"
-            @click="workspaceStore.selectProject(proj.id)"
+            @click="toggleProjectCollapse(proj.id)"
           >
+            <el-icon :size="10" class="collapse-icon" :class="{ collapsed: isProjectCollapsed(proj.id) }">
+              <ArrowDown />
+            </el-icon>
             <el-icon :size="13"><FolderOpened /></el-icon>
             <span class="project-name">{{ proj.name }}</span>
             <div class="project-actions">
               <button class="action-btn" @click.stop>
                 <el-icon :size="12"><MoreFilled /></el-icon>
               </button>
-              <button class="action-btn" @click.stop="newChatForProject(proj.id)">
+              <button class="action-btn" @click="newChatForProject($event, proj.id)">
                 <el-icon :size="12"><EditPen /></el-icon>
               </button>
             </div>
           </div>
 
-          <div class="project-conversations">
+          <div v-if="!isProjectCollapsed(proj.id)" class="project-conversations">
             <template v-if="chatStore.getConversationsByProject(proj.id).length">
               <div
                 v-for="conv in chatStore.getConversationsByProject(proj.id)"
                 :key="conv.id"
                 class="conv-item"
-                :class="{ active: chatStore.activeConversationId === conv.id, pinned: conv.pinned }"
+                :class="{ active: chatStore.activeConversationId === conv.id }"
                 @click="openConversation(conv.id)"
                 @contextmenu="showContextMenu($event, conv)"
               >
@@ -230,7 +253,16 @@ onUnmounted(() => {
                   />
                 </template>
                 <template v-else>
-                  <span v-if="conv.pinned" class="pin-icon">&#x1F4CC;</span>
+                  <button
+                    class="conv-pin-btn"
+                    :class="{ pinned: conv.pinned }"
+                    @click="handleQuickPin($event, conv)"
+                    :title="conv.pinned ? '取消置顶' : '置顶'"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                      <path d="M9.828.722a.5.5 0 0 1 .354.146l4.95 4.95a.5.5 0 0 1-.707.707l-.55-.55-3.18 3.18a5.5 5.5 0 0 1-1.32 4.988.5.5 0 0 1-.707 0L5.843 11.32l-3.89 3.89a.5.5 0 0 1-.707-.708l3.89-3.89-2.824-2.823a.5.5 0 0 1 0-.707 5.5 5.5 0 0 1 4.988-1.32l3.18-3.18-.55-.55a.5.5 0 0 1 .354-.854z"/>
+                    </svg>
+                  </button>
                   <span class="conv-title">{{ getConvTitle(conv) }}</span>
                   <span class="conv-time">{{ formatRelativeTime(conv.updatedAt) }}</span>
                   <button class="conv-more-btn" @click="showContextMenuFromButton($event, conv)">
@@ -432,8 +464,8 @@ onUnmounted(() => {
 .project-header {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
-  padding: 7px var(--spacing-md);
+  gap: 5px;
+  padding: 7px var(--spacing-sm);
   border-radius: var(--radius-md);
   cursor: pointer;
   color: var(--sidebar-text);
@@ -449,6 +481,16 @@ onUnmounted(() => {
 .project-header.active {
   background: var(--sidebar-item-active);
   color: var(--sidebar-text-active);
+}
+
+.collapse-icon {
+  flex-shrink: 0;
+  transition: transform 0.15s;
+  opacity: 0.5;
+}
+
+.collapse-icon.collapsed {
+  transform: rotate(-90deg);
 }
 
 .project-name {
@@ -490,14 +532,14 @@ onUnmounted(() => {
 
 /* Conversations under project */
 .project-conversations {
-  padding-left: calc(var(--spacing-md) + 13px + var(--spacing-sm));
+  padding-left: 20px;
 }
 
 .conv-item {
   display: flex;
   align-items: center;
   width: 100%;
-  padding: 5px var(--spacing-sm);
+  padding: 5px 8px;
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
@@ -506,7 +548,7 @@ onUnmounted(() => {
   text-align: left;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
-  gap: var(--spacing-sm);
+  gap: 4px;
 }
 
 .conv-item:hover {
@@ -517,6 +559,7 @@ onUnmounted(() => {
 .conv-item.active {
   background: var(--sidebar-item-active);
   color: var(--sidebar-text-active);
+  font-weight: 500;
 }
 
 .conv-title {
@@ -533,16 +576,40 @@ onUnmounted(() => {
 }
 
 .no-conversations {
-  padding: 4px var(--spacing-sm);
+  padding: 4px 8px;
   font-size: var(--font-size-xs);
   color: var(--sidebar-section-title);
 }
 
-/* Pin icon */
-.pin-icon {
-  font-size: 10px;
+/* Pin button on hover */
+.conv-pin-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--sidebar-section-title);
+  cursor: pointer;
   flex-shrink: 0;
-  opacity: 0.6;
+  padding: 0;
+  transition: color 0.15s, background 0.15s;
+}
+
+.conv-pin-btn:hover {
+  color: var(--sidebar-text-active);
+  background: var(--sidebar-item-active);
+}
+
+.conv-pin-btn.pinned {
+  display: flex;
+  color: var(--sidebar-text-active);
+}
+
+.conv-item:hover .conv-pin-btn {
+  display: flex;
 }
 
 /* More button on conv item */
