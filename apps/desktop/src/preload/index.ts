@@ -4,7 +4,9 @@ import type {
   AgentEvent,
   CreateConversationPayload,
   SendMessagePayload,
-  SettingsPayload
+  SettingsPayload,
+  ConversationUpdatePayload,
+  ProjectPayload
 } from './types'
 import { IPC_CHANNELS } from './types'
 
@@ -27,9 +29,27 @@ const agentAPI = {
       }
     }
   },
+  conversations: {
+    list: (projectId?: string | null) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CONVERSATIONS_LIST, projectId),
+    getMessages: (conversationId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CONVERSATIONS_GET_MESSAGES, conversationId),
+    update: (payload: ConversationUpdatePayload) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CONVERSATIONS_UPDATE, payload),
+    delete: (conversationId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.CONVERSATIONS_DELETE, conversationId)
+  },
+  projects: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_LIST),
+    save: (payload: ProjectPayload) => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_SAVE, payload),
+    delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_DELETE, id)
+  },
   settings: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET),
     update: (payload: SettingsPayload) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_UPDATE, payload)
+  },
+  dialog: {
+    selectFolder: () => ipcRenderer.invoke(IPC_CHANNELS.DIALOG_SELECT_FOLDER)
   }
 }
 

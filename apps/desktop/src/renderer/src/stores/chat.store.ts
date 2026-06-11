@@ -34,8 +34,42 @@ export const useChatStore = defineStore('chat', () => {
       })
   }
 
+  async function loadConversations(projectId?: string | null): Promise<void> {
+    const list = await window.agentAPI.conversations.list(projectId)
+    for (const item of list) {
+      const exists = conversations.value.find((c) => c.id === item.id)
+      if (!exists) {
+        conversations.value.push({
+          id: item.id,
+          title: item.title,
+          agentId: item.agentId,
+          projectId: item.projectId,
+          pinned: item.pinned,
+          archived: item.archived,
+          messages: [],
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt
+        })
+      }
+    }
+  }
+
+  async function loadMessages(conversationId: string): Promise<void> {
+    const conv = conversations.value.find((c) => c.id === conversationId)
+    if (!conv) return
+    if (conv.messages.length > 0) return
+    const msgs = await window.agentAPI.conversations.getMessages(conversationId)
+    conv.messages = msgs.map((m) => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      createdAt: m.createdAt
+    }))
+  }
+
   function setActive(id: string | null): void {
     activeConversationId.value = id
+    if (id) loadMessages(id)
   }
 
   async function createConversation(
@@ -179,18 +213,25 @@ export const useChatStore = defineStore('chat', () => {
 
   function togglePin(conversationId: string): void {
     const conv = conversations.value.find((c) => c.id === conversationId)
-    if (conv) conv.pinned = !conv.pinned
+    if (conv) {
+      conv.pinned = !conv.pinned
+      window.agentAPI.conversations.update({ id: conversationId, pinned: conv.pinned })
+    }
   }
 
   function renameConversation(conversationId: string, title: string): void {
     const conv = conversations.value.find((c) => c.id === conversationId)
-    if (conv) conv.title = title
+    if (conv) {
+      conv.title = title
+      window.agentAPI.conversations.update({ id: conversationId, title })
+    }
   }
 
   function archiveConversation(conversationId: string): void {
     const conv = conversations.value.find((c) => c.id === conversationId)
     if (conv) {
       conv.archived = true
+      window.agentAPI.conversations.update({ id: conversationId, archived: true })
       if (activeConversationId.value === conversationId) {
         activeConversationId.value = null
       }
@@ -199,6 +240,7 @@ export const useChatStore = defineStore('chat', () => {
 
   function deleteConversation(conversationId: string): void {
     conversations.value = conversations.value.filter((c) => c.id !== conversationId)
+    window.agentAPI.conversations.delete(conversationId)
     if (activeConversationId.value === conversationId) {
       activeConversationId.value = null
     }
@@ -225,6 +267,8 @@ export const useChatStore = defineStore('chat', () => {
     currentQueuedMessages,
     conversationList,
     getConversationsByProject,
+    loadConversations,
+    loadMessages,
     setActive,
     createConversation,
     addMessage,

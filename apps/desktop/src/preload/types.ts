@@ -5,13 +5,22 @@ export const IPC_CHANNELS = {
   CHAT_STOP: 'chat:stop',
   AGENT_EVENT: 'agent:event',
   SETTINGS_GET: 'settings:get',
-  SETTINGS_UPDATE: 'settings:update'
+  SETTINGS_UPDATE: 'settings:update',
+  DIALOG_SELECT_FOLDER: 'dialog:selectFolder',
+  CONVERSATIONS_LIST: 'conversations:list',
+  CONVERSATIONS_GET_MESSAGES: 'conversations:getMessages',
+  CONVERSATIONS_UPDATE: 'conversations:update',
+  CONVERSATIONS_DELETE: 'conversations:delete',
+  PROJECTS_LIST: 'projects:list',
+  PROJECTS_SAVE: 'projects:save',
+  PROJECTS_DELETE: 'projects:delete'
 } as const
 
 export interface SendMessagePayload {
   conversationId: string
   content: string
   agentId: string
+  cwd?: string
 }
 
 export interface CreateConversationPayload {
@@ -26,6 +35,19 @@ export interface SettingsPayload {
   language?: string
 }
 
+export interface ConversationUpdatePayload {
+  id: string
+  title?: string
+  pinned?: boolean
+  archived?: boolean
+}
+
+export interface ProjectPayload {
+  id: string
+  name: string
+  path: string
+}
+
 export interface AgentInfo {
   id: string
   name: string
@@ -35,6 +57,17 @@ export interface AgentInfo {
 export interface ConversationInfo {
   id: string
   title: string
+}
+
+export interface ConversationListItem {
+  id: string
+  title: string
+  agentId: string
+  projectId: string | null
+  pinned: boolean
+  archived: boolean
+  createdAt: string
+  updatedAt: string
 }
 
 export interface MessageInfo {
@@ -66,8 +99,22 @@ export interface AgentAPI {
     stop: (conversationId: string) => Promise<void>
     onAgentEvent: (callback: (event: AgentEvent) => void) => () => void
   }
+  conversations: {
+    list: (projectId?: string | null) => Promise<ConversationListItem[]>
+    getMessages: (conversationId: string) => Promise<MessageInfo[]>
+    update: (payload: ConversationUpdatePayload) => Promise<void>
+    delete: (conversationId: string) => Promise<void>
+  }
+  projects: {
+    list: () => Promise<ProjectPayload[]>
+    save: (payload: ProjectPayload) => Promise<void>
+    delete: (id: string) => Promise<void>
+  }
   settings: {
     get: () => Promise<SettingsInfo>
     update: (payload: SettingsPayload) => Promise<void>
+  }
+  dialog: {
+    selectFolder: () => Promise<string | null>
   }
 }

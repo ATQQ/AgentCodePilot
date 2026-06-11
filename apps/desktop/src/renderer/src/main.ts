@@ -22,8 +22,14 @@ const settingsStore = useSettingsStore()
 const agentStore = useAgentStore()
 const chatStore = useChatStore()
 
+import { useWorkspaceStore } from './stores/workspace.store'
+const workspaceStore = useWorkspaceStore()
+
 settingsStore.fetchSettings()
 agentStore.fetchAgents()
+workspaceStore.loadProjects().then(() => {
+  chatStore.loadConversations()
+})
 chatStore.initAgentEventListener()
 preloadCodeBlockRuntime()
 

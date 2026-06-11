@@ -3,16 +3,13 @@ import { ref, computed, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { FolderOpened, Search, Plus, Close, Folder } from '@element-plus/icons-vue'
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
-import { mockFolders } from '@renderer/mock/data'
 
 const { t } = useI18n()
 const workspaceStore = useWorkspaceStore()
 
 const showDropdown = ref(false)
-const showAddSubmenu = ref(false)
 const showWorkspacePanel = ref(false)
 const searchQuery = ref('')
-const folderFilter = ref('')
 const workspaceName = ref('')
 const workspaceFolders = ref<string[]>([])
 const dropAbove = ref(false)
@@ -39,13 +36,6 @@ const filteredWorkspaces = computed(() => {
   return workspaceStore.workspaces.filter((ws) => ws.name.toLowerCase().includes(q))
 })
 
-const filteredFolders = computed(() => {
-  const folders = mockFolders.map((f) => f.path)
-  if (!folderFilter.value) return folders
-  const q = folderFilter.value.toLowerCase()
-  return folders.filter((f) => f.toLowerCase().includes(q))
-})
-
 function selectProject(id: string | null): void {
   workspaceStore.selectProject(id)
   showDropdown.value = false
@@ -60,7 +50,6 @@ function selectWorkspace(id: string): void {
 
 async function toggleDropdown(): Promise<void> {
   showDropdown.value = !showDropdown.value
-  showAddSubmenu.value = false
   showWorkspacePanel.value = false
   searchQuery.value = ''
 
@@ -79,17 +68,25 @@ function adjustDropdownPosition(): void {
   dropAbove.value = spaceBelow < dropdownHeight && triggerRect.top > dropdownHeight
 }
 
+async function handleAddProject(): Promise<void> {
+  const project = await workspaceStore.addProject()
+  if (project) {
+    workspaceStore.selectProject(project.id)
+    showDropdown.value = false
+  }
+}
+
 function openWorkspaceSetup(): void {
   showDropdown.value = false
   showWorkspacePanel.value = true
-  folderFilter.value = ''
   workspaceName.value = ''
   workspaceFolders.value = []
 }
 
-function addFolderToWorkspace(folder: string): void {
-  if (!workspaceFolders.value.includes(folder)) {
-    workspaceFolders.value.push(folder)
+async function addFolderToWorkspace(): Promise<void> {
+  const path = await window.agentAPI.dialog.selectFolder()
+  if (path && !workspaceFolders.value.includes(path)) {
+    workspaceFolders.value.push(path)
   }
 }
 
@@ -97,9 +94,18 @@ function removeFolderFromWorkspace(folder: string): void {
   workspaceFolders.value = workspaceFolders.value.filter((f) => f !== folder)
 }
 
-function saveWorkspace(): void {
+async function saveWorkspace(): Promise<void> {
   if (workspaceName.value.trim() && workspaceFolders.value.length) {
     workspaceStore.createWorkspace(workspaceName.value.trim(), [...workspaceFolders.value])
+    for (const folder of workspaceFolders.value) {
+      const existing = workspaceStore.projects.find((p) => p.path === folder)
+      if (!existing) {
+        const name = folder.split('/').pop() || folder
+        const project = { id: `proj-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, name, path: folder }
+        workspaceStore.projects.push(project)
+        await window.agentAPI.projects.save(project)
+      }
+    }
   }
   showWorkspacePanel.value = false
 }
@@ -135,7 +141,7 @@ function closeWorkspacePanel(): void {
           />
         </div>
 
-        <div class="dropdown-list">
+        <div v-if="filteredProjects.length" class="dropdown-list">
           <button
             v-for="proj in filteredProjects"
             :key="proj.id"
@@ -144,7 +150,10 @@ function closeWorkspacePanel(): void {
             @click="selectProject(proj.id)"
           >
             <el-icon :size="14"><FolderOpened /></el-icon>
-            <span class="item-label">{{ proj.name }}</span>
+            <div class="item-content">
+              <span class="item-label">{{ proj.name }}</span>
+              <span class="item-path">{{ proj.path }}</span>
+            </div>
             <span v-if="workspaceStore.selectedProjectId === proj.id" class="check">&#x2713;</span>
           </button>
         </div>
@@ -161,41 +170,41 @@ function closeWorkspacePanel(): void {
           >
             <el-icon :size="14"><Folder /></el-icon>
             <span class="item-label">{{ ws.name }}</span>
-            <span class="ws-folder-count">{{ ws.folders.length }} 个文件夹</span>
+            <span class="ws-folder-count">{{ ws.folders.length }} 个项目</span>
           </button>
         </div>
+
+        <!-- 选中工作空间时展示关联项目 -->
+        <template v-if="workspaceStore.currentWorkspace">
+          <div class="dropdown-divider"></div>
+          <div class="dropdown-group-title">当前工作空间项目</div>
+          <div class="dropdown-list workspace-projects">
+            <div
+              v-for="folder in workspaceStore.currentWorkspace.folders"
+              :key="folder"
+              class="ws-project-item"
+            >
+              <el-icon :size="12"><FolderOpened /></el-icon>
+              <span class="folder-path">{{ folder.split('/').pop() }}</span>
+              <span class="folder-full-path">{{ folder }}</span>
+            </div>
+          </div>
+        </template>
 
         <div class="dropdown-divider"></div>
 
-        <div class="dropdown-actions" @mouseenter="showAddSubmenu = true" @mouseleave="showAddSubmenu = false">
-          <button class="dropdown-item">
-            <el-icon :size="14"><Plus /></el-icon>
-            <span class="item-label">{{ t('project.addNewProject') }}</span>
-            <span class="arrow">&#8250;</span>
-          </button>
-
-          <Transition name="fade">
-            <div v-if="showAddSubmenu" class="submenu">
-              <button class="dropdown-item">
-                <el-icon :size="14"><Plus /></el-icon>
-                <span class="item-label">{{ t('project.createBlank') }}</span>
-              </button>
-              <button class="dropdown-item">
-                <el-icon :size="14"><FolderOpened /></el-icon>
-                <span class="item-label">{{ t('project.useExistingFolder') }}</span>
-              </button>
-            </div>
-          </Transition>
-        </div>
+        <button class="dropdown-item" @click="handleAddProject">
+          <el-icon :size="14"><Plus /></el-icon>
+          <span class="item-label">{{ t('project.useExistingFolder') }}</span>
+        </button>
 
         <button class="dropdown-item" @click="openWorkspaceSetup">
           <el-icon :size="14"><Folder /></el-icon>
           <span class="item-label">{{ t('project.setupWorkspace') }}</span>
         </button>
 
-        <div class="dropdown-divider"></div>
-
-        <button class="dropdown-item" @click="selectProject(null)">
+        <div v-if="workspaceStore.selectedProjectId" class="dropdown-divider"></div>
+        <button v-if="workspaceStore.selectedProjectId" class="dropdown-item" @click="selectProject(null)">
           <el-icon :size="14"><Close /></el-icon>
           <span class="item-label">{{ t('project.noProject') }}</span>
         </button>
@@ -231,31 +240,8 @@ function closeWorkspacePanel(): void {
           </div>
         </div>
 
-        <div class="folder-filter">
-          <input
-            v-model="folderFilter"
-            type="text"
-            :placeholder="t('project.filterFolders')"
-            class="filter-input"
-          />
-        </div>
-
-        <div class="folder-list">
-          <button
-            v-for="folder in filteredFolders"
-            :key="folder"
-            class="dropdown-item"
-            :class="{ selected: workspaceFolders.includes(folder) }"
-            @click="addFolderToWorkspace(folder)"
-          >
-            <el-icon :size="14"><Folder /></el-icon>
-            <span class="item-label folder-path">{{ folder }}</span>
-            <span v-if="workspaceFolders.includes(folder)" class="check">&#x2713;</span>
-          </button>
-        </div>
-
         <div class="dropdown-divider"></div>
-        <button class="dropdown-item">
+        <button class="dropdown-item" @click="addFolderToWorkspace">
           <el-icon :size="14"><Plus /></el-icon>
           <span class="item-label">{{ t('project.addFolder') }}</span>
         </button>
@@ -300,7 +286,7 @@ function closeWorkspacePanel(): void {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
-  min-width: 300px;
+  min-width: 320px;
   background: var(--content-bg);
   border: 1px solid var(--sidebar-border);
   border-radius: var(--radius-lg);
@@ -384,11 +370,28 @@ function closeWorkspacePanel(): void {
   font-weight: 500;
 }
 
+.item-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
 .item-label {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.item-path {
+  font-size: 11px;
+  color: var(--content-text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', monospace;
 }
 
 .check {
@@ -397,34 +400,39 @@ function closeWorkspacePanel(): void {
   font-size: 14px;
 }
 
-.arrow {
-  flex-shrink: 0;
-  color: var(--content-text-tertiary);
-  font-size: 16px;
-}
-
 .dropdown-divider {
   height: 1px;
   background: var(--sidebar-border);
   margin: var(--spacing-xs) 0;
 }
 
-.dropdown-actions {
-  position: relative;
-  padding: 0 var(--spacing-xs);
+.workspace-projects {
+  max-height: 120px;
 }
 
-.submenu {
-  position: absolute;
-  left: calc(100% + 4px);
-  top: 0;
-  min-width: 180px;
-  background: var(--content-bg);
-  border: 1px solid var(--sidebar-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  padding: var(--spacing-xs);
-  z-index: 1001;
+.ws-project-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 5px var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--content-text-secondary);
+}
+
+.ws-project-item .folder-path {
+  flex-shrink: 0;
+  font-weight: 500;
+  color: var(--content-text);
+}
+
+.ws-project-item .folder-full-path {
+  flex: 1;
+  font-size: 11px;
+  color: var(--content-text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Code', monospace;
 }
 
 .panel-header {
@@ -480,7 +488,6 @@ function closeWorkspacePanel(): void {
 
 .workspace-folders {
   padding: var(--spacing-xs) var(--spacing-sm);
-  border-bottom: 1px solid var(--sidebar-border);
 }
 
 .workspace-folder-item {
@@ -514,33 +521,12 @@ function closeWorkspacePanel(): void {
   background: var(--btn-ghost-hover);
 }
 
-.folder-filter {
-  padding: var(--spacing-sm) var(--spacing-md);
-  border-bottom: 1px solid var(--sidebar-border);
-}
-
-.filter-input {
-  width: 100%;
-  border: none;
-  background: transparent;
-  color: var(--content-text);
-  font-size: var(--font-size-sm);
-  outline: none;
-}
-
-.filter-input::placeholder {
-  color: var(--content-text-tertiary);
-}
-
-.folder-list {
-  max-height: 240px;
-  overflow-y: auto;
-  padding: var(--spacing-xs);
-}
-
 .folder-path {
   font-family: ui-monospace, 'SF Mono', 'Cascadia Code', monospace;
   font-size: var(--font-size-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fade-enter-active,

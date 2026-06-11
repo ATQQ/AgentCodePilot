@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -7,13 +7,19 @@ import type {
   AgentEvent,
   AgentInfo,
   ConversationInfo,
+  ConversationListItem,
   CreateConversationPayload,
+  ConversationUpdatePayload,
+  MessageInfo,
+  ProjectPayload,
   SendMessagePayload,
   SettingsInfo,
   SettingsPayload
 } from '../preload/types'
 import { MockAgentAdapter } from './runtime/mock-agent'
 import { ClaudeAgentAdapter } from './runtime/claude-agent'
+import { getDatabase, closeDatabase } from './database'
+import * as repo from './database/repositories'
 
 const mockAgents: AgentInfo[] = [
   { id: 'claude-code', name: 'Claude Code', enabled: true },
@@ -22,18 +28,49 @@ const mockAgents: AgentInfo[] = [
   { id: 'cursor', name: 'Cursor', enabled: false }
 ]
 
-const mockSettings: SettingsInfo = {
-  theme: 'light',
-  approvalLevel: 'request',
-  language: 'zh-CN'
-}
-
 const mockAgent = new MockAgentAdapter()
 const claudeAgent = new ClaudeAgentAdapter()
 let mainWindow: BrowserWindow | null = null
 
+const streamingMessages = new Map<string, { conversationId: string; content: string }>()
+
 function emitAgentEvent(event: AgentEvent): void {
   mainWindow?.webContents.send(IPC_CHANNELS.AGENT_EVENT, event)
+
+  if (event.type === 'message.started') {
+    streamingMessages.set(event.messageId, { conversationId: event.conversationId, content: '' })
+  } else if (event.type === 'message.delta') {
+    const entry = streamingMessages.get(event.messageId)
+    if (entry) entry.content += event.delta
+  } else if (event.type === 'message.completed') {
+    const entry = streamingMessages.get(event.messageId)
+    if (entry) {
+      repo.addMessage({
+        id: event.messageId,
+        conversationId: entry.conversationId,
+        role: 'assistant',
+        content: entry.content,
+        createdAt: new Date().toISOString()
+      })
+      streamingMessages.delete(event.messageId)
+    }
+  } else if (event.type === 'message.error') {
+    for (const [msgId, entry] of streamingMessages) {
+      if (entry.conversationId === event.conversationId) {
+        streamingMessages.delete(msgId)
+        break
+      }
+    }
+  }
+}
+
+function getSettingsFromDb(): SettingsInfo {
+  const all = repo.getAllSettings()
+  return {
+    theme: (all['theme'] as SettingsInfo['theme']) || 'light',
+    approvalLevel: (all['approvalLevel'] as SettingsInfo['approvalLevel']) || 'request',
+    language: all['language'] || 'zh-CN'
+  }
 }
 
 function registerIpcHandlers(): void {
@@ -47,17 +84,48 @@ function registerIpcHandlers(): void {
       const id = `conv-${Date.now()}`
       const title =
         payload.firstMessage.slice(0, 30) + (payload.firstMessage.length > 30 ? '...' : '')
+      const now = new Date().toISOString()
+
+      repo.createConversation({
+        id,
+        title,
+        agentId: payload.agentId,
+        projectId: payload.projectId ?? null,
+        createdAt: now,
+        updatedAt: now
+      })
+
+      const msgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      repo.addMessage({
+        id: msgId,
+        conversationId: id,
+        role: 'user',
+        content: payload.firstMessage,
+        createdAt: now
+      })
+
       return { id, title }
     }
   )
 
   ipcMain.handle(IPC_CHANNELS.CHAT_SEND, (_e, payload: SendMessagePayload): void => {
     const messageId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    const now = new Date().toISOString()
+
+    repo.addMessage({
+      id: messageId,
+      conversationId: payload.conversationId,
+      role: 'user',
+      content: payload.content,
+      createdAt: now
+    })
+
     const runInput = {
       conversationId: payload.conversationId,
       messageId,
       content: payload.content,
-      agentId: payload.agentId
+      agentId: payload.agentId,
+      cwd: payload.cwd
     }
 
     if (payload.agentId === 'claude-code') {
@@ -72,14 +140,88 @@ function registerIpcHandlers(): void {
     mockAgent.stop(conversationId)
   })
 
+  // --- Conversations ---
+
+  ipcMain.handle(
+    IPC_CHANNELS.CONVERSATIONS_LIST,
+    (_e, projectId?: string | null): ConversationListItem[] => {
+      const rows = projectId
+        ? repo.getConversationsByProject(projectId)
+        : repo.getAllConversations()
+
+      return rows.map((r) => ({
+        id: r.id,
+        title: r.title,
+        agentId: r.agent_id,
+        projectId: r.project_id,
+        pinned: r.pinned === 1,
+        archived: r.archived === 1,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at
+      }))
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.CONVERSATIONS_GET_MESSAGES,
+    (_e, conversationId: string): MessageInfo[] => {
+      const rows = repo.getMessagesByConversation(conversationId)
+      return rows.map((r) => ({
+        id: r.id,
+        role: r.role as 'user' | 'assistant',
+        content: r.content,
+        createdAt: r.created_at
+      }))
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.CONVERSATIONS_UPDATE,
+    (_e, payload: ConversationUpdatePayload): void => {
+      repo.updateConversation(payload.id, {
+        title: payload.title,
+        pinned: payload.pinned,
+        archived: payload.archived
+      })
+    }
+  )
+
+  ipcMain.handle(IPC_CHANNELS.CONVERSATIONS_DELETE, (_e, conversationId: string): void => {
+    repo.deleteConversation(conversationId)
+  })
+
+  // --- Projects ---
+
+  ipcMain.handle(IPC_CHANNELS.PROJECTS_LIST, (): ProjectPayload[] => {
+    return repo.getAllProjects()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROJECTS_SAVE, (_e, payload: ProjectPayload): void => {
+    repo.saveProject(payload)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROJECTS_DELETE, (_e, id: string): void => {
+    repo.deleteProject(id)
+  })
+
+  // --- Settings ---
+
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, (): SettingsInfo => {
-    return { ...mockSettings }
+    return getSettingsFromDb()
   })
 
   ipcMain.handle(IPC_CHANNELS.SETTINGS_UPDATE, (_e, payload: SettingsPayload): void => {
-    if (payload.theme) mockSettings.theme = payload.theme
-    if (payload.approvalLevel) mockSettings.approvalLevel = payload.approvalLevel
-    if (payload.language) mockSettings.language = payload.language
+    if (payload.theme) repo.setSetting('theme', payload.theme)
+    if (payload.approvalLevel) repo.setSetting('approvalLevel', payload.approvalLevel)
+    if (payload.language) repo.setSetting('language', payload.language)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.DIALOG_SELECT_FOLDER, async (): Promise<string | null> => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory']
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0]
   })
 }
 
@@ -124,6 +266,9 @@ function createWindow(): void {
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.agentcodepilot.app')
 
+  // Initialize database
+  getDatabase()
+
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
@@ -141,4 +286,8 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('will-quit', () => {
+  closeDatabase()
 })
