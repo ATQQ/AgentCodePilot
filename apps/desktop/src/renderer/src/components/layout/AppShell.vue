@@ -21,7 +21,7 @@ function toggleSidebar(): void {
 }
 
 function handleGlobalKeydown(e: KeyboardEvent): void {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'g') {
     e.preventDefault()
     searchVisible.value = !searchVisible.value
   }

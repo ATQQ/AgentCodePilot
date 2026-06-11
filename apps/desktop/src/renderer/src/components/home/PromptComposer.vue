@@ -54,6 +54,8 @@ const approvalOptions = {
   auto: { label: 'composer.approval.autoApprove', icon: '\u{1F64A}' },
   full: { label: 'composer.approval.fullAccess', icon: '⚠' }
 }
+
+defineExpose({ setInput: (text: string) => { input.value = text } })
 </script>
 
 <template>

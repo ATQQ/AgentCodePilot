@@ -60,7 +60,9 @@ export default {
     inputPlaceholder: '输入消息...',
     noConversation: '暂无活跃对话',
     stop: '停止生成',
-    queued: '排队中'
+    queued: '排队中',
+    copy: '复制',
+    resend: '重新编辑'
   },
   settings: {
     title: '设置',
