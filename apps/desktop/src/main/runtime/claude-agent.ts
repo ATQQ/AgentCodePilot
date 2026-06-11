@@ -27,7 +27,7 @@ export class ClaudeAgentAdapter {
         options: {
           abortController: controller,
           cwd: input.cwd || app.getPath('home'),
-          allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'],
+          allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'WebFetch', 'WebSearch'],
           maxTurns: 20,
           permissionMode: 'bypassPermissions',
           allowDangerouslySkipPermissions: true,
