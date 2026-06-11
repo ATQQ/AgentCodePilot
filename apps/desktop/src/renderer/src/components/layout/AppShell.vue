@@ -65,7 +65,6 @@ onUnmounted(() => {
       <AppSidebar v-show="!sidebarCollapsed" />
     </Transition>
     <div class="main-content">
-      <div class="main-drag-area"></div>
       <div class="page-content">
         <router-view />
       </div>
@@ -86,6 +85,7 @@ onUnmounted(() => {
   position: fixed;
   top: 0;
   left: 0;
+  right: 0;
   height: var(--topbar-height);
   display: flex;
   align-items: center;
@@ -132,13 +132,8 @@ onUnmounted(() => {
   background: var(--content-bg);
 }
 
-.main-drag-area {
-  height: var(--topbar-height);
-  flex-shrink: 0;
-  -webkit-app-region: drag;
-}
-
 .page-content {
+  padding-top: var(--topbar-height);
   flex: 1;
   overflow: auto;
 }
