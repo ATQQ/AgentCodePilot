@@ -59,6 +59,9 @@ importers:
       '@electron-toolkit/tsconfig':
         specifier: ^2.0.0
         version: 2.0.0(@types/node@22.19.20)
+      '@electron/rebuild':
+        specifier: ^4.0.4
+        version: 4.0.4
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13
@@ -5901,11 +5904,11 @@ snapshots:
 
   node-abi@4.31.0:
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.2
 
   node-api-version@0.2.1:
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.2
 
   node-gyp@12.4.0:
     dependencies:
@@ -5914,7 +5917,7 @@ snapshots:
       graceful-fs: 4.2.11
       nopt: 9.0.0
       proc-log: 6.1.0
-      semver: 7.7.4
+      semver: 7.8.2
       tar: 7.5.16
       tinyglobby: 0.2.17
       undici: 6.26.0
