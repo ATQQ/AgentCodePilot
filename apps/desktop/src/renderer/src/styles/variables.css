@@ -5,6 +5,7 @@
 
   /* Sidebar */
   --sidebar-bg: #f9fafb;
+  --sidebar-bg-translucent: rgba(249, 250, 251, 0.78);
   --sidebar-border: #e5e7eb;
   --sidebar-text: #6b7280;
   --sidebar-text-active: #111827;
@@ -79,6 +80,7 @@
 html.dark {
   /* Sidebar */
   --sidebar-bg: #18181b;
+  --sidebar-bg-translucent: rgba(24, 24, 27, 0.78);
   --sidebar-border: #27272a;
   --sidebar-text: #a1a1aa;
   --sidebar-text-active: #f4f4f5;

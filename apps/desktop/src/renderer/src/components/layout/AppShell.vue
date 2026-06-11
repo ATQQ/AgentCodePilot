@@ -4,6 +4,7 @@ import AppSidebar from './AppSidebar.vue'
 import SearchDialog from './SearchDialog.vue'
 
 const searchVisible = ref(false)
+const sidebarCollapsed = ref(false)
 
 function openSearch(): void {
   searchVisible.value = true
@@ -11,6 +12,10 @@ function openSearch(): void {
 
 function closeSearch(): void {
   searchVisible.value = false
+}
+
+function toggleSidebar(): void {
+  sidebarCollapsed.value = !sidebarCollapsed.value
 }
 
 function handleGlobalKeydown(e: KeyboardEvent): void {
@@ -21,6 +26,7 @@ function handleGlobalKeydown(e: KeyboardEvent): void {
 }
 
 provide('openSearch', openSearch)
+provide('toggleSidebar', toggleSidebar)
 
 onMounted(() => {
   document.addEventListener('keydown', handleGlobalKeydown)
@@ -33,7 +39,9 @@ onUnmounted(() => {
 
 <template>
   <div class="app-shell">
-    <AppSidebar />
+    <Transition name="sidebar-slide">
+      <AppSidebar v-show="!sidebarCollapsed" />
+    </Transition>
     <div class="main-content">
       <div class="main-drag-area"></div>
       <div class="page-content">
@@ -69,5 +77,17 @@ onUnmounted(() => {
 .page-content {
   flex: 1;
   overflow: auto;
+}
+
+.sidebar-slide-enter-active,
+.sidebar-slide-leave-active {
+  transition: width 0.2s ease, min-width 0.2s ease, opacity 0.2s ease;
+}
+
+.sidebar-slide-enter-from,
+.sidebar-slide-leave-to {
+  width: 0 !important;
+  min-width: 0 !important;
+  opacity: 0;
 }
 </style>

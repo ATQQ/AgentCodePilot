@@ -11,6 +11,7 @@ import {
   Folder,
   MoreFilled,
   ArrowRight,
+  ArrowLeft,
   ArrowDown
 } from '@element-plus/icons-vue'
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
@@ -26,6 +27,7 @@ const workspaceStore = useWorkspaceStore()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const openSearch = inject<() => void>('openSearch', () => {})
+const toggleSidebar = inject<() => void>('toggleSidebar', () => {})
 
 const topNavItems = [
   { name: 'new-chat', path: '/', icon: EditPen, labelKey: 'sidebar.newChat' },
@@ -194,7 +196,23 @@ onUnmounted(() => {
 
 <template>
   <aside class="sidebar">
-    <div class="sidebar-drag-area"></div>
+    <div class="sidebar-toolbar">
+      <div class="toolbar-drag-zone"></div>
+      <div class="toolbar-actions">
+        <button class="toolbar-btn" @click="toggleSidebar" title="收起侧边栏">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="2" y="3" width="12" height="10" rx="1.5" />
+            <line x1="6" y1="3" x2="6" y2="13" />
+          </svg>
+        </button>
+        <button class="toolbar-btn" @click="router.back()" title="后退">
+          <el-icon :size="13"><ArrowLeft /></el-icon>
+        </button>
+        <button class="toolbar-btn" @click="router.forward()" title="前进">
+          <el-icon :size="13"><ArrowRight /></el-icon>
+        </button>
+      </div>
+    </div>
     <div class="sidebar-content">
       <nav class="sidebar-nav">
         <button
@@ -385,17 +403,53 @@ onUnmounted(() => {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
   height: 100vh;
-  background: var(--sidebar-bg);
+  background: var(--sidebar-bg-translucent, rgba(249, 250, 251, 0.82));
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border-right: 1px solid var(--sidebar-border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-.sidebar-drag-area {
+.sidebar-toolbar {
   height: var(--topbar-height);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--spacing-sm);
   -webkit-app-region: drag;
+}
+
+.toolbar-drag-zone {
+  width: 70px;
+  flex-shrink: 0;
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 22px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--sidebar-text);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.toolbar-btn:hover {
+  background: var(--sidebar-item-hover);
+  color: var(--sidebar-text-active);
 }
 
 .sidebar-content {
