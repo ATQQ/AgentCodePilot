@@ -126,11 +126,8 @@ function resendMessage(content: string): void {
         >
           <div v-if="msg.role === 'assistant'" class="message-role">
             <span class="agent-avatar">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 2a4 4 0 0 1 4 4v2a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z"/>
-                <path d="M8 14h8a4 4 0 0 1 4 4v2H4v-2a4 4 0 0 1 4-4z"/>
-                <circle cx="9" cy="7" r="0.5" fill="currentColor" stroke="none"/>
-                <circle cx="15" cy="7" r="0.5" fill="currentColor" stroke="none"/>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M4.709 15.955l4.72-10.151c.91-1.96 1.365-2.94 2.12-3.166a2 2 0 0 1 1.254.07c.72.312 1.063 1.344 1.748 3.407l1.375 4.138a2 2 0 0 0 .234.497l2.15 3.163c1.136 1.67 1.704 2.505 1.59 3.204a2 2 0 0 1-.63 1.124c-.534.487-1.556.487-3.6.487H7.35c-2.126 0-3.189 0-3.7-.55a2 2 0 0 1-.483-1.085c-.091-.707.437-1.523 1.494-3.156l.049-.074z"/>
               </svg>
             </span>
             {{ agentStore.currentAgent?.name }}
@@ -169,11 +166,8 @@ function resendMessage(content: string): void {
         </div>
         <div v-if="chatStore.isWaiting" class="thinking-indicator">
           <span class="agent-avatar">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 2a4 4 0 0 1 4 4v2a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z"/>
-              <path d="M8 14h8a4 4 0 0 1 4 4v2H4v-2a4 4 0 0 1 4-4z"/>
-              <circle cx="9" cy="7" r="0.5" fill="currentColor" stroke="none"/>
-              <circle cx="15" cy="7" r="0.5" fill="currentColor" stroke="none"/>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M4.709 15.955l4.72-10.151c.91-1.96 1.365-2.94 2.12-3.166a2 2 0 0 1 1.254.07c.72.312 1.063 1.344 1.748 3.407l1.375 4.138a2 2 0 0 0 .234.497l2.15 3.163c1.136 1.67 1.704 2.505 1.59 3.204a2 2 0 0 1-.63 1.124c-.534.487-1.556.487-3.6.487H7.35c-2.126 0-3.189 0-3.7-.55a2 2 0 0 1-.483-1.085c-.091-.707.437-1.523 1.494-3.156l.049-.074z"/>
             </svg>
           </span>
           <div class="thinking-dots">
@@ -270,8 +264,8 @@ function resendMessage(content: string): void {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: var(--btn-primary-bg);
-  color: var(--btn-primary-text);
+  background: #d97757;
+  color: #fff;
   flex-shrink: 0;
 }
 
