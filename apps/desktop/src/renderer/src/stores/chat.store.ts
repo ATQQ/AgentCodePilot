@@ -200,25 +200,19 @@ export const useChatStore = defineStore('chat', () => {
   function handleAgentEvent(event: AgentEvent): void {
     switch (event.type) {
       case 'message.started': {
-        const conv = conversations.value.find((c) => c.id === event.conversationId)
-        if (!conv) return
-        waitingConversationIds.value.delete(event.conversationId)
         streamingConversationIds.value.add(event.conversationId)
-        conv.messages.push({
-          id: event.messageId,
-          role: 'assistant',
-          content: '',
-          createdAt: new Date().toISOString()
-        })
         break
       }
       case 'message.delta': {
         const conv = conversations.value.find((c) => c.id === event.conversationId)
         if (!conv) return
-        const msg = conv.messages.find((m) => m.id === event.messageId)
-        if (msg) {
-          msg.content += event.delta
+        waitingConversationIds.value.delete(event.conversationId)
+        let msg = conv.messages.find((m) => m.id === event.messageId)
+        if (!msg) {
+          msg = { id: event.messageId, role: 'assistant', content: '', createdAt: new Date().toISOString() }
+          conv.messages.push(msg)
         }
+        msg.content += event.delta
         break
       }
       case 'message.completed': {
@@ -239,6 +233,7 @@ export const useChatStore = defineStore('chat', () => {
         if (conv) {
           addMessage(event.conversationId, 'assistant', `[Error] ${event.error}`)
         }
+        waitingConversationIds.value.delete(event.conversationId)
         streamingConversationIds.value.delete(event.conversationId)
         flushQueueForConversation(event.conversationId)
         break

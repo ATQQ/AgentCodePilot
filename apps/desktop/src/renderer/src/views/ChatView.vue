@@ -124,7 +124,17 @@ function resendMessage(content: string): void {
           class="message"
           :class="msg.role"
         >
-          <div v-if="msg.role === 'assistant'" class="message-role">{{ agentStore.currentAgent?.name }}</div>
+          <div v-if="msg.role === 'assistant'" class="message-role">
+            <span class="agent-avatar">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2a4 4 0 0 1 4 4v2a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z"/>
+                <path d="M8 14h8a4 4 0 0 1 4 4v2H4v-2a4 4 0 0 1 4-4z"/>
+                <circle cx="9" cy="7" r="0.5" fill="currentColor" stroke="none"/>
+                <circle cx="15" cy="7" r="0.5" fill="currentColor" stroke="none"/>
+              </svg>
+            </span>
+            {{ agentStore.currentAgent?.name }}
+          </div>
           <div class="message-content">
             <template v-if="msg.role === 'assistant'">
               <MarkdownRender
@@ -158,6 +168,14 @@ function resendMessage(content: string): void {
           </div>
         </div>
         <div v-if="chatStore.isWaiting" class="thinking-indicator">
+          <span class="agent-avatar">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a4 4 0 0 1 4 4v2a4 4 0 0 1-8 0V6a4 4 0 0 1 4-4z"/>
+              <path d="M8 14h8a4 4 0 0 1 4 4v2H4v-2a4 4 0 0 1 4-4z"/>
+              <circle cx="9" cy="7" r="0.5" fill="currentColor" stroke="none"/>
+              <circle cx="15" cy="7" r="0.5" fill="currentColor" stroke="none"/>
+            </svg>
+          </span>
           <div class="thinking-dots">
             <span class="dot"></span>
             <span class="dot"></span>
@@ -236,10 +254,25 @@ function resendMessage(content: string): void {
 }
 
 .message-role {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: var(--font-size-xs);
   font-weight: 500;
   color: var(--content-text-secondary);
   margin-bottom: 4px;
+}
+
+.agent-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  flex-shrink: 0;
 }
 
 .message-content {
