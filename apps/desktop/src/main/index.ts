@@ -25,7 +25,6 @@ import * as repo from './database/repositories'
 const mockAgents: AgentInfo[] = [
   { id: 'claude-code', name: 'Claude Code', enabled: true },
   { id: 'codex', name: 'Codex', enabled: true },
-  { id: 'gemini-cli', name: 'Gemini CLI', enabled: true },
   { id: 'cursor', name: 'Cursor', enabled: false }
 ]
 
