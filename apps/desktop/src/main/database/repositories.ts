@@ -247,3 +247,41 @@ export function deleteWorkspace(id: string): void {
   const db = getDatabase()
   db.prepare('DELETE FROM workspaces WHERE id = ?').run(id)
 }
+
+// --- Provider Configs ---
+
+export interface ProviderConfigRow {
+  id: string
+  name: string
+  type: string
+  config: string
+}
+
+export function saveProviderConfig(provider: {
+  id: string
+  name: string
+  type: string
+  config: string
+}): void {
+  const db = getDatabase()
+  db.prepare(
+    'INSERT OR REPLACE INTO provider_configs (id, name, type, config) VALUES (?, ?, ?, ?)'
+  ).run(provider.id, provider.name, provider.type, provider.config)
+}
+
+export function getAllProviderConfigs(): ProviderConfigRow[] {
+  const db = getDatabase()
+  return db.prepare('SELECT * FROM provider_configs').all() as ProviderConfigRow[]
+}
+
+export function getProviderConfig(id: string): ProviderConfigRow | undefined {
+  const db = getDatabase()
+  return db.prepare('SELECT * FROM provider_configs WHERE id = ?').get(id) as
+    | ProviderConfigRow
+    | undefined
+}
+
+export function deleteProviderConfig(id: string): void {
+  const db = getDatabase()
+  db.prepare('DELETE FROM provider_configs WHERE id = ?').run(id)
+}

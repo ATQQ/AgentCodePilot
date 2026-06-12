@@ -14,24 +14,16 @@ import type {
   ConversationUpdatePayload,
   MessageInfo,
   ProjectPayload,
+  ProviderConfigPayload,
   WorkspacePayload,
   SendMessagePayload,
   SettingsInfo,
   SettingsPayload
 } from '../preload/types'
-import { MockAgentAdapter } from './runtime/mock-agent'
-import { ClaudeAgentAdapter } from './runtime/claude-agent'
+import { agentRegistry, initializeAgentRegistry } from './runtime'
 import { getDatabase, closeDatabase } from './database'
 import * as repo from './database/repositories'
 
-const mockAgents: AgentInfo[] = [
-  { id: 'claude-code', name: 'Claude Code', enabled: true },
-  { id: 'codex', name: 'Codex', enabled: true },
-  { id: 'cursor', name: 'Cursor', enabled: false }
-]
-
-const mockAgent = new MockAgentAdapter()
-const claudeAgent = new ClaudeAgentAdapter()
 let mainWindow: BrowserWindow | null = null
 
 const streamingMessages = new Map<string, { conversationId: string; content: string; rawInput: string }>()
@@ -104,7 +96,11 @@ function getSettingsFromDb(): SettingsInfo {
 
 function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.AGENTS_LIST, (): AgentInfo[] => {
-    return mockAgents
+    return agentRegistry.list().map((a) => ({
+      id: a.id,
+      name: a.name,
+      enabled: a.enabled
+    }))
   })
 
   ipcMain.handle(
@@ -164,10 +160,15 @@ function registerIpcHandlers(): void {
       workspaceFolders: payload.workspaceFolders
     }
 
-    if (payload.agentId === 'claude-code') {
-      claudeAgent.run(runInput, emitAgentEvent)
+    const adapter = agentRegistry.get(payload.agentId)
+    if (adapter) {
+      adapter.run(runInput, emitAgentEvent)
     } else {
-      mockAgent.run(runInput, emitAgentEvent)
+      emitAgentEvent({
+        type: 'message.error',
+        conversationId: payload.conversationId,
+        error: `Agent "${payload.agentId}" not found or not configured`
+      })
     }
   })
 
@@ -200,16 +201,20 @@ function registerIpcHandlers(): void {
       workspaceFolders: payload.workspaceFolders
     }
 
-    if (payload.agentId === 'claude-code') {
-      claudeAgent.run(runInput, emitAgentEvent)
+    const adapter = agentRegistry.get(payload.agentId)
+    if (adapter) {
+      adapter.run(runInput, emitAgentEvent)
     } else {
-      mockAgent.run(runInput, emitAgentEvent)
+      emitAgentEvent({
+        type: 'message.error',
+        conversationId: payload.conversationId,
+        error: `Agent "${payload.agentId}" not found or not configured`
+      })
     }
   })
 
   ipcMain.handle(IPC_CHANNELS.CHAT_STOP, (_e, conversationId: string): void => {
-    claudeAgent.stop(conversationId)
-    mockAgent.stop(conversationId)
+    agentRegistry.stopAll(conversationId)
   })
 
   // --- Conversations ---
@@ -316,6 +321,30 @@ function registerIpcHandlers(): void {
     repo.deleteWorkspace(id)
   })
 
+  // --- Providers ---
+
+  ipcMain.handle(IPC_CHANNELS.PROVIDERS_LIST, (): ProviderConfigPayload[] => {
+    return repo.getAllProviderConfigs().map((p) => ({
+      id: p.id,
+      name: p.name,
+      type: p.type,
+      config: JSON.parse(p.config) as Record<string, unknown>
+    }))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROVIDERS_SAVE, (_e, payload: ProviderConfigPayload): void => {
+    repo.saveProviderConfig({
+      id: payload.id,
+      name: payload.name,
+      type: payload.type,
+      config: JSON.stringify(payload.config)
+    })
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROVIDERS_DELETE, (_e, id: string): void => {
+    repo.deleteProviderConfig(id)
+  })
+
   // --- Settings ---
 
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, (): SettingsInfo => {
@@ -402,8 +431,8 @@ function createWindow(): void {
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.agentcodepilot.app')
 
-  // Initialize database
   getDatabase()
+  initializeAgentRegistry()
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

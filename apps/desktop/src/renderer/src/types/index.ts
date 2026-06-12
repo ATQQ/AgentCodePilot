@@ -22,6 +22,15 @@ export interface Project {
   path: string
 }
 
+export interface ToolCall {
+  toolUseId: string
+  toolName: string
+  input: Record<string, unknown>
+  status: 'running' | 'completed' | 'error'
+  summary?: string
+  elapsedSeconds?: number
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant'
@@ -29,6 +38,7 @@ export interface Message {
   createdAt: string
   usage?: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number; costUSD: number }
   attachments?: Attachment[]
+  toolCalls?: ToolCall[]
   debugInput?: string
   debugOutput?: string
 }

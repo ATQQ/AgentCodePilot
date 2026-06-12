@@ -14,7 +14,6 @@ import {
 } from '@element-plus/icons-vue'
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
 import { useChatStore } from '@renderer/stores/chat.store'
-import { useAgentStore } from '@renderer/stores/agent.store'
 import { formatRelativeTime } from '@renderer/composables/useRelativeTime'
 import type { Conversation } from '@renderer/types'
 
@@ -23,7 +22,6 @@ const router = useRouter()
 const route = useRoute()
 const workspaceStore = useWorkspaceStore()
 const chatStore = useChatStore()
-const agentStore = useAgentStore()
 const openSearch = inject<() => void>('openSearch', () => {})
 
 const topNavItems = [

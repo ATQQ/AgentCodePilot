@@ -7,6 +7,7 @@ import { useChatStore } from '@renderer/stores/chat.store'
 import { useAgentStore } from '@renderer/stores/agent.store'
 import PromptComposer from '@renderer/components/home/PromptComposer.vue'
 import AgentSelector from '@renderer/components/home/AgentSelector.vue'
+import ToolCallCard from '@renderer/components/chat/ToolCallCard.vue'
 import claudeIcon from '@renderer/assets/claude-icon.svg'
 import codexIcon from '@renderer/assets/codex-icon.svg'
 import cursorIcon from '@renderer/assets/cursor-icon.svg'
@@ -171,6 +172,13 @@ function resendMessage(content: string): void {
           </div>
           <div class="message-content">
             <template v-if="msg.role === 'assistant'">
+              <div v-if="msg.toolCalls?.length" class="tool-calls-section">
+                <ToolCallCard
+                  v-for="tc in msg.toolCalls"
+                  :key="tc.toolUseId"
+                  :tool-call="tc"
+                />
+              </div>
               <MarkdownRender
                 custom-id="chat"
                 :content="msg.content"
@@ -599,5 +607,9 @@ function resendMessage(content: string): void {
   justify-content: center;
   height: 100%;
   color: var(--content-text-secondary);
+}
+
+.tool-calls-section {
+  margin-bottom: 8px;
 }
 </style>

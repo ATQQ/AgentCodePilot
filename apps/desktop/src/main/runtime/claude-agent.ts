@@ -1,9 +1,12 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { app } from 'electron'
 import type { AgentEvent, TokenUsage } from '../../preload/types'
-import type { AgentRunInput } from './mock-agent'
+import type { AgentAdapter, AgentRunInput } from './types'
 
-export class ClaudeAgentAdapter {
+export class ClaudeAgentAdapter implements AgentAdapter {
+  readonly id = 'claude-code'
+  readonly name = 'Claude Code'
+  readonly enabled = true
   private abortControllers = new Map<string, AbortController>()
   private sessionIds = new Map<string, string>()
 
@@ -55,13 +58,46 @@ export class ClaudeAgentAdapter {
         if (message.type === 'system' && message.subtype === 'init') {
           this.sessionIds.set(input.conversationId, message.session_id)
         } else if (message.type === 'stream_event') {
-          const event = (message as { event: { type: string; delta?: { type: string; text?: string } } }).event
-          if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta' && event.delta.text) {
+          const event = (message as { event: { type: string; index?: number; content_block?: { type: string; id?: string; name?: string; input?: unknown }; delta?: { type: string; text?: string } } }).event
+          if (event.type === 'content_block_start' && event.content_block?.type === 'tool_use') {
+            const block = event.content_block
+            emit({
+              type: 'tool.started',
+              conversationId: input.conversationId,
+              messageId: input.messageId,
+              tool: {
+                toolUseId: block.id || `tool-${Date.now()}`,
+                toolName: block.name || 'unknown',
+                input: (block.input as Record<string, unknown>) || {},
+                status: 'running'
+              }
+            })
+          } else if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta' && event.delta.text) {
             emit({
               type: 'message.delta',
               conversationId: input.conversationId,
               messageId: input.messageId,
               delta: event.delta.text
+            })
+          }
+        } else if (message.type === 'tool_progress') {
+          const toolMsg = message as { tool_use_id: string; tool_name: string; elapsed_time_seconds: number }
+          emit({
+            type: 'tool.progress',
+            conversationId: input.conversationId,
+            messageId: input.messageId,
+            toolUseId: toolMsg.tool_use_id,
+            elapsedSeconds: toolMsg.elapsed_time_seconds
+          })
+        } else if (message.type === 'tool_use_summary') {
+          const summaryMsg = message as { summary: string; preceding_tool_use_ids: string[] }
+          for (const toolId of summaryMsg.preceding_tool_use_ids) {
+            emit({
+              type: 'tool.completed',
+              conversationId: input.conversationId,
+              messageId: input.messageId,
+              toolUseId: toolId,
+              summary: summaryMsg.summary
             })
           }
         } else if (message.type === 'result') {

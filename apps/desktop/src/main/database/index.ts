@@ -70,6 +70,13 @@ function migrate(database: Database.Database): void {
       folders TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS provider_configs (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      config TEXT NOT NULL DEFAULT '{}'
+    );
+
     CREATE INDEX IF NOT EXISTS idx_messages_conversation
       ON messages(conversation_id, created_at);
 

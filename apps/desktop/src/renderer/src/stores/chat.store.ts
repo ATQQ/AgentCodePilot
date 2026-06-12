@@ -262,6 +262,42 @@ export const useChatStore = defineStore('chat', () => {
         flushQueueForConversation(event.conversationId)
         break
       }
+      case 'tool.started': {
+        const conv = conversations.value.find((c) => c.id === event.conversationId)
+        if (!conv) return
+        let msg = conv.messages.find((m) => m.id === event.messageId)
+        if (!msg) {
+          msg = { id: event.messageId, role: 'assistant', content: '', createdAt: new Date().toISOString() }
+          conv.messages.push(msg)
+        }
+        if (!msg.toolCalls) msg.toolCalls = []
+        const existing = msg.toolCalls.find((t) => t.toolUseId === event.tool.toolUseId)
+        if (!existing) {
+          msg.toolCalls.push({ ...event.tool })
+        }
+        break
+      }
+      case 'tool.progress': {
+        const conv = conversations.value.find((c) => c.id === event.conversationId)
+        if (!conv) return
+        const msg = conv.messages.find((m) => m.id === event.messageId)
+        if (!msg?.toolCalls) return
+        const tc = msg.toolCalls.find((t) => t.toolUseId === event.toolUseId)
+        if (tc) tc.elapsedSeconds = event.elapsedSeconds
+        break
+      }
+      case 'tool.completed': {
+        const conv = conversations.value.find((c) => c.id === event.conversationId)
+        if (!conv) return
+        const msg = conv.messages.find((m) => m.id === event.messageId)
+        if (!msg?.toolCalls) return
+        const tc = msg.toolCalls.find((t) => t.toolUseId === event.toolUseId)
+        if (tc) {
+          tc.status = 'completed'
+          if (event.summary) tc.summary = event.summary
+        }
+        break
+      }
     }
   }
 

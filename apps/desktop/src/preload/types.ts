@@ -19,7 +19,10 @@ export const IPC_CHANNELS = {
   PROJECTS_DELETE: 'projects:delete',
   WORKSPACES_LIST: 'workspaces:list',
   WORKSPACES_SAVE: 'workspaces:save',
-  WORKSPACES_DELETE: 'workspaces:delete'
+  WORKSPACES_DELETE: 'workspaces:delete',
+  PROVIDERS_LIST: 'providers:list',
+  PROVIDERS_SAVE: 'providers:save',
+  PROVIDERS_DELETE: 'providers:delete'
 } as const
 
 export interface FileAttachmentPayload {
@@ -78,6 +81,13 @@ export interface WorkspacePayload {
   folders: string[]
 }
 
+export interface ProviderConfigPayload {
+  id: string
+  name: string
+  type: string
+  config: Record<string, unknown>
+}
+
 export interface AgentInfo {
   id: string
   name: string
@@ -127,11 +137,23 @@ export interface TokenUsage {
   costUSD: number
 }
 
+export interface ToolUseInfo {
+  toolUseId: string
+  toolName: string
+  input: Record<string, unknown>
+  status: 'running' | 'completed' | 'error'
+  summary?: string
+  elapsedSeconds?: number
+}
+
 export type AgentEvent =
   | { type: 'message.started'; conversationId: string; messageId: string }
   | { type: 'message.delta'; conversationId: string; messageId: string; delta: string }
   | { type: 'message.completed'; conversationId: string; messageId: string; usage?: TokenUsage; debugInput?: string; debugOutput?: string }
   | { type: 'message.error'; conversationId: string; error: string }
+  | { type: 'tool.started'; conversationId: string; messageId: string; tool: ToolUseInfo }
+  | { type: 'tool.progress'; conversationId: string; messageId: string; toolUseId: string; elapsedSeconds: number }
+  | { type: 'tool.completed'; conversationId: string; messageId: string; toolUseId: string; summary?: string }
 
 export interface AgentAPI {
   agents: {
@@ -158,6 +180,11 @@ export interface AgentAPI {
   workspaces: {
     list: () => Promise<WorkspacePayload[]>
     save: (payload: WorkspacePayload) => Promise<void>
+    delete: (id: string) => Promise<void>
+  }
+  providers: {
+    list: () => Promise<ProviderConfigPayload[]>
+    save: (payload: ProviderConfigPayload) => Promise<void>
     delete: (id: string) => Promise<void>
   }
   settings: {

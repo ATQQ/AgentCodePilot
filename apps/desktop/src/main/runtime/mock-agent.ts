@@ -1,13 +1,5 @@
 import type { AgentEvent } from '../../preload/types'
-
-export interface AgentRunInput {
-  conversationId: string
-  messageId: string
-  content: string
-  agentId: string
-  cwd?: string
-  workspaceFolders?: string[]
-}
+import type { AgentAdapter, AgentRunInput } from './types'
 
 const MOCK_MARKDOWN_RESPONSE = `## 分析结果
 
@@ -70,7 +62,10 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-export class MockAgentAdapter {
+export class MockAgentAdapter implements AgentAdapter {
+  readonly id = 'mock'
+  readonly name = 'Mock Agent'
+  readonly enabled = true
   private abortControllers = new Map<string, AbortController>()
 
   async run(input: AgentRunInput, emit: (event: AgentEvent) => void): Promise<void> {
