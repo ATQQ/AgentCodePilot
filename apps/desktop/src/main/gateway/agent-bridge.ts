@@ -1,13 +1,14 @@
 import { app } from 'electron'
 import type { UnifiedChatRequest } from './types'
 import { agentRegistry } from '../runtime'
+import { resolveAgent } from './router'
 import type { AgentEvent } from '../../preload/types'
 
 export async function runAgentForGateway(
   req: UnifiedChatRequest,
   onDelta: (text: string) => void
 ): Promise<void> {
-  const agentId = resolveAgentId(req.model)
+  const agentId = resolveAgent(req.model)
   const adapter = agentRegistry.get(agentId)
   if (!adapter) {
     throw new Error(`No adapter found for model "${req.model}" (resolved to agent "${agentId}")`)
@@ -45,11 +46,6 @@ export async function runAgentForGateway(
       )
       .catch(reject)
   })
-}
-
-function resolveAgentId(model: string): string {
-  if (model.startsWith('claude') || model === 'claude-code') return 'claude-code'
-  return 'claude-code'
 }
 
 function buildPrompt(req: UnifiedChatRequest): string {

@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto'
 import type { GatewayConfig, OpenAIChatRequest, UnifiedChatRequest, AnthropicRequest } from './types'
 import { handleOpenAICompletion } from './openai-handler'
 import { handleAnthropicMessages } from './anthropic-handler'
+import { agentRegistry } from '../runtime'
 
 let server: Server | null = null
 let config: GatewayConfig = {
@@ -107,12 +108,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   const url = req.url || ''
 
   if (req.method === 'GET' && (url === '/v1/models' || url === '/v1/models/')) {
-    sendJson(res, 200, {
-      object: 'list',
-      data: [
-        { id: 'claude-code', object: 'model', created: Date.now(), owned_by: 'agent-desktop' }
-      ]
-    })
+    const models = agentRegistry.list().map((a) => ({
+      id: a.id,
+      object: 'model',
+      created: Math.floor(Date.now() / 1000),
+      owned_by: 'agent-desktop'
+    }))
+    sendJson(res, 200, { object: 'list', data: models })
     return
   }
 
