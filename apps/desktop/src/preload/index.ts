@@ -51,7 +51,12 @@ const agentAPI = {
     update: (payload: SettingsPayload) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_UPDATE, payload)
   },
   dialog: {
-    selectFolder: () => ipcRenderer.invoke(IPC_CHANNELS.DIALOG_SELECT_FOLDER)
+    selectFolder: () => ipcRenderer.invoke(IPC_CHANNELS.DIALOG_SELECT_FOLDER),
+    selectFiles: () => ipcRenderer.invoke(IPC_CHANNELS.DIALOG_SELECT_FILES)
+  },
+  file: {
+    saveTempImage: (data: ArrayBuffer, filename: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_SAVE_TEMP_IMAGE, data, filename)
   }
 }
 

@@ -7,20 +7,31 @@ import WorkspaceSelector from '@renderer/components/home/WorkspaceSelector.vue'
 import { useChatStore } from '@renderer/stores/chat.store'
 import { useAgentStore } from '@renderer/stores/agent.store'
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
+import type { Attachment } from '@renderer/types'
 
 const router = useRouter()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const workspaceStore = useWorkspaceStore()
 
-async function handleSubmit(text: string): Promise<void> {
+async function handleSubmit(text: string, attachments: Attachment[]): Promise<void> {
   const agentId = agentStore.selectedAgentId
   const projectId = workspaceStore.selectedProjectId
-  const convId = await chatStore.createConversation(agentId, text, projectId)
+  const convId = await chatStore.createConversation(agentId, text, projectId, attachments)
   router.push('/chat')
   const conv = chatStore.activeConversation
   const cwd = conv?.cwd || workspaceStore.currentCwd
-  await window.agentAPI.chat.sendFirstMessage({ conversationId: convId, content: text, agentId, cwd })
+  const attachmentPayloads = attachments.map((a) => {
+    if (a.type === 'url') return { id: a.id, type: 'url' as const, url: a.url }
+    return { id: a.id, type: a.type, name: a.name, path: a.path }
+  })
+  await window.agentAPI.chat.sendFirstMessage({
+    conversationId: convId,
+    content: text,
+    agentId,
+    cwd,
+    attachments: attachmentPayloads.length > 0 ? attachmentPayloads : undefined
+  })
 }
 </script>
 

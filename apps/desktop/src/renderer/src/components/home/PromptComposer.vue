@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Plus, Top } from '@element-plus/icons-vue'
+import type { Attachment, FileAttachment, UrlAttachment } from '@renderer/types'
 
 const { t } = useI18n()
 const input = ref('')
@@ -10,6 +11,9 @@ const showApprovalMenu = ref(false)
 const planMode = ref(false)
 const pursueGoals = ref(false)
 const approvalLevel = ref<'request' | 'auto' | 'full'>('request')
+const attachments = ref<Attachment[]>([])
+const showUrlInput = ref(false)
+const urlInputValue = ref('')
 
 const props = defineProps<{
   streaming?: boolean
@@ -17,22 +21,137 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  submit: [text: string]
+  submit: [text: string, attachments: Attachment[]]
   stop: []
   cancelQueue: [index: number]
 }>()
 
+function generateId(): string {
+  return `att-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+}
+
+function isImageFile(filename: string): boolean {
+  return /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i.test(filename)
+}
+
+function getFileName(path: string): string {
+  return path.split('/').pop() || path.split('\\').pop() || path
+}
+
 function handleSubmit(): void {
   const text = input.value.trim()
-  if (!text) return
-  emit('submit', text)
+  if (!text && attachments.value.length === 0) return
+  emit('submit', text, [...attachments.value])
   input.value = ''
+  attachments.value = []
 }
 
 function handleKeydown(e: KeyboardEvent): void {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
     handleSubmit()
+  }
+}
+
+function isUrl(text: string): boolean {
+  return /^https?:\/\/\S+$/i.test(text.trim())
+}
+
+async function handlePaste(e: ClipboardEvent): Promise<void> {
+  const items = e.clipboardData?.items
+  if (!items) return
+
+  const text = e.clipboardData?.getData('text/plain') || ''
+
+  // Check if pasted text is a URL
+  if (text && isUrl(text)) {
+    e.preventDefault()
+    attachments.value.push({
+      id: generateId(),
+      type: 'url',
+      url: text.trim()
+    })
+    return
+  }
+
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault()
+      const file = item.getAsFile()
+      if (!file) continue
+
+      const previewUrl = URL.createObjectURL(file)
+      const buffer = await file.arrayBuffer()
+      const filename = file.name || `paste-${Date.now()}.png`
+      const savedPath = await window.agentAPI.file.saveTempImage(buffer, filename)
+
+      attachments.value.push({
+        id: generateId(),
+        type: 'image',
+        name: filename,
+        path: savedPath,
+        previewUrl
+      })
+    }
+  }
+}
+
+async function handleSelectFiles(): Promise<void> {
+  showAddMenu.value = false
+  const paths = await window.agentAPI.dialog.selectFiles()
+  if (!paths) return
+
+  for (const path of paths) {
+    const name = getFileName(path)
+    const isImage = isImageFile(name)
+    const att: FileAttachment = {
+      id: generateId(),
+      type: isImage ? 'image' : 'file',
+      name,
+      path,
+      previewUrl: isImage ? `file://${path}` : undefined
+    }
+    attachments.value.push(att)
+  }
+}
+
+function handleAddUrl(): void {
+  showAddMenu.value = false
+  showUrlInput.value = true
+}
+
+function confirmUrl(): void {
+  const url = urlInputValue.value.trim()
+  if (!url) return
+  const att: UrlAttachment = {
+    id: generateId(),
+    type: 'url',
+    url,
+    title: undefined
+  }
+  attachments.value.push(att)
+  urlInputValue.value = ''
+  showUrlInput.value = false
+}
+
+function handleUrlKeydown(e: KeyboardEvent): void {
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    confirmUrl()
+  } else if (e.key === 'Escape') {
+    showUrlInput.value = false
+    urlInputValue.value = ''
+  }
+}
+
+function removeAttachment(id: string): void {
+  const idx = attachments.value.findIndex((a) => a.id === id)
+  if (idx !== -1) {
+    const att = attachments.value[idx]
+    if (att.type === 'image' && 'previewUrl' in att && att.previewUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(att.previewUrl)
+    }
+    attachments.value.splice(idx, 1)
   }
 }
 
@@ -55,6 +174,16 @@ const approvalOptions = {
   full: { label: 'composer.approval.fullAccess', icon: '⚠' }
 }
 
+function truncateUrl(url: string, max = 40): string {
+  if (url.length <= max) return url
+  return url.slice(0, max - 3) + '...'
+}
+
+function getUrlIndex(id: string): number {
+  const urls = attachments.value.filter((a) => a.type === 'url')
+  return urls.findIndex((a) => a.id === id) + 1
+}
+
 defineExpose({ setInput: (text: string) => { input.value = text } })
 </script>
 
@@ -69,12 +198,58 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
       </div>
     </div>
 
+    <!-- Attachments preview -->
+    <div v-if="attachments.length > 0" class="attachments-area">
+      <div v-for="att in attachments" :key="att.id" class="attachment-item">
+        <template v-if="att.type === 'image'">
+          <div class="attachment-image">
+            <img :src="att.previewUrl" :alt="att.name" />
+            <button class="attachment-remove" @click="removeAttachment(att.id)">&times;</button>
+          </div>
+        </template>
+        <template v-else-if="att.type === 'file'">
+          <div class="attachment-file">
+            <span class="attachment-file-icon">&#x1F4C4;</span>
+            <span class="attachment-file-name">{{ att.name }}</span>
+            <button class="attachment-remove" @click="removeAttachment(att.id)">&times;</button>
+          </div>
+        </template>
+        <template v-else-if="att.type === 'url'">
+          <div class="attachment-url">
+            <span class="attachment-url-badge">#{{ getUrlIndex(att.id) }}</span>
+            <span class="attachment-url-text">{{ truncateUrl(att.url) }}</span>
+            <button class="attachment-remove" @click="removeAttachment(att.id)">&times;</button>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- URL input -->
+    <div v-if="showUrlInput" class="url-input-area">
+      <span class="url-input-icon">&#x1F517;</span>
+      <input
+        v-model="urlInputValue"
+        class="url-input"
+        type="url"
+        :placeholder="t('composer.urlPlaceholder')"
+        autofocus
+        @keydown="handleUrlKeydown"
+      />
+      <button class="url-input-confirm" @click="confirmUrl">
+        {{ t('common.confirm') }}
+      </button>
+      <button class="url-input-cancel" @click="showUrlInput = false; urlInputValue = ''">
+        {{ t('common.cancel') }}
+      </button>
+    </div>
+
     <textarea
       v-model="input"
       class="composer-input"
       :placeholder="t('home.placeholder')"
       rows="1"
       @keydown="handleKeydown"
+      @paste="handlePaste"
     />
     <div class="composer-toolbar">
       <div class="toolbar-left">
@@ -85,13 +260,13 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
           </button>
           <Transition name="fade">
             <div v-if="showAddMenu" class="dropdown-menu" @mouseleave="showAddMenu = false">
-              <button class="menu-item">
+              <button class="menu-item" @click="handleSelectFiles">
                 <span class="menu-icon">&#x1F4CE;</span>
                 <span>{{ t('composer.addMenu.addPhotosAndFiles') }}</span>
               </button>
-              <button class="menu-item">
-                <span class="menu-icon">&#x1F310;</span>
-                <span>{{ t('composer.addMenu.attachContext') }}</span>
+              <button class="menu-item" @click="handleAddUrl">
+                <span class="menu-icon">&#x1F517;</span>
+                <span>{{ t('composer.addMenu.attachUrl') }}</span>
               </button>
               <div class="menu-divider"></div>
               <button class="menu-item menu-item--toggle" @click.stop="planMode = !planMode">
@@ -181,7 +356,7 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
         <button
           v-else
           class="send-btn"
-          :disabled="!input.trim()"
+          :disabled="!input.trim() && attachments.length === 0"
           @click="handleSubmit"
         >
           <el-icon :size="14"><Top /></el-icon>
@@ -266,6 +441,169 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
 .queued-cancel:hover {
   background: var(--sidebar-border);
   color: var(--content-text);
+}
+
+/* Attachments area */
+.attachments-area {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border-bottom: 1px solid var(--composer-border);
+}
+
+.attachment-item {
+  position: relative;
+}
+
+.attachment-image {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--sidebar-border);
+}
+
+.attachment-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attachment-file {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radius-md);
+  background: var(--btn-ghost-hover);
+  font-size: var(--font-size-sm);
+  color: var(--content-text);
+  max-width: 180px;
+}
+
+.attachment-file-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.attachment-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-url {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radius-md);
+  background: var(--btn-ghost-hover);
+  font-size: var(--font-size-sm);
+  color: var(--content-text);
+  max-width: 240px;
+}
+
+.attachment-url-badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--btn-primary-bg);
+}
+
+.attachment-url-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-remove {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: var(--content-text-secondary);
+  color: var(--content-bg);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  z-index: 1;
+}
+
+.attachment-file .attachment-remove,
+.attachment-url .attachment-remove {
+  position: static;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
+.attachment-remove:hover {
+  background: var(--content-text);
+}
+
+/* URL input area */
+.url-input-area {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border-bottom: 1px solid var(--composer-border);
+}
+
+.url-input-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.url-input {
+  flex: 1;
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-md);
+  padding: 4px 8px;
+  font-size: var(--font-size-sm);
+  background: transparent;
+  color: var(--content-text);
+  outline: none;
+}
+
+.url-input:focus {
+  border-color: var(--composer-border-focus);
+}
+
+.url-input-confirm,
+.url-input-cancel {
+  padding: 4px 8px;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.url-input-confirm {
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+}
+
+.url-input-confirm:hover {
+  opacity: 0.85;
+}
+
+.url-input-cancel {
+  background: transparent;
+  color: var(--content-text-secondary);
+}
+
+.url-input-cancel:hover {
+  background: var(--btn-ghost-hover);
 }
 
 .composer-input {

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Conversation, Message } from '@renderer/types'
-import type { AgentEvent } from '../../../preload/types'
+import type { Attachment, Conversation, Message } from '@renderer/types'
+import type { AgentEvent, AttachmentPayload } from '../../../preload/types'
 import { useWorkspaceStore } from './workspace.store'
 
 export const useChatStore = defineStore('chat', () => {
@@ -89,7 +89,11 @@ export const useChatStore = defineStore('chat', () => {
       id: m.id,
       role: m.role,
       content: m.content,
-      createdAt: m.createdAt
+      createdAt: m.createdAt,
+      attachments: m.attachments as Attachment[] | undefined,
+      usage: m.usage,
+      debugInput: m.debugInput,
+      debugOutput: m.debugOutput
     }))
   }
 
@@ -101,12 +105,14 @@ export const useChatStore = defineStore('chat', () => {
   async function createConversation(
     agentId: string,
     firstMessage: string,
-    projectId?: string | null
+    projectId?: string | null,
+    attachments?: Attachment[]
   ): Promise<string> {
     const result = await window.agentAPI.chat.createConversation({
       agentId,
       firstMessage,
-      projectId
+      projectId,
+      attachments: toAttachmentPayloads(attachments)
     })
 
     const now = new Date().toISOString()
@@ -114,7 +120,8 @@ export const useChatStore = defineStore('chat', () => {
       id: `msg-${Date.now()}`,
       role: 'user',
       content: firstMessage,
-      createdAt: now
+      createdAt: now,
+      attachments: attachments && attachments.length > 0 ? attachments : undefined
     }
     conversations.value.unshift({
       id: result.id,
@@ -131,7 +138,7 @@ export const useChatStore = defineStore('chat', () => {
     return result.id
   }
 
-  function addMessage(conversationId: string, role: 'user' | 'assistant', content: string): void {
+  function addMessage(conversationId: string, role: 'user' | 'assistant', content: string, attachments?: Attachment[]): void {
     const conv = conversations.value.find((c) => c.id === conversationId)
     if (!conv) return
     const now = new Date().toISOString()
@@ -139,21 +146,31 @@ export const useChatStore = defineStore('chat', () => {
       id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       role,
       content,
-      createdAt: now
+      createdAt: now,
+      attachments: attachments && attachments.length > 0 ? attachments : undefined
     })
     conv.updatedAt = now
+  }
+
+  function toAttachmentPayloads(attachments?: Attachment[]): AttachmentPayload[] | undefined {
+    if (!attachments || attachments.length === 0) return undefined
+    return attachments.map((a) => {
+      if (a.type === 'url') return { id: a.id, type: 'url' as const, url: a.url }
+      return { id: a.id, type: a.type, name: a.name, path: a.path }
+    })
   }
 
   async function sendMessage(
     conversationId: string,
     content: string,
-    agentId: string
+    agentId: string,
+    attachments?: Attachment[]
   ): Promise<void> {
     if (isConversationStreaming(conversationId)) {
       queuedMessages.value.push({ conversationId, content, agentId })
       return
     }
-    addMessage(conversationId, 'user', content)
+    addMessage(conversationId, 'user', content, attachments)
     waitingConversationIds.value.add(conversationId)
     const conv = conversations.value.find((c) => c.id === conversationId)
     const workspaceStore = useWorkspaceStore()
@@ -161,7 +178,8 @@ export const useChatStore = defineStore('chat', () => {
       conversationId,
       content,
       agentId,
-      cwd: conv?.cwd || workspaceStore.currentCwd
+      cwd: conv?.cwd || workspaceStore.currentCwd,
+      attachments: toAttachmentPayloads(attachments)
     })
   }
 
@@ -219,9 +237,11 @@ export const useChatStore = defineStore('chat', () => {
         const conv = conversations.value.find((c) => c.id === event.conversationId)
         if (conv) {
           conv.updatedAt = new Date().toISOString()
-          if (event.usage) {
-            const msg = conv.messages.find((m) => m.id === event.messageId)
-            if (msg) msg.usage = event.usage
+          const msg = conv.messages.find((m) => m.id === event.messageId)
+          if (msg) {
+            if (event.usage) msg.usage = event.usage
+            if (event.debugInput) msg.debugInput = event.debugInput
+            if (event.debugOutput) msg.debugOutput = event.debugOutput
           }
         }
         streamingConversationIds.value.delete(event.conversationId)

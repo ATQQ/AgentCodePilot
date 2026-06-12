@@ -24,11 +24,12 @@ export default {
   composer: {
     addMenu: {
       addPhotosAndFiles: '添加照片和文件',
-      attachContext: '附加上下文',
+      attachUrl: '附加外部链接内容',
       planMode: '计划模式',
       pursueGoals: '追求目标',
       plugins: '插件'
     },
+    urlPlaceholder: '输入 URL 链接...',
     approval: {
       label: '请求批准',
       title: '应如何批准操作？',
