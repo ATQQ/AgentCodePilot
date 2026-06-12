@@ -63,6 +63,11 @@ const agentAPI = {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET),
     update: (payload: SettingsPayload) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_UPDATE, payload)
   },
+  gateway: {
+    status: () => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_STATUS),
+    start: () => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_START),
+    stop: () => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_STOP)
+  },
   dialog: {
     selectFolder: () => ipcRenderer.invoke(IPC_CHANNELS.DIALOG_SELECT_FOLDER),
     selectFiles: () => ipcRenderer.invoke(IPC_CHANNELS.DIALOG_SELECT_FILES)

@@ -22,7 +22,10 @@ export const IPC_CHANNELS = {
   WORKSPACES_DELETE: 'workspaces:delete',
   PROVIDERS_LIST: 'providers:list',
   PROVIDERS_SAVE: 'providers:save',
-  PROVIDERS_DELETE: 'providers:delete'
+  PROVIDERS_DELETE: 'providers:delete',
+  GATEWAY_STATUS: 'gateway:status',
+  GATEWAY_START: 'gateway:start',
+  GATEWAY_STOP: 'gateway:stop'
 } as const
 
 export interface FileAttachmentPayload {
@@ -86,6 +89,13 @@ export interface ProviderConfigPayload {
   name: string
   type: string
   config: Record<string, unknown>
+}
+
+export interface GatewayStatus {
+  running: boolean
+  host: string
+  port: number
+  token: string
 }
 
 export interface AgentInfo {
@@ -190,6 +200,11 @@ export interface AgentAPI {
   settings: {
     get: () => Promise<SettingsInfo>
     update: (payload: SettingsPayload) => Promise<void>
+  }
+  gateway: {
+    status: () => Promise<GatewayStatus>
+    start: () => Promise<GatewayStatus>
+    stop: () => Promise<void>
   }
   dialog: {
     selectFolder: () => Promise<string | null>

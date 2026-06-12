@@ -12,6 +12,7 @@ import type {
   ConversationListItem,
   CreateConversationPayload,
   ConversationUpdatePayload,
+  GatewayStatus,
   MessageInfo,
   ProjectPayload,
   ProviderConfigPayload,
@@ -21,6 +22,7 @@ import type {
   SettingsPayload
 } from '../preload/types'
 import { agentRegistry, initializeAgentRegistry } from './runtime'
+import { startGateway, stopGateway, getGatewayConfig, isGatewayRunning } from './gateway'
 import { getDatabase, closeDatabase } from './database'
 import * as repo from './database/repositories'
 
@@ -357,6 +359,23 @@ function registerIpcHandlers(): void {
     if (payload.language) repo.setSetting('language', payload.language)
   })
 
+  // --- Gateway ---
+
+  ipcMain.handle(IPC_CHANNELS.GATEWAY_STATUS, (): GatewayStatus => {
+    const cfg = getGatewayConfig()
+    return { running: isGatewayRunning(), host: cfg.host, port: cfg.port, token: cfg.token }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GATEWAY_START, (): GatewayStatus => {
+    const result = startGateway()
+    const cfg = getGatewayConfig()
+    return { running: true, host: cfg.host, port: cfg.port, token: result.token }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GATEWAY_STOP, (): void => {
+    stopGateway()
+  })
+
   ipcMain.handle(IPC_CHANNELS.DIALOG_SELECT_FOLDER, async (): Promise<string | null> => {
     const result = await dialog.showOpenDialog({
       properties: ['openDirectory']
@@ -454,5 +473,6 @@ app.on('window-all-closed', () => {
 })
 
 app.on('will-quit', () => {
+  stopGateway()
   closeDatabase()
 })
