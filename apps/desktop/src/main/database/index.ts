@@ -73,9 +73,38 @@ function migrate(database: Database.Database): void {
 }
 
 function runMigrations(database: Database.Database): void {
-  const cols = database.pragma('table_info(conversations)') as { name: string }[]
-  if (!cols.find((c) => c.name === 'cwd')) {
+  const convCols = database.pragma('table_info(conversations)') as { name: string }[]
+  if (!convCols.find((c) => c.name === 'cwd')) {
     database.exec('ALTER TABLE conversations ADD COLUMN cwd TEXT')
+  }
+
+  const msgCols = database.pragma('table_info(messages)') as { name: string }[]
+  if (!msgCols.find((c) => c.name === 'attachments')) {
+    database.exec('ALTER TABLE messages ADD COLUMN attachments TEXT')
+  }
+  if (!msgCols.find((c) => c.name === 'input_tokens')) {
+    database.exec('ALTER TABLE messages ADD COLUMN input_tokens INTEGER')
+  }
+  if (!msgCols.find((c) => c.name === 'output_tokens')) {
+    database.exec('ALTER TABLE messages ADD COLUMN output_tokens INTEGER')
+  }
+  if (!msgCols.find((c) => c.name === 'raw_input')) {
+    database.exec('ALTER TABLE messages ADD COLUMN raw_input TEXT')
+  }
+  if (!msgCols.find((c) => c.name === 'debug_input')) {
+    database.exec('ALTER TABLE messages ADD COLUMN debug_input TEXT')
+  }
+  if (!msgCols.find((c) => c.name === 'debug_output')) {
+    database.exec('ALTER TABLE messages ADD COLUMN debug_output TEXT')
+  }
+  if (!msgCols.find((c) => c.name === 'cache_read_tokens')) {
+    database.exec('ALTER TABLE messages ADD COLUMN cache_read_tokens INTEGER')
+  }
+  if (!msgCols.find((c) => c.name === 'cache_creation_tokens')) {
+    database.exec('ALTER TABLE messages ADD COLUMN cache_creation_tokens INTEGER')
+  }
+  if (!msgCols.find((c) => c.name === 'cost_usd')) {
+    database.exec('ALTER TABLE messages ADD COLUMN cost_usd REAL')
   }
 }
 

@@ -8,6 +8,8 @@ export const IPC_CHANNELS = {
   SETTINGS_GET: 'settings:get',
   SETTINGS_UPDATE: 'settings:update',
   DIALOG_SELECT_FOLDER: 'dialog:selectFolder',
+  DIALOG_SELECT_FILES: 'dialog:selectFiles',
+  FILE_SAVE_TEMP_IMAGE: 'file:saveTempImage',
   CONVERSATIONS_LIST: 'conversations:list',
   CONVERSATIONS_GET_MESSAGES: 'conversations:getMessages',
   CONVERSATIONS_UPDATE: 'conversations:update',
@@ -17,17 +19,34 @@ export const IPC_CHANNELS = {
   PROJECTS_DELETE: 'projects:delete'
 } as const
 
+export interface FileAttachmentPayload {
+  id: string
+  type: 'image' | 'file'
+  name: string
+  path: string
+}
+
+export interface UrlAttachmentPayload {
+  id: string
+  type: 'url'
+  url: string
+}
+
+export type AttachmentPayload = FileAttachmentPayload | UrlAttachmentPayload
+
 export interface SendMessagePayload {
   conversationId: string
   content: string
   agentId: string
   cwd?: string
+  attachments?: AttachmentPayload[]
 }
 
 export interface CreateConversationPayload {
   agentId: string
   firstMessage: string
   projectId?: string | null
+  attachments?: AttachmentPayload[]
 }
 
 export interface SettingsPayload {
@@ -78,6 +97,10 @@ export interface MessageInfo {
   role: 'user' | 'assistant'
   content: string
   createdAt: string
+  attachments?: AttachmentPayload[]
+  usage?: TokenUsage
+  debugInput?: string
+  debugOutput?: string
 }
 
 export interface SettingsInfo {
@@ -89,12 +112,15 @@ export interface SettingsInfo {
 export interface TokenUsage {
   inputTokens: number
   outputTokens: number
+  cacheReadTokens: number
+  cacheCreationTokens: number
+  costUSD: number
 }
 
 export type AgentEvent =
   | { type: 'message.started'; conversationId: string; messageId: string }
   | { type: 'message.delta'; conversationId: string; messageId: string; delta: string }
-  | { type: 'message.completed'; conversationId: string; messageId: string; usage?: TokenUsage }
+  | { type: 'message.completed'; conversationId: string; messageId: string; usage?: TokenUsage; debugInput?: string; debugOutput?: string }
   | { type: 'message.error'; conversationId: string; error: string }
 
 export interface AgentAPI {
@@ -125,5 +151,9 @@ export interface AgentAPI {
   }
   dialog: {
     selectFolder: () => Promise<string | null>
+    selectFiles: () => Promise<string[] | null>
+  }
+  file: {
+    saveTempImage: (data: ArrayBuffer, filename: string) => Promise<string>
   }
 }

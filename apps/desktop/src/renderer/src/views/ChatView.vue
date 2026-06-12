@@ -10,6 +10,7 @@ import AgentSelector from '@renderer/components/home/AgentSelector.vue'
 import claudeIcon from '@renderer/assets/claude-icon.svg'
 import codexIcon from '@renderer/assets/codex-icon.svg'
 import cursorIcon from '@renderer/assets/cursor-icon.svg'
+import type { Attachment } from '@renderer/types'
 
 const agentIcons: Record<string, string> = {
   'claude-code': claudeIcon,
@@ -26,7 +27,20 @@ const composerRef = ref<InstanceType<typeof PromptComposer> | null>(null)
 const streamedMessageIds = ref<Set<string>>(new Set())
 const copiedMessageId = ref<string | null>(null)
 const waitingSeconds = ref(0)
+const debugMode = ref(false)
+let debugClickCount = 0
+let debugClickTimer: ReturnType<typeof setTimeout> | null = null
 let waitingTimer: ReturnType<typeof setInterval> | null = null
+
+function handleDebugClick(): void {
+  debugClickCount++
+  if (debugClickTimer) clearTimeout(debugClickTimer)
+  debugClickTimer = setTimeout(() => { debugClickCount = 0 }, 1500)
+  if (debugClickCount >= 5) {
+    debugMode.value = !debugMode.value
+    debugClickCount = 0
+  }
+}
 
 if (!chatStore.activeConversation) {
   router.replace('/')
@@ -85,10 +99,10 @@ function wasStreamed(msgId: string): boolean {
   return streamedMessageIds.value.has(msgId)
 }
 
-function handleSubmit(text: string): void {
-  if (!text || !chatStore.activeConversationId) return
+function handleSubmit(text: string, attachments: Attachment[]): void {
+  if ((!text && attachments.length === 0) || !chatStore.activeConversationId) return
   const agentId = chatStore.activeConversation?.agentId ?? agentStore.selectedAgentId
-  chatStore.sendMessage(chatStore.activeConversationId, text, agentId)
+  chatStore.sendMessage(chatStore.activeConversationId, text, agentId, attachments)
 }
 
 function handleStop(): void {
@@ -108,7 +122,14 @@ const currentAgentIcon = computed(() => {
 
 function formatTime(dateStr: string): string {
   const date = new Date(dateStr)
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const now = new Date()
+  const isToday = date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  if (isToday) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
 }
 
 async function copyMessage(msg: { id: string; content: string }): Promise<void> {
@@ -117,6 +138,10 @@ async function copyMessage(msg: { id: string; content: string }): Promise<void> 
   setTimeout(() => {
     if (copiedMessageId.value === msg.id) copiedMessageId.value = null
   }, 2000)
+}
+
+async function copyText(text: string): Promise<void> {
+  await navigator.clipboard.writeText(text)
 }
 
 function resendMessage(content: string): void {
@@ -161,6 +186,27 @@ function resendMessage(content: string): void {
               />
             </template>
             <template v-else>
+              <div v-if="msg.attachments?.length" class="message-attachments">
+                <div v-for="(att, idx) in msg.attachments" :key="att.id" class="msg-attachment">
+                  <template v-if="att.type === 'image'">
+                    <img class="msg-attachment-img" :src="att.previewUrl || `file://${att.path}`" :alt="att.name" />
+                  </template>
+                  <template v-else-if="att.type === 'file'">
+                    <span class="msg-attachment-chip">&#x1F4C4; {{ att.name }}</span>
+                  </template>
+                  <template v-else-if="att.type === 'url'">
+                    <span class="msg-attachment-chip msg-attachment-url">
+                      <span class="msg-url-label">&#x1F517; #{{ idx + 1 }} {{ att.url }}</span>
+                      <span class="msg-attachment-tooltip">
+                        <button class="tooltip-copy" @click.stop="copyText(att.url)">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        </button>
+                        <span class="tooltip-url">{{ att.url }}</span>
+                      </span>
+                    </span>
+                  </template>
+                </div>
+              </div>
               {{ msg.content }}
             </template>
           </div>
@@ -172,15 +218,23 @@ function resendMessage(content: string): void {
             <button v-if="msg.role === 'user'" class="action-btn" :title="t('chat.resend')" @click="resendMessage(msg.content)">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
             </button>
-            <span v-if="msg.usage" class="action-tokens">{{ msg.usage.inputTokens + msg.usage.outputTokens }} tokens</span>
+            <span v-if="msg.usage" class="action-tokens">输入 {{ msg.usage.inputTokens }} token 输出 {{ msg.usage.outputTokens }} token<template v-if="msg.usage.costUSD"> 成本 ${{ msg.usage.costUSD.toFixed(4) }}</template></span>
             <span class="action-time">{{ formatTime(msg.createdAt) }}</span>
+          </div>
+          <div v-if="debugMode && msg.role === 'assistant'" class="debug-panel">
+            <div class="debug-section">
+              <span class="debug-label">REQUEST</span>
+              <pre class="debug-json">{{ msg.debugInput ? JSON.stringify(JSON.parse(msg.debugInput), null, 2) : '(无数据)' }}</pre>
+            </div>
+            <div class="debug-section">
+              <span class="debug-label">RESPONSE</span>
+              <pre class="debug-json">{{ msg.debugOutput ? JSON.stringify(JSON.parse(msg.debugOutput), null, 2) : '(无数据)' }}</pre>
+            </div>
           </div>
         </div>
         <div v-if="chatStore.isWaiting" class="thinking-indicator">
           <span class="agent-avatar">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M4.709 15.955l4.72-10.151c.91-1.96 1.365-2.94 2.12-3.166a2 2 0 0 1 1.254.07c.72.312 1.063 1.344 1.748 3.407l1.375 4.138a2 2 0 0 0 .234.497l2.15 3.163c1.136 1.67 1.704 2.505 1.59 3.204a2 2 0 0 1-.63 1.124c-.534.487-1.556.487-3.6.487H7.35c-2.126 0-3.189 0-3.7-.55a2 2 0 0 1-.483-1.085c-.091-.707.437-1.523 1.494-3.156l.049-.074z"/>
-            </svg>
+            <img :src="currentAgentIcon" width="14" height="14" alt="" />
           </span>
           <div class="thinking-dots">
             <span class="dot"></span>
@@ -193,6 +247,7 @@ function resendMessage(content: string): void {
       </div>
 
       <div class="chat-input-area">
+        <div class="debug-trigger" @click="handleDebugClick"></div>
         <PromptComposer
           ref="composerRef"
           :streaming="chatStore.isStreaming"
@@ -302,6 +357,7 @@ function resendMessage(content: string): void {
 }
 
 .chat-input-area {
+  position: relative;
   padding: var(--spacing-md) var(--spacing-lg);
   flex-shrink: 0;
 }
@@ -351,6 +407,7 @@ function resendMessage(content: string): void {
   font-size: var(--font-size-xs);
   color: var(--content-text-secondary);
   user-select: none;
+  white-space: nowrap;
 }
 
 .action-time {
@@ -392,6 +449,148 @@ function resendMessage(content: string): void {
 .thinking-text {
   font-size: var(--font-size-xs);
   color: var(--content-text-secondary);
+}
+
+.message-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.msg-attachment-img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.msg-attachment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.15);
+  font-size: var(--font-size-xs);
+  max-width: 200px;
+  white-space: nowrap;
+}
+
+.msg-attachment-url {
+  max-width: 280px;
+  position: relative;
+  cursor: pointer;
+  overflow: visible;
+}
+
+.msg-url-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msg-attachment-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--content-bg);
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  max-width: min(480px, 80vw);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s, transform 0.15s, visibility 0.15s;
+  transform: translateY(4px);
+  z-index: 100;
+  pointer-events: auto;
+}
+
+.msg-attachment-url:hover .msg-attachment-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.tooltip-url {
+  font-size: var(--font-size-xs);
+  color: var(--content-text);
+  word-break: break-all;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+.tooltip-copy {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--content-text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tooltip-copy:hover {
+  background: var(--btn-ghost-hover);
+  color: var(--content-text);
+}
+
+.debug-trigger {
+  position: absolute;
+  top: -20px;
+  right: 40px;
+  width: 30px;
+  height: 20px;
+  cursor: default;
+  z-index: 10;
+}
+
+.debug-panel {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.debug-section {
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.debug-label {
+  display: block;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  background: var(--sidebar-border);
+  color: var(--content-text-secondary);
+}
+
+.debug-json {
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--btn-ghost-hover);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--content-text-secondary);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 200px;
+  overflow-y: auto;
 }
 
 .no-conversation {

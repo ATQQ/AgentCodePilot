@@ -18,26 +18,33 @@ export class ClaudeAgentAdapter {
     })
 
     let usage: TokenUsage | undefined
+    const rawMessages: unknown[] = []
+    const existingSessionId = this.sessionIds.get(input.conversationId)
+
+    const queryOptions = {
+      abortController: controller,
+      cwd: input.cwd || app.getPath('home'),
+      allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'WebFetch', 'WebSearch'],
+      skills: 'all' as const,
+      maxTurns: 20,
+      permissionMode: 'bypassPermissions' as const,
+      allowDangerouslySkipPermissions: true,
+      includePartialMessages: true,
+      ...(existingSessionId ? { resume: existingSessionId } : {})
+    }
 
     try {
-      const existingSessionId = this.sessionIds.get(input.conversationId)
-
       const q = query({
         prompt: input.content,
-        options: {
-          abortController: controller,
-          cwd: input.cwd || app.getPath('home'),
-          allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'WebFetch', 'WebSearch'],
-          maxTurns: 20,
-          permissionMode: 'bypassPermissions',
-          allowDangerouslySkipPermissions: true,
-          includePartialMessages: true,
-          ...(existingSessionId ? { resume: existingSessionId } : {})
-        }
+        options: queryOptions
       })
 
       for await (const message of q) {
         if (controller.signal.aborted) break
+
+        if (message.type !== 'stream_event') {
+          rawMessages.push(message)
+        }
 
         if (message.type === 'system' && message.subtype === 'init') {
           this.sessionIds.set(input.conversationId, message.session_id)
@@ -51,20 +58,34 @@ export class ClaudeAgentAdapter {
               delta: event.delta.text
             })
           }
-        } else if (message.type === 'assistant') {
-          const msg = (message as { message?: { usage?: { input_tokens: number; output_tokens: number } } }).message
-          if (msg?.usage) {
+        } else if (message.type === 'result') {
+          const result = message as { subtype?: string; errors?: string[]; modelUsage?: Record<string, { inputTokens?: number; outputTokens?: number; cacheReadInputTokens?: number; cacheCreationInputTokens?: number; costUSD?: number }> }
+          if (result.modelUsage) {
+            let totalInput = 0
+            let totalOutput = 0
+            let totalCacheRead = 0
+            let totalCacheCreation = 0
+            let totalCost = 0
+            for (const model of Object.values(result.modelUsage)) {
+              totalInput += model.inputTokens ?? 0
+              totalOutput += model.outputTokens ?? 0
+              totalCacheRead += model.cacheReadInputTokens ?? 0
+              totalCacheCreation += model.cacheCreationInputTokens ?? 0
+              totalCost += model.costUSD ?? 0
+            }
             usage = {
-              inputTokens: (usage?.inputTokens ?? 0) + msg.usage.input_tokens,
-              outputTokens: (usage?.outputTokens ?? 0) + msg.usage.output_tokens
+              inputTokens: totalInput,
+              outputTokens: totalOutput,
+              cacheReadTokens: totalCacheRead,
+              cacheCreationTokens: totalCacheCreation,
+              costUSD: totalCost
             }
           }
-        } else if (message.type === 'result') {
           if (
-            message.subtype === 'error_max_turns' ||
-            message.subtype === 'error_during_execution'
+            result.subtype === 'error_max_turns' ||
+            result.subtype === 'error_during_execution'
           ) {
-            const errors = 'errors' in message ? (message.errors as string[]) : []
+            const errors = result.errors ?? []
             emit({
               type: 'message.error',
               conversationId: input.conversationId,
@@ -76,16 +97,11 @@ export class ClaudeAgentAdapter {
         }
       }
 
-      if (!controller.signal.aborted) {
-        emit({
-          type: 'message.completed',
-          conversationId: input.conversationId,
-          messageId: input.messageId,
-          usage
-        })
-      }
+      this.emitCompleted(input, emit, usage, rawMessages, queryOptions)
     } catch (error: unknown) {
-      if (!controller.signal.aborted) {
+      if (controller.signal.aborted) {
+        this.emitCompleted(input, emit, usage, rawMessages, queryOptions)
+      } else {
         const errorMessage = error instanceof Error ? error.message : String(error)
         emit({
           type: 'message.error',
@@ -96,6 +112,41 @@ export class ClaudeAgentAdapter {
     } finally {
       this.abortControllers.delete(input.conversationId)
     }
+  }
+
+  private emitCompleted(
+    input: AgentRunInput,
+    emit: (event: AgentEvent) => void,
+    usage: TokenUsage | undefined,
+    rawMessages: unknown[],
+    queryOptions: Record<string, unknown>
+  ): void {
+    let debugInputStr: string | undefined
+    let debugOutputStr: string | undefined
+    try {
+      debugInputStr = JSON.stringify({
+        prompt: input.content,
+        options: { ...queryOptions, abortController: undefined }
+      })
+    } catch {
+      debugInputStr = JSON.stringify({ prompt: input.content, error: 'Failed to serialize options' })
+    }
+    try {
+      debugOutputStr = JSON.stringify(rawMessages, (_key, value) => {
+        if (typeof value === 'function' || typeof value === 'symbol') return undefined
+        return value
+      })
+    } catch {
+      debugOutputStr = JSON.stringify({ error: 'Failed to serialize raw messages', count: rawMessages.length })
+    }
+    emit({
+      type: 'message.completed',
+      conversationId: input.conversationId,
+      messageId: input.messageId,
+      usage,
+      debugInput: debugInputStr,
+      debugOutput: debugOutputStr
+    })
   }
 
   stop(conversationId: string): void {

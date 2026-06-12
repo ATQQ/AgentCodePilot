@@ -1,12 +1,13 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
-import { mkdirSync } from 'fs'
+import { mkdirSync, writeFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { IPC_CHANNELS } from '../preload/types'
 import type {
   AgentEvent,
   AgentInfo,
+  AttachmentPayload,
   ConversationInfo,
   ConversationListItem,
   CreateConversationPayload,
@@ -32,26 +33,51 @@ const mockAgent = new MockAgentAdapter()
 const claudeAgent = new ClaudeAgentAdapter()
 let mainWindow: BrowserWindow | null = null
 
-const streamingMessages = new Map<string, { conversationId: string; content: string }>()
+const streamingMessages = new Map<string, { conversationId: string; content: string; rawInput: string }>()
+
+function buildPromptWithAttachments(content: string, attachments?: AttachmentPayload[]): string {
+  if (!attachments || attachments.length === 0) return content
+  const parts: string[] = []
+  for (const att of attachments) {
+    if (att.type === 'url') {
+      parts.push(`[参考链接: ${att.url}]`)
+    } else {
+      parts.push(`[附件: ${att.path}]`)
+    }
+  }
+  return parts.join('\n') + '\n\n' + content
+}
 
 function emitAgentEvent(event: AgentEvent): void {
-  mainWindow?.webContents.send(IPC_CHANNELS.AGENT_EVENT, event)
-
   if (event.type === 'message.started') {
-    streamingMessages.set(event.messageId, { conversationId: event.conversationId, content: '' })
+    if (!streamingMessages.has(event.messageId)) {
+      streamingMessages.set(event.messageId, { conversationId: event.conversationId, content: '', rawInput: '' })
+    }
   } else if (event.type === 'message.delta') {
     const entry = streamingMessages.get(event.messageId)
     if (entry) entry.content += event.delta
   } else if (event.type === 'message.completed') {
     const entry = streamingMessages.get(event.messageId)
     if (entry) {
-      repo.addMessage({
-        id: event.messageId,
-        conversationId: entry.conversationId,
-        role: 'assistant',
-        content: entry.content,
-        createdAt: new Date().toISOString()
-      })
+      try {
+        repo.addMessage({
+          id: event.messageId,
+          conversationId: entry.conversationId,
+          role: 'assistant',
+          content: entry.content,
+          createdAt: new Date().toISOString(),
+          inputTokens: event.usage?.inputTokens ?? null,
+          outputTokens: event.usage?.outputTokens ?? null,
+          cacheReadTokens: event.usage?.cacheReadTokens ?? null,
+          cacheCreationTokens: event.usage?.cacheCreationTokens ?? null,
+          costUSD: event.usage?.costUSD ?? null,
+          rawInput: entry.rawInput || null,
+          debugInput: event.debugInput || null,
+          debugOutput: event.debugOutput || null
+        })
+      } catch (e) {
+        console.error('[emitAgentEvent] Failed to save message to db:', e)
+      }
       streamingMessages.delete(event.messageId)
     }
   } else if (event.type === 'message.error') {
@@ -62,6 +88,8 @@ function emitAgentEvent(event: AgentEvent): void {
       }
     }
   }
+
+  mainWindow?.webContents.send(IPC_CHANNELS.AGENT_EVENT, event)
 }
 
 function getSettingsFromDb(): SettingsInfo {
@@ -110,7 +138,8 @@ function registerIpcHandlers(): void {
         conversationId: id,
         role: 'user',
         content: payload.firstMessage,
-        createdAt: now
+        createdAt: now,
+        attachments: payload.attachments ? JSON.stringify(payload.attachments) : null
       })
 
       return { id, title, cwd }
@@ -119,10 +148,16 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.CHAT_SEND_FIRST, (_e, payload: SendMessagePayload): void => {
     const assistantMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-a`
+    const prompt = buildPromptWithAttachments(payload.content, payload.attachments)
+    streamingMessages.set(assistantMsgId, {
+      conversationId: payload.conversationId,
+      content: '',
+      rawInput: prompt
+    })
     const runInput = {
       conversationId: payload.conversationId,
       messageId: assistantMsgId,
-      content: payload.content,
+      content: prompt,
       agentId: payload.agentId,
       cwd: payload.cwd
     }
@@ -144,13 +179,20 @@ function registerIpcHandlers(): void {
       conversationId: payload.conversationId,
       role: 'user',
       content: payload.content,
-      createdAt: now
+      createdAt: now,
+      attachments: payload.attachments ? JSON.stringify(payload.attachments) : null
     })
 
+    const prompt = buildPromptWithAttachments(payload.content, payload.attachments)
+    streamingMessages.set(assistantMsgId, {
+      conversationId: payload.conversationId,
+      content: '',
+      rawInput: prompt
+    })
     const runInput = {
       conversationId: payload.conversationId,
       messageId: assistantMsgId,
-      content: payload.content,
+      content: prompt,
       agentId: payload.agentId,
       cwd: payload.cwd
     }
@@ -194,12 +236,33 @@ function registerIpcHandlers(): void {
     IPC_CHANNELS.CONVERSATIONS_GET_MESSAGES,
     (_e, conversationId: string): MessageInfo[] => {
       const rows = repo.getMessagesByConversation(conversationId)
-      return rows.map((r) => ({
-        id: r.id,
-        role: r.role as 'user' | 'assistant',
-        content: r.content,
-        createdAt: r.created_at
-      }))
+      return rows.map((r) => {
+        const msg: MessageInfo = {
+          id: r.id,
+          role: r.role as 'user' | 'assistant',
+          content: r.content,
+          createdAt: r.created_at
+        }
+        if (r.attachments) {
+          try { msg.attachments = JSON.parse(r.attachments) } catch {}
+        }
+        if (r.input_tokens != null && r.output_tokens != null) {
+          msg.usage = {
+            inputTokens: r.input_tokens,
+            outputTokens: r.output_tokens,
+            cacheReadTokens: r.cache_read_tokens ?? 0,
+            cacheCreationTokens: r.cache_creation_tokens ?? 0,
+            costUSD: r.cost_usd ?? 0
+          }
+        }
+        if (r.debug_input) {
+          msg.debugInput = r.debug_input
+        }
+        if (r.debug_output) {
+          msg.debugOutput = r.debug_output
+        }
+        return msg
+      })
     }
   )
 
@@ -251,6 +314,30 @@ function registerIpcHandlers(): void {
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths[0]
   })
+
+  ipcMain.handle(IPC_CHANNELS.DIALOG_SELECT_FILES, async (): Promise<string[] | null> => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths
+  })
+
+  ipcMain.handle(
+    IPC_CHANNELS.FILE_SAVE_TEMP_IMAGE,
+    (_e, data: ArrayBuffer, filename: string): string => {
+      const tempDir = join(app.getPath('temp'), 'agent-desktop-app')
+      mkdirSync(tempDir, { recursive: true })
+      const uniqueName = `${Date.now()}-${filename}`
+      const filePath = join(tempDir, uniqueName)
+      writeFileSync(filePath, Buffer.from(data))
+      return filePath
+    }
+  )
 }
 
 function createWindow(): void {

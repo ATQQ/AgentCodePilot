@@ -18,6 +18,15 @@ export interface MessageRow {
   role: string
   content: string
   created_at: string
+  attachments: string | null
+  input_tokens: number | null
+  output_tokens: number | null
+  cache_read_tokens: number | null
+  cache_creation_tokens: number | null
+  cost_usd: number | null
+  raw_input: string | null
+  debug_input: string | null
+  debug_output: string | null
 }
 
 export interface ProjectRow {
@@ -109,16 +118,49 @@ export function addMessage(msg: {
   role: string
   content: string
   createdAt: string
+  attachments?: string | null
+  inputTokens?: number | null
+  outputTokens?: number | null
+  cacheReadTokens?: number | null
+  cacheCreationTokens?: number | null
+  costUSD?: number | null
+  rawInput?: string | null
+  debugInput?: string | null
+  debugOutput?: string | null
 }): void {
   const db = getDatabase()
   db.prepare(
-    `INSERT INTO messages (id, conversation_id, role, content, created_at)
-     VALUES (?, ?, ?, ?, ?)`
-  ).run(msg.id, msg.conversationId, msg.role, msg.content, msg.createdAt)
+    `INSERT INTO messages (id, conversation_id, role, content, created_at, attachments, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, raw_input, debug_input, debug_output)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    msg.id,
+    msg.conversationId,
+    msg.role,
+    msg.content,
+    msg.createdAt,
+    msg.attachments ?? null,
+    msg.inputTokens ?? null,
+    msg.outputTokens ?? null,
+    msg.cacheReadTokens ?? null,
+    msg.cacheCreationTokens ?? null,
+    msg.costUSD ?? null,
+    msg.rawInput ?? null,
+    msg.debugInput ?? null,
+    msg.debugOutput ?? null
+  )
 
   db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(
     msg.createdAt,
     msg.conversationId
+  )
+}
+
+export function updateMessageUsage(id: string, inputTokens: number, outputTokens: number): void {
+  const db = getDatabase()
+  db.prepare('UPDATE messages SET input_tokens = ?, output_tokens = ? WHERE id = ?').run(
+    inputTokens,
+    outputTokens,
+    id
   )
 }
 

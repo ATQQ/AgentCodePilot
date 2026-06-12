@@ -27,7 +27,10 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   createdAt: string
-  usage?: { inputTokens: number; outputTokens: number }
+  usage?: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number; costUSD: number }
+  attachments?: Attachment[]
+  debugInput?: string
+  debugOutput?: string
 }
 
 export interface Conversation {
@@ -42,6 +45,23 @@ export interface Conversation {
   pinned?: boolean
   archived?: boolean
 }
+
+export interface FileAttachment {
+  id: string
+  type: 'image' | 'file'
+  name: string
+  path: string
+  previewUrl?: string
+}
+
+export interface UrlAttachment {
+  id: string
+  type: 'url'
+  url: string
+  title?: string
+}
+
+export type Attachment = FileAttachment | UrlAttachment
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 export type ApprovalLevel = 'request' | 'auto' | 'full'
