@@ -174,11 +174,13 @@ export const useChatStore = defineStore('chat', () => {
     waitingConversationIds.value.add(conversationId)
     const conv = conversations.value.find((c) => c.id === conversationId)
     const workspaceStore = useWorkspaceStore()
+    const wsFolders = workspaceStore.currentWorkspace?.folders
     await window.agentAPI.chat.sendMessage({
       conversationId,
       content,
       agentId,
       cwd: conv?.cwd || workspaceStore.currentCwd,
+      workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
       attachments: toAttachmentPayloads(attachments)
     })
   }
@@ -207,11 +209,13 @@ export const useChatStore = defineStore('chat', () => {
     waitingConversationIds.value.add(next.conversationId)
     const conv = conversations.value.find((c) => c.id === next.conversationId)
     const workspaceStore = useWorkspaceStore()
+    const wsFolders = workspaceStore.currentWorkspace?.folders
     window.agentAPI.chat.sendMessage({
       conversationId: next.conversationId,
       content: next.content,
       agentId: next.agentId,
-      cwd: conv?.cwd || workspaceStore.currentCwd
+      cwd: conv?.cwd || workspaceStore.currentCwd,
+      workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined
     })
   }
 

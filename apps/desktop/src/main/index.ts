@@ -14,6 +14,7 @@ import type {
   ConversationUpdatePayload,
   MessageInfo,
   ProjectPayload,
+  WorkspacePayload,
   SendMessagePayload,
   SettingsInfo,
   SettingsPayload
@@ -159,7 +160,8 @@ function registerIpcHandlers(): void {
       messageId: assistantMsgId,
       content: prompt,
       agentId: payload.agentId,
-      cwd: payload.cwd
+      cwd: payload.cwd,
+      workspaceFolders: payload.workspaceFolders
     }
 
     if (payload.agentId === 'claude-code') {
@@ -194,7 +196,8 @@ function registerIpcHandlers(): void {
       messageId: assistantMsgId,
       content: prompt,
       agentId: payload.agentId,
-      cwd: payload.cwd
+      cwd: payload.cwd,
+      workspaceFolders: payload.workspaceFolders
     }
 
     if (payload.agentId === 'claude-code') {
@@ -293,6 +296,24 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.PROJECTS_DELETE, (_e, id: string): void => {
     repo.deleteProject(id)
+  })
+
+  // --- Workspaces ---
+
+  ipcMain.handle(IPC_CHANNELS.WORKSPACES_LIST, (): WorkspacePayload[] => {
+    return repo.getAllWorkspaces().map((w) => ({
+      id: w.id,
+      name: w.name,
+      folders: JSON.parse(w.folders) as string[]
+    }))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.WORKSPACES_SAVE, (_e, payload: WorkspacePayload): void => {
+    repo.saveWorkspace(payload)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.WORKSPACES_DELETE, (_e, id: string): void => {
+    repo.deleteWorkspace(id)
   })
 
   // --- Settings ---

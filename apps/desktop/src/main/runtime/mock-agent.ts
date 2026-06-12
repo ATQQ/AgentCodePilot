@@ -6,6 +6,7 @@ export interface AgentRunInput {
   content: string
   agentId: string
   cwd?: string
+  workspaceFolders?: string[]
 }
 
 const MOCK_MARKDOWN_RESPONSE = `## 分析结果

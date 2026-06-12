@@ -6,7 +6,8 @@ import type {
   SendMessagePayload,
   SettingsPayload,
   ConversationUpdatePayload,
-  ProjectPayload
+  ProjectPayload,
+  WorkspacePayload
 } from './types'
 import { IPC_CHANNELS } from './types'
 
@@ -45,6 +46,11 @@ const agentAPI = {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_LIST),
     save: (payload: ProjectPayload) => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_SAVE, payload),
     delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_DELETE, id)
+  },
+  workspaces: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACES_LIST),
+    save: (payload: WorkspacePayload) => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACES_SAVE, payload),
+    delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACES_DELETE, id)
   },
   settings: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET),

@@ -30,9 +30,31 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     )
   })
 
+  const allWorkspaceFolders = computed<Set<string>>(() => {
+    const folders = new Set<string>()
+    for (const ws of workspaces.value) {
+      for (const f of ws.folders) {
+        folders.add(f)
+      }
+    }
+    return folders
+  })
+
+  const standaloneProjects = computed<Project[]>(() => {
+    return projects.value.filter((p) => !allWorkspaceFolders.value.has(p.path))
+  })
+
+  function getProjectsForWorkspace(wsId: string): Project[] {
+    const ws = workspaces.value.find((w) => w.id === wsId)
+    if (!ws) return []
+    return projects.value.filter((p) => ws.folders.includes(p.path))
+  }
+
   async function loadProjects(): Promise<void> {
     const list = await window.agentAPI.projects.list()
     projects.value = list.map((p) => ({ id: p.id, name: p.name, path: p.path }))
+    const wsList = await window.agentAPI.workspaces.list()
+    workspaces.value = wsList.map((w) => ({ id: w.id, name: w.name, folders: w.folders }))
   }
 
   function selectProject(id: string | null): void {
@@ -63,19 +85,33 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     await window.agentAPI.projects.delete(id)
   }
 
-  function createWorkspace(name: string, folders: string[]): void {
-    workspaces.value.push({
-      id: `ws-${Date.now()}`,
-      name,
-      folders
-    })
+  async function createWorkspace(name: string, folders: string[]): Promise<string> {
+    const ws = { id: `ws-${Date.now()}`, name, folders }
+    workspaces.value.push(ws)
+    await window.agentAPI.workspaces.save(ws)
+    return ws.id
   }
 
-  function removeWorkspace(id: string): void {
+  async function removeWorkspace(id: string): Promise<void> {
     workspaces.value = workspaces.value.filter((w) => w.id !== id)
     if (selectedProjectId.value === id) {
       selectedProjectId.value = null
     }
+    await window.agentAPI.workspaces.delete(id)
+  }
+
+  async function renameProject(id: string, newName: string): Promise<void> {
+    const project = projects.value.find((p) => p.id === id)
+    if (!project) return
+    project.name = newName
+    await window.agentAPI.projects.save({ id: project.id, name: project.name, path: project.path })
+  }
+
+  async function renameWorkspace(id: string, newName: string): Promise<void> {
+    const ws = workspaces.value.find((w) => w.id === id)
+    if (!ws) return
+    ws.name = newName
+    await window.agentAPI.workspaces.save({ id: ws.id, name: ws.name, folders: ws.folders })
   }
 
   return {
@@ -86,11 +122,16 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     currentWorkspace,
     currentCwd,
     workspaceProjects,
+    standaloneProjects,
+    allWorkspaceFolders,
     loadProjects,
     selectProject,
     addProject,
     removeProject,
     createWorkspace,
-    removeWorkspace
+    removeWorkspace,
+    renameProject,
+    renameWorkspace,
+    getProjectsForWorkspace
   }
 })

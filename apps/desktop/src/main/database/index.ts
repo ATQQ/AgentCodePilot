@@ -64,6 +64,12 @@ function migrate(database: Database.Database): void {
       path TEXT NOT NULL UNIQUE
     );
 
+    CREATE TABLE IF NOT EXISTS workspaces (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      folders TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_messages_conversation
       ON messages(conversation_id, created_at);
 

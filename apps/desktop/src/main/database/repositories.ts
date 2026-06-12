@@ -222,3 +222,28 @@ export function deleteProject(id: string): void {
   const db = getDatabase()
   db.prepare('DELETE FROM projects WHERE id = ?').run(id)
 }
+
+// --- Workspaces ---
+
+export interface WorkspaceRow {
+  id: string
+  name: string
+  folders: string
+}
+
+export function saveWorkspace(ws: { id: string; name: string; folders: string[] }): void {
+  const db = getDatabase()
+  db.prepare(
+    `INSERT OR REPLACE INTO workspaces (id, name, folders) VALUES (?, ?, ?)`
+  ).run(ws.id, ws.name, JSON.stringify(ws.folders))
+}
+
+export function getAllWorkspaces(): WorkspaceRow[] {
+  const db = getDatabase()
+  return db.prepare('SELECT * FROM workspaces').all() as WorkspaceRow[]
+}
+
+export function deleteWorkspace(id: string): void {
+  const db = getDatabase()
+  db.prepare('DELETE FROM workspaces WHERE id = ?').run(id)
+}

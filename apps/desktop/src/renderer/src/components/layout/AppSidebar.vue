@@ -45,6 +45,17 @@ const contextMenu = reactive({
 const renaming = ref<{ id: string; title: string } | null>(null)
 const renameInputRef = ref<HTMLInputElement | null>(null)
 
+const projectRenaming = ref<{ id: string; name: string; type: 'project' | 'workspace' } | null>(null)
+const projectRenameInputRef = ref<HTMLInputElement | null>(null)
+
+const projectMenu = reactive({
+  visible: false,
+  x: 0,
+  y: 0,
+  id: '',
+  type: '' as 'project' | 'workspace'
+})
+
 function navigate(path: string): void {
   if (path === '/search') {
     openSearch()
@@ -178,8 +189,72 @@ function handleDelete(): void {
   closeContextMenu()
 }
 
+function showProjectMenu(e: MouseEvent, id: string, type: 'project' | 'workspace'): void {
+  e.stopPropagation()
+  const btn = e.currentTarget as HTMLElement
+  const rect = btn.getBoundingClientRect()
+  projectMenu.visible = true
+  projectMenu.x = rect.right
+  projectMenu.y = rect.top
+  projectMenu.id = id
+  projectMenu.type = type
+}
+
+function closeProjectMenu(): void {
+  projectMenu.visible = false
+}
+
+function handleProjectRename(): void {
+  const { id, type } = projectMenu
+  let name = ''
+  if (type === 'project') {
+    const proj = workspaceStore.projects.find((p) => p.id === id)
+    name = proj?.name ?? ''
+  } else {
+    const ws = workspaceStore.workspaces.find((w) => w.id === id)
+    name = ws?.name ?? ''
+  }
+  projectRenaming.value = { id, name, type }
+  closeProjectMenu()
+  setTimeout(() => projectRenameInputRef.value?.focus(), 50)
+}
+
+function confirmProjectRename(): void {
+  if (!projectRenaming.value || !projectRenaming.value.name.trim()) {
+    projectRenaming.value = null
+    return
+  }
+  const { id, name, type } = projectRenaming.value
+  if (type === 'project') {
+    workspaceStore.renameProject(id, name.trim())
+  } else {
+    workspaceStore.renameWorkspace(id, name.trim())
+  }
+  projectRenaming.value = null
+}
+
+function cancelProjectRename(): void {
+  projectRenaming.value = null
+}
+
+function handleProjectRenameKeydown(e: KeyboardEvent): void {
+  if (e.key === 'Enter') confirmProjectRename()
+  else if (e.key === 'Escape') cancelProjectRename()
+}
+
+function handleProjectDelete(): void {
+  const { id, type } = projectMenu
+  if (type === 'project') {
+    workspaceStore.removeProject(id)
+  } else {
+    workspaceStore.removeWorkspace(id)
+  }
+  closeProjectMenu()
+}
+
 function onDocumentClick(): void {
   if (contextMenu.visible) closeContextMenu()
+  if (projectMenu.visible) closeProjectMenu()
 }
 
 onMounted(() => {
@@ -208,11 +283,106 @@ onUnmounted(() => {
         </button>
       </nav>
 
+      <div v-if="workspaceStore.workspaces.length" class="sidebar-section">
+        <div class="section-title">{{ t('sidebar.workspaces') }}</div>
+
+        <div
+          v-for="ws in workspaceStore.workspaces"
+          :key="ws.id"
+          class="project-group"
+        >
+          <div
+            class="project-header"
+            :class="{ active: workspaceStore.selectedProjectId === ws.id }"
+            @click="toggleProjectCollapse(ws.id)"
+          >
+            <el-icon :size="10" class="collapse-icon" :class="{ collapsed: isProjectCollapsed(ws.id) }">
+              <ArrowDown />
+            </el-icon>
+            <el-icon :size="13"><Folder /></el-icon>
+            <template v-if="projectRenaming && projectRenaming.id === ws.id">
+              <input
+                ref="projectRenameInputRef"
+                v-model="projectRenaming.name"
+                class="rename-input project-rename-input"
+                @click.stop
+                @keydown="handleProjectRenameKeydown"
+                @blur="confirmProjectRename"
+              />
+            </template>
+            <template v-else>
+              <span class="project-name" :title="ws.folders.join('\n')">{{ ws.name }}</span>
+            </template>
+            <div class="project-actions">
+              <button class="action-btn" @click="showProjectMenu($event, ws.id, 'workspace')">
+                <el-icon :size="12"><MoreFilled /></el-icon>
+              </button>
+              <button class="action-btn" @click="newChatForProject($event, ws.id)">
+                <el-icon :size="12"><EditPen /></el-icon>
+              </button>
+            </div>
+          </div>
+
+          <div v-if="!isProjectCollapsed(ws.id)" class="project-conversations">
+            <div class="ws-sub-projects">
+              <div
+                v-for="proj in workspaceStore.getProjectsForWorkspace(ws.id)"
+                :key="proj.id"
+                class="ws-sub-project-item"
+                :title="proj.path"
+              >
+                <el-icon :size="11"><FolderOpened /></el-icon>
+                <span class="ws-sub-project-name">{{ proj.name }}</span>
+              </div>
+            </div>
+            <template v-if="chatStore.getConversationsByProject(ws.id).length">
+              <div
+                v-for="conv in chatStore.getConversationsByProject(ws.id)"
+                :key="conv.id"
+                class="conv-item"
+                :class="{ active: chatStore.activeConversationId === conv.id }"
+                @click="openConversation(conv.id)"
+                @contextmenu="showContextMenu($event, conv)"
+              >
+                <template v-if="renaming && renaming.id === conv.id">
+                  <input
+                    ref="renameInputRef"
+                    v-model="renaming.title"
+                    class="rename-input"
+                    @click.stop
+                    @keydown="handleRenameKeydown"
+                    @blur="confirmRename"
+                  />
+                </template>
+                <template v-else>
+                  <button
+                    class="conv-pin-btn"
+                    :class="{ pinned: conv.pinned }"
+                    @click="handleQuickPin($event, conv)"
+                    :title="conv.pinned ? '取消置顶' : '置顶'"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                      <path d="M9.828.722a.5.5 0 0 1 .354.146l4.95 4.95a.5.5 0 0 1-.707.707l-.55-.55-3.18 3.18a5.5 5.5 0 0 1-1.32 4.988.5.5 0 0 1-.707 0L5.843 11.32l-3.89 3.89a.5.5 0 0 1-.707-.708l3.89-3.89-2.824-2.823a.5.5 0 0 1 0-.707 5.5 5.5 0 0 1 4.988-1.32l3.18-3.18-.55-.55a.5.5 0 0 1 .354-.854z"/>
+                    </svg>
+                  </button>
+                  <span class="conv-title">{{ getConvTitle(conv) }}</span>
+                  <span class="conv-time">{{ formatRelativeTime(conv.updatedAt) }}</span>
+                  <button class="conv-more-btn" @click="showContextMenuFromButton($event, conv)">
+                    <el-icon :size="12"><MoreFilled /></el-icon>
+                  </button>
+                </template>
+              </div>
+            </template>
+            <div v-else class="no-conversations">{{ t('sidebar.noChats') }}</div>
+          </div>
+        </div>
+      </div>
+
       <div class="sidebar-section">
         <div class="section-title">{{ t('sidebar.projects') }}</div>
 
         <div
-          v-for="proj in workspaceStore.projects"
+          v-for="proj in workspaceStore.standaloneProjects"
           :key="proj.id"
           class="project-group"
         >
@@ -225,9 +395,21 @@ onUnmounted(() => {
               <ArrowDown />
             </el-icon>
             <el-icon :size="13"><FolderOpened /></el-icon>
-            <span class="project-name">{{ proj.name }}</span>
+            <template v-if="projectRenaming && projectRenaming.id === proj.id">
+              <input
+                ref="projectRenameInputRef"
+                v-model="projectRenaming.name"
+                class="rename-input project-rename-input"
+                @click.stop
+                @keydown="handleProjectRenameKeydown"
+                @blur="confirmProjectRename"
+              />
+            </template>
+            <template v-else>
+              <span class="project-name">{{ proj.name }}</span>
+            </template>
             <div class="project-actions">
-              <button class="action-btn" @click.stop>
+              <button class="action-btn" @click="showProjectMenu($event, proj.id, 'project')">
                 <el-icon :size="12"><MoreFilled /></el-icon>
               </button>
               <button class="action-btn" @click="newChatForProject($event, proj.id)">
@@ -325,36 +507,6 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div v-if="workspaceStore.workspaces.length" class="sidebar-section">
-        <div class="section-title">{{ t('sidebar.workspaces') }}</div>
-
-        <div
-          v-for="ws in workspaceStore.workspaces"
-          :key="ws.id"
-          class="project-group"
-        >
-          <div
-            class="project-header"
-            :class="{ active: workspaceStore.selectedProjectId === ws.id }"
-            @click="workspaceStore.selectProject(ws.id)"
-          >
-            <el-icon :size="13"><Folder /></el-icon>
-            <span class="project-name">{{ ws.name }}</span>
-            <div class="project-actions">
-              <button class="action-btn" @click.stop>
-                <el-icon :size="12"><MoreFilled /></el-icon>
-              </button>
-              <button class="action-btn" @click.stop>
-                <el-icon :size="12"><EditPen /></el-icon>
-              </button>
-            </div>
-          </div>
-
-          <div class="project-conversations">
-            <div class="no-conversations">{{ t('sidebar.noChats') }}</div>
-          </div>
-        </div>
-      </div>
     </div>
 
     <div class="sidebar-footer">
@@ -415,6 +567,28 @@ onUnmounted(() => {
             <span>归档</span>
           </button>
           <button class="ctx-item ctx-item--danger" @click="handleDelete">
+            <span class="ctx-icon">&#x1F5D1;</span>
+            <span>删除</span>
+          </button>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- Project/Workspace Menu -->
+    <Teleport to="body">
+      <Transition name="ctx-fade">
+        <div
+          v-if="projectMenu.visible"
+          class="context-menu"
+          :style="{ left: projectMenu.x + 'px', top: projectMenu.y + 'px' }"
+          @click.stop
+        >
+          <button class="ctx-item" @click="handleProjectRename">
+            <span class="ctx-icon">&#x270F;</span>
+            <span>重命名</span>
+          </button>
+          <div class="ctx-divider"></div>
+          <button class="ctx-item ctx-item--danger" @click="handleProjectDelete">
             <span class="ctx-icon">&#x1F5D1;</span>
             <span>删除</span>
           </button>
@@ -692,6 +866,27 @@ onUnmounted(() => {
   display: none;
 }
 
+/* Workspace sub projects */
+.ws-sub-projects {
+  padding: 2px 0 4px 22px;
+}
+
+.ws-sub-project-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px var(--spacing-sm);
+  font-size: 11px;
+  color: var(--sidebar-section-title);
+  border-radius: var(--radius-sm);
+}
+
+.ws-sub-project-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Rename input */
 .rename-input {
   flex: 1;
@@ -702,6 +897,11 @@ onUnmounted(() => {
   font-size: var(--font-size-xs);
   padding: 2px 6px;
   outline: none;
+}
+
+.project-rename-input {
+  font-size: var(--font-size-sm);
+  min-width: 0;
 }
 
 /* Context menu */

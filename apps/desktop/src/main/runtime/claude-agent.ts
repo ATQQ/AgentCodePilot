@@ -21,6 +21,12 @@ export class ClaudeAgentAdapter {
     const rawMessages: unknown[] = []
     const existingSessionId = this.sessionIds.get(input.conversationId)
 
+    let prompt = input.content
+    if (input.workspaceFolders && input.workspaceFolders.length > 1) {
+      const folderList = input.workspaceFolders.map((f) => `- ${f}`).join('\n')
+      prompt = `[Workspace Context] This is a multi-directory workspace. The working directories are:\n${folderList}\nYou may need to work across these directories.\n\n${prompt}`
+    }
+
     const queryOptions = {
       abortController: controller,
       cwd: input.cwd || app.getPath('home'),
@@ -35,7 +41,7 @@ export class ClaudeAgentAdapter {
 
     try {
       const q = query({
-        prompt: input.content,
+        prompt,
         options: queryOptions
       })
 

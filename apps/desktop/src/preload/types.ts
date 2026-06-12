@@ -16,7 +16,10 @@ export const IPC_CHANNELS = {
   CONVERSATIONS_DELETE: 'conversations:delete',
   PROJECTS_LIST: 'projects:list',
   PROJECTS_SAVE: 'projects:save',
-  PROJECTS_DELETE: 'projects:delete'
+  PROJECTS_DELETE: 'projects:delete',
+  WORKSPACES_LIST: 'workspaces:list',
+  WORKSPACES_SAVE: 'workspaces:save',
+  WORKSPACES_DELETE: 'workspaces:delete'
 } as const
 
 export interface FileAttachmentPayload {
@@ -39,6 +42,7 @@ export interface SendMessagePayload {
   content: string
   agentId: string
   cwd?: string
+  workspaceFolders?: string[]
   attachments?: AttachmentPayload[]
 }
 
@@ -66,6 +70,12 @@ export interface ProjectPayload {
   id: string
   name: string
   path: string
+}
+
+export interface WorkspacePayload {
+  id: string
+  name: string
+  folders: string[]
 }
 
 export interface AgentInfo {
@@ -143,6 +153,11 @@ export interface AgentAPI {
   projects: {
     list: () => Promise<ProjectPayload[]>
     save: (payload: ProjectPayload) => Promise<void>
+    delete: (id: string) => Promise<void>
+  }
+  workspaces: {
+    list: () => Promise<WorkspacePayload[]>
+    save: (payload: WorkspacePayload) => Promise<void>
     delete: (id: string) => Promise<void>
   }
   settings: {

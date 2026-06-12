@@ -25,11 +25,13 @@ async function handleSubmit(text: string, attachments: Attachment[]): Promise<vo
     if (a.type === 'url') return { id: a.id, type: 'url' as const, url: a.url }
     return { id: a.id, type: a.type, name: a.name, path: a.path }
   })
+  const wsFolders = workspaceStore.currentWorkspace?.folders
   await window.agentAPI.chat.sendFirstMessage({
     conversationId: convId,
     content: text,
     agentId,
     cwd,
+    workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
     attachments: attachmentPayloads.length > 0 ? attachmentPayloads : undefined
   })
 }

@@ -96,7 +96,7 @@ function removeFolderFromWorkspace(folder: string): void {
 
 async function saveWorkspace(): Promise<void> {
   if (workspaceName.value.trim() && workspaceFolders.value.length) {
-    workspaceStore.createWorkspace(workspaceName.value.trim(), [...workspaceFolders.value])
+    const wsId = await workspaceStore.createWorkspace(workspaceName.value.trim(), [...workspaceFolders.value])
     for (const folder of workspaceFolders.value) {
       const existing = workspaceStore.projects.find((p) => p.path === folder)
       if (!existing) {
@@ -106,6 +106,7 @@ async function saveWorkspace(): Promise<void> {
         await window.agentAPI.projects.save(project)
       }
     }
+    workspaceStore.selectProject(wsId)
   }
   showWorkspacePanel.value = false
 }
