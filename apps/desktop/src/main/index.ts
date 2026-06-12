@@ -22,7 +22,9 @@ import type {
   SettingsPayload
 } from '../preload/types'
 import { agentRegistry, initializeAgentRegistry } from './runtime'
+import { supervisedRun, supervisedStop } from './runtime/supervisor'
 import { startGateway, stopGateway, getGatewayConfig, isGatewayRunning } from './gateway'
+import { logInfo, logError, cleanOldLogs } from './logger'
 import { getDatabase, closeDatabase } from './database'
 import * as repo from './database/repositories'
 
@@ -162,16 +164,7 @@ function registerIpcHandlers(): void {
       workspaceFolders: payload.workspaceFolders
     }
 
-    const adapter = agentRegistry.get(payload.agentId)
-    if (adapter) {
-      adapter.run(runInput, emitAgentEvent)
-    } else {
-      emitAgentEvent({
-        type: 'message.error',
-        conversationId: payload.conversationId,
-        error: `Agent "${payload.agentId}" not found or not configured`
-      })
-    }
+    supervisedRun(runInput, emitAgentEvent)
   })
 
   ipcMain.handle(IPC_CHANNELS.CHAT_SEND, (_e, payload: SendMessagePayload): void => {
@@ -203,20 +196,11 @@ function registerIpcHandlers(): void {
       workspaceFolders: payload.workspaceFolders
     }
 
-    const adapter = agentRegistry.get(payload.agentId)
-    if (adapter) {
-      adapter.run(runInput, emitAgentEvent)
-    } else {
-      emitAgentEvent({
-        type: 'message.error',
-        conversationId: payload.conversationId,
-        error: `Agent "${payload.agentId}" not found or not configured`
-      })
-    }
+    supervisedRun(runInput, emitAgentEvent)
   })
 
   ipcMain.handle(IPC_CHANNELS.CHAT_STOP, (_e, conversationId: string): void => {
-    agentRegistry.stopAll(conversationId)
+    supervisedStop(conversationId)
   })
 
   // --- Conversations ---
@@ -450,6 +434,8 @@ function createWindow(): void {
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.agentcodepilot.app')
 
+  logInfo('App', `Starting AgentCodePilot v${app.getVersion()}`)
+  cleanOldLogs()
   getDatabase()
   initializeAgentRegistry()
 
@@ -475,4 +461,13 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => {
   stopGateway()
   closeDatabase()
+  logInfo('App', 'Application quit')
+})
+
+process.on('uncaughtException', (error) => {
+  logError('Process', 'Uncaught exception', error)
+})
+
+process.on('unhandledRejection', (reason) => {
+  logError('Process', 'Unhandled rejection', reason)
 })
