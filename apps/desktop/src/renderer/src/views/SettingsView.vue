@@ -4,21 +4,21 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import type { ThemeMode } from '@renderer/types'
-import {
-  ArrowLeft,
-  Setting,
-  Brush,
-  Document,
-  Star,
-  Key,
-  Camera,
-  Connection,
-  Monitor,
-  Mouse,
-  Link,
-  FolderOpened,
-  Tickets
-} from '@element-plus/icons-vue'
+import { ArrowLeft, Brush } from '@element-plus/icons-vue'
+// TODO: 恢复未实现设置项时取消注释
+// import {
+//   Setting,
+//   Document,
+//   Star,
+//   Key,
+//   Camera,
+//   Connection,
+//   Monitor,
+//   Mouse,
+//   Link,
+//   FolderOpened,
+//   Tickets
+// } from '@element-plus/icons-vue'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -29,7 +29,7 @@ const activeSection = ref('appearance')
 interface NavItem {
   key: string
   labelKey: string
-  icon: typeof Setting
+  icon: typeof Brush
 }
 
 interface NavGroup {
@@ -40,40 +40,48 @@ interface NavGroup {
 const navGroups: NavGroup[] = [
   {
     titleKey: 'settings.personal',
-    items: [
-      { key: 'general', labelKey: 'settings.general', icon: Setting },
-      { key: 'appearance', labelKey: 'settings.appearance', icon: Brush },
-      { key: 'configuration', labelKey: 'settings.configuration', icon: Document },
-      { key: 'personalization', labelKey: 'settings.personalization', icon: Star },
-      { key: 'shortcuts', labelKey: 'settings.keyboardShortcuts', icon: Key }
-    ]
-  },
-  {
-    titleKey: 'settings.integration',
-    items: [
-      { key: 'snapshots', labelKey: 'settings.appSnapshots', icon: Camera },
-      { key: 'mcp', labelKey: 'settings.mcpServers', icon: Connection },
-      { key: 'browser', labelKey: 'settings.browser', icon: Monitor },
-      { key: 'computer', labelKey: 'settings.computerControl', icon: Mouse }
-    ]
-  },
-  {
-    titleKey: 'settings.coding',
-    items: [
-      { key: 'hooks', labelKey: 'settings.hooks', icon: Link },
-      { key: 'connections', labelKey: 'settings.connections', icon: Connection },
-      { key: 'git', labelKey: 'settings.git', icon: Tickets },
-      { key: 'environment', labelKey: 'settings.environment', icon: Monitor },
-      { key: 'worktree', labelKey: 'settings.workTree', icon: FolderOpened }
-    ]
-  },
-  {
-    titleKey: 'settings.archived',
-    items: [
-      { key: 'archived', labelKey: 'settings.archivedConversations', icon: Document }
-    ]
+    items: [{ key: 'appearance', labelKey: 'settings.appearance', icon: Brush }]
   }
 ]
+
+// TODO: 恢复未实现设置项时替换上方 navGroups
+// const navGroups: NavGroup[] = [
+//   {
+//     titleKey: 'settings.personal',
+//     items: [
+//       { key: 'general', labelKey: 'settings.general', icon: Setting },
+//       { key: 'appearance', labelKey: 'settings.appearance', icon: Brush },
+//       { key: 'configuration', labelKey: 'settings.configuration', icon: Document },
+//       { key: 'personalization', labelKey: 'settings.personalization', icon: Star },
+//       { key: 'shortcuts', labelKey: 'settings.keyboardShortcuts', icon: Key }
+//     ]
+//   },
+//   {
+//     titleKey: 'settings.integration',
+//     items: [
+//       { key: 'snapshots', labelKey: 'settings.appSnapshots', icon: Camera },
+//       { key: 'mcp', labelKey: 'settings.mcpServers', icon: Connection },
+//       { key: 'browser', labelKey: 'settings.browser', icon: Monitor },
+//       { key: 'computer', labelKey: 'settings.computerControl', icon: Mouse }
+//     ]
+//   },
+//   {
+//     titleKey: 'settings.coding',
+//     items: [
+//       { key: 'hooks', labelKey: 'settings.hooks', icon: Link },
+//       { key: 'connections', labelKey: 'settings.connections', icon: Connection },
+//       { key: 'git', labelKey: 'settings.git', icon: Tickets },
+//       { key: 'environment', labelKey: 'settings.environment', icon: Monitor },
+//       { key: 'worktree', labelKey: 'settings.workTree', icon: FolderOpened }
+//     ]
+//   },
+//   {
+//     titleKey: 'settings.archived',
+//     items: [
+//       { key: 'archived', labelKey: 'settings.archivedConversations', icon: Document }
+//     ]
+//   }
+// ]
 
 const themeOptions: { value: ThemeMode; labelKey: string; icon: string }[] = [
   { value: 'light', labelKey: 'settings.light', icon: '☀' },
@@ -95,6 +103,7 @@ function goBack(): void {
         <span>{{ t('common.backToApp') }}</span>
       </button>
 
+      <!-- TODO: 搜索功能实现后恢复
       <div class="search-box">
         <input
           type="text"
@@ -102,6 +111,7 @@ function goBack(): void {
           class="search-input"
         />
       </div>
+      -->
 
       <nav class="settings-nav">
         <div v-for="group in navGroups" :key="group.titleKey" class="nav-group">
@@ -147,6 +157,7 @@ function goBack(): void {
             </div>
           </div>
 
+          <!-- TODO: 以下外观设置实现后恢复
           <div class="setting-card">
             <div class="setting-row">
               <div class="setting-label">{{ t('settings.uiFontSize') }}</div>
@@ -184,9 +195,10 @@ function goBack(): void {
               <el-switch />
             </div>
           </div>
+          -->
         </div>
 
-        <!-- General Section -->
+        <!-- TODO: General Section 实现后恢复
         <div v-else-if="activeSection === 'general'" class="content-section">
           <h1 class="page-title">{{ t('settings.general') }}</h1>
 
@@ -199,14 +211,16 @@ function goBack(): void {
             </div>
           </div>
         </div>
+        -->
 
-        <!-- Other sections placeholder -->
+        <!-- TODO: 其他设置分区实现后恢复
         <div v-else class="content-section">
           <h1 class="page-title">{{ t(`settings.${activeSection === 'shortcuts' ? 'keyboardShortcuts' : activeSection}`) }}</h1>
           <div class="coming-soon">
             <el-empty description="即将推出" :image-size="80" />
           </div>
         </div>
+        -->
       </div>
     </main>
   </div>
@@ -264,6 +278,7 @@ function goBack(): void {
   color: var(--content-text);
 }
 
+/* TODO: 搜索功能实现后恢复
 .search-box {
   padding: 0 var(--spacing-md) var(--spacing-md);
 }
@@ -287,6 +302,7 @@ function goBack(): void {
 .search-input:focus {
   border-color: var(--composer-border-focus);
 }
+*/
 
 .settings-nav {
   flex: 1;
@@ -369,6 +385,7 @@ function goBack(): void {
   gap: var(--spacing-lg);
 }
 
+/* TODO: 未实现设置项 UI 恢复时取消注释
 .setting-row {
   display: flex;
   align-items: center;
@@ -381,6 +398,7 @@ function goBack(): void {
   margin-top: var(--spacing-sm);
   padding-top: var(--spacing-md);
 }
+*/
 
 .setting-label {
   font-size: var(--font-size-base);
@@ -394,6 +412,7 @@ function goBack(): void {
   margin-top: 2px;
 }
 
+/* TODO: 未实现设置项 UI 恢复时取消注释
 .setting-control {
   display: flex;
   align-items: center;
@@ -409,6 +428,7 @@ function goBack(): void {
   min-width: 60px;
   text-align: center;
 }
+*/
 
 .theme-toggle {
   display: flex;
@@ -447,6 +467,7 @@ function goBack(): void {
   font-size: 12px;
 }
 
+/* TODO: 未实现设置项 UI 恢复时取消注释
 .segmented-control {
   display: flex;
   gap: 2px;
@@ -482,4 +503,5 @@ function goBack(): void {
   justify-content: center;
   padding: var(--spacing-2xl);
 }
+*/
 </style>

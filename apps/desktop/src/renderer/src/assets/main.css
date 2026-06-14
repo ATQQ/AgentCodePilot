@@ -1,5 +1,7 @@
 @import './base.css';
 @import '../styles/variables.css';
+@import 'markstream-vue/index.css';
+@import 'katex/dist/katex.min.css';
 
 * {
   margin: 0;

@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import MarkdownRender from 'markstream-vue'
 import { useChatStore } from '@renderer/stores/chat.store'
 import { useAgentStore } from '@renderer/stores/agent.store'
+import { useSettingsStore } from '@renderer/stores/settings.store'
 import PromptComposer from '@renderer/components/home/PromptComposer.vue'
 import AgentSelector from '@renderer/components/home/AgentSelector.vue'
 import ToolCallsSection from '@renderer/components/chat/ToolCallsSection.vue'
@@ -23,6 +24,7 @@ const { t } = useI18n()
 const router = useRouter()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
+const settingsStore = useSettingsStore()
 const messagesEnd = ref<HTMLElement | null>(null)
 const composerRef = ref<InstanceType<typeof PromptComposer> | null>(null)
 const streamedMessageIds = ref<Set<string>>(new Set())
@@ -121,6 +123,12 @@ const currentAgentIcon = computed(() => {
   return agentIcons[agentId] || claudeIcon
 })
 
+const isDark = computed(() => {
+  if (settingsStore.theme === 'dark') return true
+  if (settingsStore.theme === 'light') return false
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
+})
+
 function formatTime(dateStr: string): string {
   const date = new Date(dateStr)
   const now = new Date()
@@ -178,6 +186,7 @@ function resendMessage(content: string): void {
                 :has-text-content="!!msg.content.trim()"
               />
               <MarkdownRender
+                mode="chat"
                 custom-id="chat"
                 :content="msg.content"
                 :final="!isStreamingMessage(msg.id)"
@@ -185,10 +194,13 @@ function resendMessage(content: string): void {
                 :fade="!isStreamingMessage(msg.id) && !wasStreamed(msg.id)"
                 :typewriter="isStreamingMessage(msg.id)"
                 :max-live-nodes="isStreamingMessage(msg.id) ? 0 : undefined"
+                :render-code-blocks-as-pre="isStreamingMessage(msg.id)"
+                :is-dark="isDark"
                 :batch-rendering="true"
                 :render-batch-size="16"
                 :render-batch-delay="8"
                 :render-batch-budget-ms="4"
+                :code-block-props="{ theme: { light: 'github-light', dark: 'github-dark' } }"
               />
             </template>
             <template v-else>

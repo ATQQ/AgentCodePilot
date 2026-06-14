@@ -31,6 +31,12 @@ export default defineConfig({
         '@renderer': resolve('src/renderer/src')
       }
     },
+    optimizeDeps: {
+      include: ['monaco-editor', 'stream-monaco', 'mermaid', 'katex']
+    },
+    worker: {
+      format: 'es'
+    },
     plugins: [vue()]
   }
 })

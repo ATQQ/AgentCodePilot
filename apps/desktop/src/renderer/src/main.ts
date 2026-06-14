@@ -1,11 +1,10 @@
 import './assets/main.css'
 import 'element-plus/dist/index.css'
-import 'markstream-vue/index.css'
 
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
-import { preloadCodeBlockRuntime } from 'markstream-vue'
+import { setupMarkstream } from './markstream-setup'
 import App from './App.vue'
 import router from './router'
 import i18n from './i18n'
@@ -31,6 +30,6 @@ workspaceStore.loadProjects().then(() => {
   chatStore.loadConversations()
 })
 chatStore.initAgentEventListener()
-preloadCodeBlockRuntime()
+setupMarkstream()
 
 app.mount('#app')
