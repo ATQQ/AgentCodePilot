@@ -194,7 +194,7 @@ function resendMessage(content: string): void {
                 :fade="!isStreamingMessage(msg.id) && !wasStreamed(msg.id)"
                 :typewriter="isStreamingMessage(msg.id)"
                 :max-live-nodes="isStreamingMessage(msg.id) ? 0 : undefined"
-                :render-code-blocks-as-pre="isStreamingMessage(msg.id)"
+                :render-code-blocks-as-pre="false"
                 :is-dark="isDark"
                 :batch-rendering="true"
                 :render-batch-size="16"
