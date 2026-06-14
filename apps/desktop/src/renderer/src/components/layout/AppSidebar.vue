@@ -78,6 +78,13 @@ function isProjectCollapsed(projId: string): boolean {
   return collapsedProjects.value.has(projId)
 }
 
+function isProjectHeaderActive(projectId: string): boolean {
+  if (workspaceStore.selectedProjectId !== projectId) return false
+  const activeConv = chatStore.activeConversation
+  if (activeConv?.projectId === projectId) return false
+  return true
+}
+
 function openConversation(id: string): void {
   chatStore.setActive(id)
   router.push('/chat')
@@ -291,7 +298,7 @@ onUnmounted(() => {
         >
           <div
             class="project-header"
-            :class="{ active: workspaceStore.selectedProjectId === ws.id }"
+            :class="{ active: isProjectHeaderActive(ws.id) }"
             @click="toggleProjectCollapse(ws.id)"
           >
             <el-icon :size="10" class="collapse-icon" :class="{ collapsed: isProjectCollapsed(ws.id) }">
@@ -386,7 +393,7 @@ onUnmounted(() => {
         >
           <div
             class="project-header"
-            :class="{ active: workspaceStore.selectedProjectId === proj.id }"
+            :class="{ active: isProjectHeaderActive(proj.id) }"
             @click="toggleProjectCollapse(proj.id)"
           >
             <el-icon :size="10" class="collapse-icon" :class="{ collapsed: isProjectCollapsed(proj.id) }">

@@ -1,47 +1,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ToolCall } from '@renderer/types'
+import { getToolLabel, getToolDetailLines } from '@renderer/utils/toolCall'
 
 const props = defineProps<{
   toolCall: ToolCall
+  depth?: number
 }>()
 
-const TOOL_LABELS: Record<string, string> = {
-  Read: '读取文件',
-  Write: '写入文件',
-  Edit: '编辑文件',
-  Bash: '执行命令',
-  Glob: '搜索文件',
-  Grep: '搜索内容',
-  WebFetch: '获取网页',
-  WebSearch: '搜索网络'
-}
-
-const label = computed(() => TOOL_LABELS[props.toolCall.toolName] || props.toolCall.toolName)
-
-const detail = computed(() => {
-  const input = props.toolCall.input
-  switch (props.toolCall.toolName) {
-    case 'Read':
-      return (input.file_path as string) || ''
-    case 'Write':
-      return (input.file_path as string) || ''
-    case 'Edit':
-      return (input.file_path as string) || ''
-    case 'Bash':
-      return ((input.command as string) || '').slice(0, 80)
-    case 'Glob':
-      return (input.pattern as string) || ''
-    case 'Grep':
-      return (input.pattern as string) || (input.query as string) || ''
-    case 'WebFetch':
-      return (input.url as string) || ''
-    case 'WebSearch':
-      return (input.query as string) || ''
-    default:
-      return ''
-  }
-})
+const label = computed(() => getToolLabel(props.toolCall.toolName))
+const detailLines = computed(() => getToolDetailLines(props.toolCall))
 
 const statusIcon = computed(() => {
   switch (props.toolCall.status) {
@@ -54,7 +22,11 @@ const statusIcon = computed(() => {
 </script>
 
 <template>
-  <div class="tool-call-card" :class="[`status-${toolCall.status}`]">
+  <div
+    class="tool-call-card"
+    :class="[`status-${toolCall.status}`, { nested: (depth ?? 0) > 0 }]"
+    :style="{ marginLeft: `${(depth ?? 0) * 16}px` }"
+  >
     <div class="tool-header">
       <span class="tool-status-icon">{{ statusIcon }}</span>
       <span class="tool-label">{{ label }}</span>
@@ -62,20 +34,37 @@ const statusIcon = computed(() => {
         {{ toolCall.elapsedSeconds.toFixed(1) }}s
       </span>
     </div>
-    <div v-if="detail" class="tool-detail">{{ detail }}</div>
-    <div v-if="toolCall.summary" class="tool-summary">{{ toolCall.summary }}</div>
+    <div v-if="detailLines.length" class="tool-details">
+      <div v-for="(line, idx) in detailLines" :key="idx" class="tool-detail-row">
+        <span class="tool-detail-label">{{ line.label }}</span>
+        <span class="tool-detail-value" :class="{ mono: line.label === '命令' || line.label === '路径' }">
+          {{ line.label === '命令' ? `$ ${line.value}` : line.value }}
+        </span>
+      </div>
+    </div>
+    <div
+      v-if="toolCall.summary && !detailLines.some((l) => l.value === toolCall.summary)"
+      class="tool-summary"
+    >
+      {{ toolCall.summary }}
+    </div>
   </div>
 </template>
 
 <style scoped>
 .tool-call-card {
-  margin: 6px 0;
+  margin: 4px 0;
   padding: 8px 12px;
   border-radius: var(--radius-md);
   border: 1px solid var(--sidebar-border);
-  background: var(--sidebar-bg);
+  background: var(--content-bg);
   font-size: var(--font-size-sm);
   transition: border-color 0.2s;
+}
+
+.tool-call-card.nested {
+  border-style: dashed;
+  background: var(--sidebar-bg);
 }
 
 .tool-call-card.status-running {
@@ -100,6 +89,7 @@ const statusIcon = computed(() => {
   font-size: 12px;
   width: 16px;
   text-align: center;
+  flex-shrink: 0;
 }
 
 .status-running .tool-status-icon {
@@ -123,6 +113,7 @@ const statusIcon = computed(() => {
 .tool-label {
   font-weight: 500;
   color: var(--content-text);
+  flex-shrink: 0;
 }
 
 .tool-elapsed {
@@ -131,21 +122,46 @@ const statusIcon = computed(() => {
   font-size: var(--font-size-xs);
 }
 
-.tool-detail {
-  margin-top: 4px;
+.tool-details {
+  margin-top: 6px;
   padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tool-detail-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tool-detail-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--content-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.tool-detail-value {
   color: var(--content-text-secondary);
-  font-family: var(--font-mono, monospace);
   font-size: var(--font-size-xs);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  word-break: break-all;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.tool-detail-value.mono {
+  font-family: var(--font-mono, monospace);
+  color: var(--content-text);
 }
 
 .tool-summary {
   margin-top: 4px;
   padding-left: 22px;
-  color: var(--content-text-secondary);
+  color: var(--content-text-tertiary);
   font-size: var(--font-size-xs);
+  word-break: break-word;
 }
 </style>

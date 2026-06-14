@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { storeToRefs } from 'pinia'
 import { Plus, Top } from '@element-plus/icons-vue'
+import { useSettingsStore } from '@renderer/stores/settings.store'
 import type { Attachment, FileAttachment, UrlAttachment } from '@renderer/types'
 
 const { t } = useI18n()
+const settingsStore = useSettingsStore()
+const { approvalLevel } = storeToRefs(settingsStore)
 const input = ref('')
 const showAddMenu = ref(false)
 const showApprovalMenu = ref(false)
 const planMode = ref(false)
 const pursueGoals = ref(false)
-const approvalLevel = ref<'request' | 'auto' | 'full'>('request')
 const attachments = ref<Attachment[]>([])
 const showUrlInput = ref(false)
 const urlInputValue = ref('')
@@ -164,7 +167,7 @@ function handleCancelQueue(index: number): void {
 }
 
 function selectApproval(level: 'request' | 'auto' | 'full'): void {
-  approvalLevel.value = level
+  settingsStore.setApprovalLevel(level)
   showApprovalMenu.value = false
 }
 

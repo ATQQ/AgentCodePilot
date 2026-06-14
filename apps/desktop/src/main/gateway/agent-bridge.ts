@@ -3,6 +3,7 @@ import type { UnifiedChatRequest } from './types'
 import { agentRegistry } from '../runtime'
 import { resolveAgent } from './router'
 import type { AgentEvent } from '../../preload/types'
+import { getSetting } from '../database/repositories'
 
 export async function runAgentForGateway(
   req: UnifiedChatRequest,
@@ -40,7 +41,8 @@ export async function runAgentForGateway(
           messageId,
           content: prompt,
           agentId,
-          cwd: app.getPath('home')
+          cwd: app.getPath('home'),
+          approvalLevel: (getSetting('approvalLevel') as 'request' | 'auto' | 'full' | undefined) ?? 'request'
         },
         emit
       )

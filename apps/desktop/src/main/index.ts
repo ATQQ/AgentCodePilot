@@ -45,6 +45,50 @@ function buildPromptWithAttachments(content: string, attachments?: AttachmentPay
   return parts.join('\n') + '\n\n' + content
 }
 
+function resolveConversationCwd(conversationId: string, payloadCwd?: string): string {
+  const conv = repo.getConversationById(conversationId)
+  if (conv?.cwd) return conv.cwd
+
+  if (conv?.project_id) {
+    const projectCwd = repo.resolveCwdForProjectId(conv.project_id)
+    if (projectCwd) {
+      repo.setConversationCwd(conversationId, projectCwd)
+      return projectCwd
+    }
+  }
+
+  if (payloadCwd) return payloadCwd
+  return app.getPath('home')
+}
+
+function resolveConversationWorkspaceFolders(
+  conversationId: string,
+  payloadFolders?: string[]
+): string[] | undefined {
+  if (payloadFolders && payloadFolders.length > 1) return payloadFolders
+
+  const conv = repo.getConversationById(conversationId)
+  if (!conv?.project_id) return undefined
+
+  return repo.resolveWorkspaceFoldersForProjectId(conv.project_id)
+}
+
+function getConversationRunContext(conversationId: string): {
+  agentSessionId: string | null
+  conversationHistory: { role: 'user' | 'assistant'; content: string }[]
+} {
+  const conv = repo.getConversationById(conversationId)
+  const messages = repo.getMessagesByConversation(conversationId)
+
+  return {
+    agentSessionId: conv?.agent_session_id ?? null,
+    conversationHistory: messages.map((m) => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content
+    }))
+  }
+}
+
 function emitAgentEvent(event: AgentEvent): void {
   if (event.type === 'message.started') {
     if (!streamingMessages.has(event.messageId)) {
@@ -84,6 +128,10 @@ function emitAgentEvent(event: AgentEvent): void {
         break
       }
     }
+  } else if (event.type === 'session.updated') {
+    repo.setConversationSessionId(event.conversationId, event.sessionId)
+  } else if (event.type === 'session.cleared') {
+    repo.setConversationSessionId(event.conversationId, null)
   }
 
   mainWindow?.webContents.send(IPC_CHANNELS.AGENT_EVENT, event)
@@ -116,7 +164,9 @@ function registerIpcHandlers(): void {
       const now = new Date().toISOString()
 
       let cwd: string | null = null
-      if (!payload.projectId) {
+      if (payload.projectId) {
+        cwd = repo.resolveCwdForProjectId(payload.projectId)
+      } else {
         const slug = id.replace(/[^a-z0-9-]/gi, '-')
         const baseDir = join(app.getPath('documents'), 'agent-desktop-app')
         cwd = join(baseDir, slug)
@@ -155,13 +205,21 @@ function registerIpcHandlers(): void {
       content: '',
       rawInput: prompt
     })
+    const runContext = getConversationRunContext(payload.conversationId)
+    const approvalLevel = getSettingsFromDb().approvalLevel
     const runInput = {
       conversationId: payload.conversationId,
       messageId: assistantMsgId,
       content: prompt,
       agentId: payload.agentId,
-      cwd: payload.cwd,
-      workspaceFolders: payload.workspaceFolders
+      cwd: resolveConversationCwd(payload.conversationId, payload.cwd),
+      workspaceFolders: resolveConversationWorkspaceFolders(
+        payload.conversationId,
+        payload.workspaceFolders
+      ),
+      agentSessionId: runContext.agentSessionId,
+      conversationHistory: runContext.conversationHistory,
+      approvalLevel
     }
 
     supervisedRun(runInput, emitAgentEvent)
@@ -187,13 +245,21 @@ function registerIpcHandlers(): void {
       content: '',
       rawInput: prompt
     })
+    const runContext = getConversationRunContext(payload.conversationId)
+    const approvalLevel = getSettingsFromDb().approvalLevel
     const runInput = {
       conversationId: payload.conversationId,
       messageId: assistantMsgId,
       content: prompt,
       agentId: payload.agentId,
-      cwd: payload.cwd,
-      workspaceFolders: payload.workspaceFolders
+      cwd: resolveConversationCwd(payload.conversationId, payload.cwd),
+      workspaceFolders: resolveConversationWorkspaceFolders(
+        payload.conversationId,
+        payload.workspaceFolders
+      ),
+      agentSessionId: runContext.agentSessionId,
+      conversationHistory: runContext.conversationHistory,
+      approvalLevel
     }
 
     supervisedRun(runInput, emitAgentEvent)

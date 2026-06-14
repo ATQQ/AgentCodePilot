@@ -277,6 +277,15 @@ export const useChatStore = defineStore('chat', () => {
         }
         break
       }
+      case 'tool.input_updated': {
+        const conv = conversations.value.find((c) => c.id === event.conversationId)
+        if (!conv) return
+        const msg = conv.messages.find((m) => m.id === event.messageId)
+        if (!msg?.toolCalls) return
+        const tc = msg.toolCalls.find((t) => t.toolUseId === event.toolUseId)
+        if (tc) tc.input = event.input
+        break
+      }
       case 'tool.progress': {
         const conv = conversations.value.find((c) => c.id === event.conversationId)
         if (!conv) return

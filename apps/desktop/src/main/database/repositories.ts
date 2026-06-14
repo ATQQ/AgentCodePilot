@@ -6,6 +6,7 @@ export interface ConversationRow {
   agent_id: string
   project_id: string | null
   cwd: string | null
+  agent_session_id: string | null
   pinned: number
   archived: number
   created_at: string
@@ -73,6 +74,61 @@ export function getAllConversations(): ConversationRow[] {
        ORDER BY pinned DESC, updated_at DESC`
     )
     .all() as ConversationRow[]
+}
+
+export function getConversationById(id: string): ConversationRow | undefined {
+  const db = getDatabase()
+  return db.prepare('SELECT * FROM conversations WHERE id = ?').get(id) as ConversationRow | undefined
+}
+
+export function setConversationSessionId(id: string, sessionId: string | null): void {
+  const db = getDatabase()
+  db.prepare('UPDATE conversations SET agent_session_id = ? WHERE id = ?').run(sessionId, id)
+}
+
+export function setConversationCwd(id: string, cwd: string): void {
+  const db = getDatabase()
+  db.prepare('UPDATE conversations SET cwd = ? WHERE id = ?').run(cwd, id)
+}
+
+export function getProjectById(id: string): ProjectRow | undefined {
+  const db = getDatabase()
+  return db.prepare('SELECT * FROM projects WHERE id = ?').get(id) as ProjectRow | undefined
+}
+
+export function resolveCwdForProjectId(projectId: string): string | null {
+  const project = getProjectById(projectId)
+  if (project) return project.path
+
+  const db = getDatabase()
+  const workspace = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(projectId) as
+    | { id: string; name: string; folders: string }
+    | undefined
+  if (workspace) {
+    try {
+      const folders = JSON.parse(workspace.folders) as string[]
+      return folders[0] ?? null
+    } catch {
+      return null
+    }
+  }
+
+  return null
+}
+
+export function resolveWorkspaceFoldersForProjectId(projectId: string): string[] | undefined {
+  const db = getDatabase()
+  const workspace = db.prepare('SELECT * FROM workspaces WHERE id = ?').get(projectId) as
+    | { folders: string }
+    | undefined
+  if (!workspace) return undefined
+
+  try {
+    const folders = JSON.parse(workspace.folders) as string[]
+    return folders.length > 1 ? folders : undefined
+  } catch {
+    return undefined
+  }
 }
 
 export function updateConversation(

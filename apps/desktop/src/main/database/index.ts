@@ -119,6 +119,11 @@ function runMigrations(database: Database.Database): void {
   if (!msgCols.find((c) => c.name === 'cost_usd')) {
     database.exec('ALTER TABLE messages ADD COLUMN cost_usd REAL')
   }
+
+  const convCols2 = database.pragma('table_info(conversations)') as { name: string }[]
+  if (!convCols2.find((c) => c.name === 'agent_session_id')) {
+    database.exec('ALTER TABLE conversations ADD COLUMN agent_session_id TEXT')
+  }
 }
 
 export function closeDatabase(): void {

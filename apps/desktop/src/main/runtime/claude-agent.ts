@@ -2,6 +2,33 @@ import { query } from '@anthropic-ai/claude-agent-sdk'
 import { app } from 'electron'
 import type { AgentEvent, TokenUsage } from '../../preload/types'
 import type { AgentAdapter, AgentRunInput } from './types'
+import type { ApprovalLevel } from './permissions'
+import { buildPermissionOptions } from './permissions'
+
+function isStaleSessionError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error)
+  return msg.includes('No conversation found with session ID')
+}
+
+function buildPrompt(input: AgentRunInput, sessionId: string | undefined): string {
+  if (sessionId) {
+    return input.content
+  }
+
+  if (input.conversationHistory && input.conversationHistory.length > 0) {
+    return input.conversationHistory
+      .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+      .join('\n\n')
+  }
+
+  return input.content
+}
+
+function withWorkspaceContext(prompt: string, workspaceFolders?: string[]): string {
+  if (!workspaceFolders || workspaceFolders.length <= 1) return prompt
+  const folderList = workspaceFolders.map((f) => `- ${f}`).join('\n')
+  return `[Workspace Context] This is a multi-directory workspace. The working directories are:\n${folderList}\nYou may need to work across these directories.\n\n${prompt}`
+}
 
 export class ClaudeAgentAdapter implements AgentAdapter {
   readonly id = 'claude-code'
@@ -11,24 +38,63 @@ export class ClaudeAgentAdapter implements AgentAdapter {
   private sessionIds = new Map<string, string>()
 
   async run(input: AgentRunInput, emit: (event: AgentEvent) => void): Promise<void> {
+    const sessionId = this.resolveSessionId(input)
+
+    try {
+      await this.runOnce(input, emit, sessionId)
+    } catch (error: unknown) {
+      if (sessionId && isStaleSessionError(error)) {
+        this.clearSession(input.conversationId, emit)
+        await this.runOnce(input, emit, undefined, { skipStarted: true })
+        return
+      }
+
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      emit({
+        type: 'message.error',
+        conversationId: input.conversationId,
+        error: errorMessage
+      })
+    }
+  }
+
+  private resolveSessionId(input: AgentRunInput): string | undefined {
+    const sessionId = input.agentSessionId ?? this.sessionIds.get(input.conversationId)
+    if (sessionId) {
+      this.sessionIds.set(input.conversationId, sessionId)
+    }
+    return sessionId
+  }
+
+  private clearSession(conversationId: string, emit: (event: AgentEvent) => void): void {
+    this.sessionIds.delete(conversationId)
+    emit({ type: 'session.cleared', conversationId })
+  }
+
+  private async runOnce(
+    input: AgentRunInput,
+    emit: (event: AgentEvent) => void,
+    sessionId: string | undefined,
+    options?: { skipStarted?: boolean }
+  ): Promise<void> {
     const controller = new AbortController()
     this.abortControllers.set(input.conversationId, controller)
 
-    emit({
-      type: 'message.started',
-      conversationId: input.conversationId,
-      messageId: input.messageId
-    })
+    if (!options?.skipStarted) {
+      emit({
+        type: 'message.started',
+        conversationId: input.conversationId,
+        messageId: input.messageId
+      })
+    }
 
     let usage: TokenUsage | undefined
     const rawMessages: unknown[] = []
-    const existingSessionId = this.sessionIds.get(input.conversationId)
+    const blockIndexToToolId = new Map<number, string>()
+    const toolInputBuffers = new Map<string, string>()
+    const prompt = withWorkspaceContext(buildPrompt(input, sessionId), input.workspaceFolders)
 
-    let prompt = input.content
-    if (input.workspaceFolders && input.workspaceFolders.length > 1) {
-      const folderList = input.workspaceFolders.map((f) => `- ${f}`).join('\n')
-      prompt = `[Workspace Context] This is a multi-directory workspace. The working directories are:\n${folderList}\nYou may need to work across these directories.\n\n${prompt}`
-    }
+    const permissionOptions = buildPermissionOptions((input.approvalLevel ?? 'request') as ApprovalLevel)
 
     const queryOptions = {
       abortController: controller,
@@ -36,10 +102,9 @@ export class ClaudeAgentAdapter implements AgentAdapter {
       allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'WebFetch', 'WebSearch'],
       skills: 'all' as const,
       maxTurns: 20,
-      permissionMode: 'bypassPermissions' as const,
-      allowDangerouslySkipPermissions: true,
+      ...permissionOptions,
       includePartialMessages: true,
-      ...(existingSessionId ? { resume: existingSessionId } : {})
+      ...(sessionId ? { resume: sessionId } : {})
     }
 
     try {
@@ -57,28 +122,58 @@ export class ClaudeAgentAdapter implements AgentAdapter {
 
         if (message.type === 'system' && message.subtype === 'init') {
           this.sessionIds.set(input.conversationId, message.session_id)
+          emit({
+            type: 'session.updated',
+            conversationId: input.conversationId,
+            sessionId: message.session_id
+          })
         } else if (message.type === 'stream_event') {
-          const event = (message as { event: { type: string; index?: number; content_block?: { type: string; id?: string; name?: string; input?: unknown }; delta?: { type: string; text?: string } } }).event
+          const event = (message as { event: { type: string; index?: number; content_block?: { type: string; id?: string; name?: string; input?: unknown }; delta?: { type: string; text?: string; partial_json?: string } } }).event
           if (event.type === 'content_block_start' && event.content_block?.type === 'tool_use') {
             const block = event.content_block
+            const toolUseId = block.id || `tool-${Date.now()}`
+            if (event.index !== undefined) {
+              blockIndexToToolId.set(event.index, toolUseId)
+            }
+            toolInputBuffers.set(toolUseId, '')
             emit({
               type: 'tool.started',
               conversationId: input.conversationId,
               messageId: input.messageId,
               tool: {
-                toolUseId: block.id || `tool-${Date.now()}`,
+                toolUseId,
                 toolName: block.name || 'unknown',
                 input: (block.input as Record<string, unknown>) || {},
                 status: 'running'
               }
             })
-          } else if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta' && event.delta.text) {
-            emit({
-              type: 'message.delta',
-              conversationId: input.conversationId,
-              messageId: input.messageId,
-              delta: event.delta.text
-            })
+          } else if (event.type === 'content_block_delta') {
+            if (event.delta?.type === 'text_delta' && event.delta.text) {
+              emit({
+                type: 'message.delta',
+                conversationId: input.conversationId,
+                messageId: input.messageId,
+                delta: event.delta.text
+              })
+            } else if (event.delta?.type === 'input_json_delta' && event.delta.partial_json) {
+              const toolUseId = event.index !== undefined ? blockIndexToToolId.get(event.index) : undefined
+              if (toolUseId) {
+                const accumulated = (toolInputBuffers.get(toolUseId) || '') + event.delta.partial_json
+                toolInputBuffers.set(toolUseId, accumulated)
+                try {
+                  const parsed = JSON.parse(accumulated) as Record<string, unknown>
+                  emit({
+                    type: 'tool.input_updated',
+                    conversationId: input.conversationId,
+                    messageId: input.messageId,
+                    toolUseId,
+                    input: parsed
+                  })
+                } catch {
+                  // partial JSON, wait for more deltas
+                }
+              }
+            }
           }
         } else if (message.type === 'tool_progress') {
           const toolMsg = message as { tool_use_id: string; tool_name: string; elapsed_time_seconds: number }
@@ -128,10 +223,16 @@ export class ClaudeAgentAdapter implements AgentAdapter {
             result.subtype === 'error_during_execution'
           ) {
             const errors = result.errors ?? []
+            const errText = errors.join('\n') || 'Agent execution error'
+            if (sessionId && isStaleSessionError({ message: errText })) {
+              this.clearSession(input.conversationId, emit)
+              await this.runOnce(input, emit, undefined, { skipStarted: true })
+              return
+            }
             emit({
               type: 'message.error',
               conversationId: input.conversationId,
-              error: errors.join('\n') || 'Agent execution error'
+              error: errText
             })
             this.abortControllers.delete(input.conversationId)
             return
@@ -144,12 +245,7 @@ export class ClaudeAgentAdapter implements AgentAdapter {
       if (controller.signal.aborted) {
         this.emitCompleted(input, emit, usage, rawMessages, queryOptions)
       } else {
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        emit({
-          type: 'message.error',
-          conversationId: input.conversationId,
-          error: errorMessage
-        })
+        throw error
       }
     } finally {
       this.abortControllers.delete(input.conversationId)

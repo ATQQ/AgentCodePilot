@@ -1,5 +1,10 @@
 import type { AgentEvent } from '../../preload/types'
 
+export interface ConversationHistoryItem {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 export interface AgentRunInput {
   conversationId: string
   messageId: string
@@ -7,6 +12,9 @@ export interface AgentRunInput {
   agentId: string
   cwd?: string
   workspaceFolders?: string[]
+  agentSessionId?: string | null
+  conversationHistory?: ConversationHistoryItem[]
+  approvalLevel?: 'request' | 'auto' | 'full'
 }
 
 export interface AgentAdapter {
