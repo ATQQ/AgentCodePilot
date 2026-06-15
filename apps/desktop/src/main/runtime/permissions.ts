@@ -1,7 +1,14 @@
-import { dialog, BrowserWindow } from 'electron'
 import type { CanUseTool, Options, PermissionMode } from '@anthropic-ai/claude-agent-sdk'
+import type { AgentEvent } from '../../preload/types'
+import { waitForApproval } from './approval-manager'
 
 export type ApprovalLevel = 'request' | 'auto' | 'full'
+
+export interface PermissionContext {
+  conversationId: string
+  messageId: string
+  emit: (event: AgentEvent) => void
+}
 
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
   Read: '读取文件',
@@ -12,6 +19,10 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   Grep: '搜索内容',
   WebFetch: '获取网页',
   WebSearch: '搜索网络'
+}
+
+export function getToolDisplayName(toolName: string): string {
+  return TOOL_DISPLAY_NAMES[toolName] || toolName
 }
 
 export function mapApprovalToPermissionMode(level: ApprovalLevel): PermissionMode {
@@ -45,39 +56,65 @@ function formatToolInputDetail(toolName: string, input: Record<string, unknown>)
   }
 }
 
-function createCanUseToolHandler(): CanUseTool {
+function getOperationLabel(toolName: string): string {
+  switch (toolName) {
+    case 'Read':
+      return '读取文件'
+    case 'Write':
+      return '写入文件'
+    case 'Edit':
+      return '修改文件'
+    case 'Bash':
+      return '执行命令'
+    case 'WebFetch':
+      return '访问网页'
+    case 'WebSearch':
+      return '搜索网络'
+    default:
+      return getToolDisplayName(toolName)
+  }
+}
+
+function createCanUseToolHandler(context: PermissionContext): CanUseTool {
   return async (toolName, input, options) => {
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-    const displayName = options.displayName || TOOL_DISPLAY_NAMES[toolName] || toolName
+    const displayName = options.displayName || getToolDisplayName(toolName)
     const inputDetail = formatToolInputDetail(toolName, input)
-    const title = options.title || `允许执行「${displayName}」？`
+    const title = options.title || `允许${getOperationLabel(toolName)}继续执行？`
     const detailParts = [
-      `工具：${toolName}（${displayName}）`,
+      inputDetail ? inputDetail : undefined,
       options.description,
-      inputDetail ? `详情：\n${inputDetail}` : undefined,
-      options.decisionReason ? `原因：${options.decisionReason}` : undefined
+      options.decisionReason ? options.decisionReason : undefined
     ].filter(Boolean)
-    const detail = detailParts.join('\n\n') || 'Claude Code 请求执行一项操作，请确认是否允许。'
+    const detail = detailParts.join('\n') || 'Claude Code 请求执行一项操作，请确认是否允许。'
+    const requestId = `apr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
-    const result = await dialog.showMessageBox(win ?? undefined, {
-      type: 'question',
-      title: '操作确认',
-      message: title,
-      detail,
-      buttons: ['允许', '拒绝'],
-      defaultId: 0,
-      cancelId: 1,
-      noLink: true
-    })
+    const allowed = await waitForApproval(
+      {
+        requestId,
+        conversationId: context.conversationId,
+        messageId: context.messageId,
+        toolUseId: options.toolUseID,
+        toolName,
+        displayName,
+        title,
+        description: options.description,
+        detail,
+        decisionReason: options.decisionReason
+      },
+      context.emit
+    )
 
-    if (result.response === 0) {
+    if (allowed) {
       return { behavior: 'allow' }
     }
     return { behavior: 'deny', message: '用户拒绝了此操作' }
   }
 }
 
-export function buildPermissionOptions(level: ApprovalLevel = 'request'): {
+export function buildPermissionOptions(
+  level: ApprovalLevel = 'auto',
+  context?: PermissionContext
+): {
   permissionMode: PermissionMode
   allowDangerouslySkipPermissions?: boolean
   canUseTool?: CanUseTool
@@ -91,10 +128,10 @@ export function buildPermissionOptions(level: ApprovalLevel = 'request'): {
     }
   }
 
-  if (level === 'request') {
+  if (context) {
     return {
       permissionMode,
-      canUseTool: createCanUseToolHandler()
+      canUseTool: createCanUseToolHandler(context)
     }
   }
 
@@ -105,7 +142,6 @@ export function buildToolAccessOptions(
   level: ApprovalLevel,
   tools: readonly string[]
 ): Pick<Options, 'tools' | 'allowedTools'> {
-  // allowedTools auto-approves without prompting — only use in full-access mode.
   if (level === 'full') {
     return { allowedTools: [...tools] }
   }

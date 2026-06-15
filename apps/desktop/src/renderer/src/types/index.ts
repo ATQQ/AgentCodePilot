@@ -43,6 +43,20 @@ export interface Message {
   debugOutput?: string
 }
 
+export interface ApprovalRequest {
+  requestId: string
+  conversationId: string
+  messageId: string
+  toolUseId: string
+  toolName: string
+  displayName: string
+  title: string
+  description?: string
+  detail: string
+  decisionReason?: string
+  status: 'pending' | 'allowed' | 'denied'
+}
+
 export interface Conversation {
   id: string
   title: string
@@ -54,6 +68,7 @@ export interface Conversation {
   updatedAt: string
   pinned?: boolean
   archived?: boolean
+  approvalLevel: ApprovalLevel
 }
 
 export interface FileAttachment {

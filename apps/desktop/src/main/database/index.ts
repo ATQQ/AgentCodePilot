@@ -124,6 +124,9 @@ function runMigrations(database: Database.Database): void {
   if (!convCols2.find((c) => c.name === 'agent_session_id')) {
     database.exec('ALTER TABLE conversations ADD COLUMN agent_session_id TEXT')
   }
+  if (!convCols2.find((c) => c.name === 'approval_level')) {
+    database.exec("ALTER TABLE conversations ADD COLUMN approval_level TEXT DEFAULT 'auto'")
+  }
 }
 
 export function closeDatabase(): void {

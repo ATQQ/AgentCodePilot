@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import type { ThemeMode } from '@renderer/types'
-import { ArrowLeft, Brush } from '@element-plus/icons-vue'
+import { ArrowLeft, Bell, Brush } from '@element-plus/icons-vue'
 // TODO: 恢复未实现设置项时取消注释
 // import {
 //   Setting,
@@ -40,7 +40,10 @@ interface NavGroup {
 const navGroups: NavGroup[] = [
   {
     titleKey: 'settings.personal',
-    items: [{ key: 'appearance', labelKey: 'settings.appearance', icon: Brush }]
+    items: [
+      { key: 'appearance', labelKey: 'settings.appearance', icon: Brush },
+      { key: 'notifications', labelKey: 'settings.notifications', icon: Bell }
+    ]
   }
 ]
 
@@ -196,6 +199,23 @@ function goBack(): void {
             </div>
           </div>
           -->
+        </div>
+
+        <div v-else-if="activeSection === 'notifications'" class="content-section">
+          <h1 class="page-title">{{ t('settings.notifications') }}</h1>
+
+          <div class="setting-card">
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">{{ t('settings.permissionNotifications') }}</div>
+                <div class="setting-desc">{{ t('settings.permissionNotificationsDesc') }}</div>
+              </div>
+              <el-switch
+                :model-value="settingsStore.permissionNotificationsEnabled"
+                @change="settingsStore.setPermissionNotificationsEnabled($event as boolean)"
+              />
+            </div>
+          </div>
         </div>
 
         <!-- TODO: General Section 实现后恢复
@@ -385,7 +405,7 @@ function goBack(): void {
   gap: var(--spacing-lg);
 }
 
-/* TODO: 未实现设置项 UI 恢复时取消注释
+/* TODO: 未实现设置项 UI 恢复时取消注释 */
 .setting-row {
   display: flex;
   align-items: center;
@@ -398,7 +418,6 @@ function goBack(): void {
   margin-top: var(--spacing-sm);
   padding-top: var(--spacing-md);
 }
-*/
 
 .setting-label {
   font-size: var(--font-size-base);

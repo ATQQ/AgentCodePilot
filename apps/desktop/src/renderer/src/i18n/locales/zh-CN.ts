@@ -66,6 +66,19 @@ export default {
     resend: '重新编辑',
     thinking: '思考中'
   },
+  approval: {
+    waitingTag: '等待批准',
+    operation: '操作',
+    path: '路径',
+    description: '说明',
+    defaultDescription: '将修改文件或内容，需要你确认后继续。',
+    scopeConversation: '本次对话允许',
+    scopeOnce: '仅本次允许',
+    allow: '允许',
+    deny: '拒绝',
+    allowed: '已允许',
+    denied: '已拒绝'
+  },
   settings: {
     title: '设置',
     searchPlaceholder: '搜索设置...',
@@ -75,6 +88,9 @@ export default {
     archived: '已归档',
     general: '常规',
     appearance: '外观',
+    notifications: '通知',
+    permissionNotifications: '启用权限通知',
+    permissionNotificationsDesc: 'Agent 需要你确认权限时，在系统通知中心显示提醒',
     configuration: '配置',
     personalization: '个性化',
     keyboardShortcuts: '键盘快捷键',

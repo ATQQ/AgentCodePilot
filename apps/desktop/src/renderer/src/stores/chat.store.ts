@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Attachment, Conversation, Message } from '@renderer/types'
+import type { Attachment, ApprovalRequest, Conversation, Message } from '@renderer/types'
 import type { AgentEvent, AttachmentPayload } from '../../../preload/types'
+import type { ApprovalLevel } from '@renderer/types'
 import { useWorkspaceStore } from './workspace.store'
 
 export const useChatStore = defineStore('chat', () => {
@@ -9,6 +10,7 @@ export const useChatStore = defineStore('chat', () => {
   const activeConversationId = ref<string | null>(null)
   const streamingConversationIds = ref<Set<string>>(new Set())
   const waitingConversationIds = ref<Set<string>>(new Set())
+  const pendingApprovals = ref<Map<string, ApprovalRequest>>(new Map())
   const queuedMessages = ref<{ conversationId: string; content: string; agentId: string }[]>([])
 
   const activeConversation = computed(() =>
@@ -39,6 +41,25 @@ export const useChatStore = defineStore('chat', () => {
     activeConversationId.value !== null && waitingConversationIds.value.has(activeConversationId.value)
   )
 
+  const pendingApprovalConversationIds = computed(() => {
+    const ids = new Set<string>()
+    for (const req of pendingApprovals.value.values()) {
+      if (req.status === 'pending') ids.add(req.conversationId)
+    }
+    return ids
+  })
+
+  function getPendingApprovalForMessage(messageId: string): ApprovalRequest | undefined {
+    for (const req of pendingApprovals.value.values()) {
+      if (req.messageId === messageId && req.status === 'pending') return req
+    }
+    return undefined
+  }
+
+  function hasPendingApproval(conversationId: string): boolean {
+    return pendingApprovalConversationIds.value.has(conversationId)
+  }
+
   function getConversationsByProject(projectId: string): Conversation[] {
     return conversations.value
       .filter((c) => c.projectId === projectId && !c.archived)
@@ -63,7 +84,9 @@ export const useChatStore = defineStore('chat', () => {
     const list = await window.agentAPI.conversations.list(projectId)
     for (const item of list) {
       const exists = conversations.value.find((c) => c.id === item.id)
-      if (!exists) {
+      if (exists) {
+        exists.approvalLevel = item.approvalLevel ?? 'auto'
+      } else {
         conversations.value.push({
           id: item.id,
           title: item.title,
@@ -72,6 +95,7 @@ export const useChatStore = defineStore('chat', () => {
           cwd: item.cwd,
           pinned: item.pinned,
           archived: item.archived,
+          approvalLevel: item.approvalLevel ?? 'auto',
           messages: [],
           createdAt: item.createdAt,
           updatedAt: item.updatedAt
@@ -129,6 +153,7 @@ export const useChatStore = defineStore('chat', () => {
       agentId,
       projectId: projectId ?? null,
       cwd: result.cwd,
+      approvalLevel: 'auto',
       messages: [msg],
       createdAt: now,
       updatedAt: now
@@ -307,7 +332,75 @@ export const useChatStore = defineStore('chat', () => {
         }
         break
       }
+      case 'approval.requested': {
+        const conv = conversations.value.find((c) => c.id === event.conversationId)
+        if (conv) {
+          let msg = conv.messages.find((m) => m.id === event.messageId)
+          if (!msg) {
+            msg = { id: event.messageId, role: 'assistant', content: '', createdAt: new Date().toISOString() }
+            conv.messages.push(msg)
+          }
+        }
+        const next = new Map(pendingApprovals.value)
+        next.set(event.requestId, {
+          requestId: event.requestId,
+          conversationId: event.conversationId,
+          messageId: event.messageId,
+          toolUseId: event.toolUseId,
+          toolName: event.toolName,
+          displayName: event.displayName,
+          title: event.title,
+          description: event.description,
+          detail: event.detail,
+          decisionReason: event.decisionReason,
+          status: 'pending'
+        })
+        pendingApprovals.value = next
+        waitingConversationIds.value.delete(event.conversationId)
+        break
+      }
+      case 'approval.resolved': {
+        const existing = pendingApprovals.value.get(event.requestId)
+        if (existing) {
+          const next = new Map(pendingApprovals.value)
+          next.set(event.requestId, {
+            ...existing,
+            status: event.allowed ? 'allowed' : 'denied'
+          })
+          pendingApprovals.value = next
+        }
+        if (event.allowed && event.scope === 'conversation') {
+          const conv = conversations.value.find((c) => c.id === event.conversationId)
+          if (conv) conv.approvalLevel = 'auto'
+        }
+        break
+      }
     }
+  }
+
+  async function respondToApproval(
+    requestId: string,
+    allowed: boolean,
+    scope: 'once' | 'conversation' = 'conversation'
+  ): Promise<void> {
+    await window.agentAPI.approval.respond({ requestId, allowed, scope })
+  }
+
+  async function setConversationApprovalLevel(
+    conversationId: string,
+    level: ApprovalLevel
+  ): Promise<void> {
+    const conv = conversations.value.find((c) => c.id === conversationId)
+    if (conv) {
+      conv.approvalLevel = level
+      await window.agentAPI.conversations.update({ id: conversationId, approvalLevel: level })
+    }
+  }
+
+  function initApprovalNavigateListener(): () => void {
+    return window.agentAPI.approval.onNavigate((conversationId) => {
+      setActive(conversationId)
+    })
   }
 
   function togglePin(conversationId: string): void {
@@ -365,6 +458,10 @@ export const useChatStore = defineStore('chat', () => {
     streamingConversationIds,
     isStreaming,
     isWaiting,
+    hasPendingApproval,
+    pendingApprovalConversationIds,
+    getPendingApprovalForMessage,
+    pendingApprovals,
     isConversationStreaming,
     currentQueuedMessages,
     conversationList,
@@ -383,6 +480,9 @@ export const useChatStore = defineStore('chat', () => {
     archiveConversation,
     deleteConversation,
     getConversationAsMarkdown,
-    initAgentEventListener
+    respondToApproval,
+    setConversationApprovalLevel,
+    initAgentEventListener,
+    initApprovalNavigateListener
   }
 })

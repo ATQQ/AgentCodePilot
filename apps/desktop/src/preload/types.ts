@@ -5,6 +5,8 @@ export const IPC_CHANNELS = {
   CHAT_SEND_FIRST: 'chat:sendFirstMessage',
   CHAT_STOP: 'chat:stop',
   AGENT_EVENT: 'agent:event',
+  APPROVAL_RESPOND: 'approval:respond',
+  APPROVAL_NAVIGATE: 'approval:navigate',
   SETTINGS_GET: 'settings:get',
   SETTINGS_UPDATE: 'settings:update',
   DIALOG_SELECT_FOLDER: 'dialog:selectFolder',
@@ -63,6 +65,7 @@ export interface SettingsPayload {
   theme?: 'light' | 'dark' | 'system'
   approvalLevel?: 'request' | 'auto' | 'full'
   language?: string
+  permissionNotificationsEnabled?: boolean
 }
 
 export interface ConversationUpdatePayload {
@@ -70,6 +73,7 @@ export interface ConversationUpdatePayload {
   title?: string
   pinned?: boolean
   archived?: boolean
+  approvalLevel?: 'request' | 'auto' | 'full'
 }
 
 export interface ProjectPayload {
@@ -118,6 +122,7 @@ export interface ConversationListItem {
   cwd: string | null
   pinned: boolean
   archived: boolean
+  approvalLevel: 'request' | 'auto' | 'full'
   createdAt: string
   updatedAt: string
 }
@@ -137,6 +142,7 @@ export interface SettingsInfo {
   theme: 'light' | 'dark' | 'system'
   approvalLevel: 'request' | 'auto' | 'full'
   language: string
+  permissionNotificationsEnabled: boolean
 }
 
 export interface TokenUsage {
@@ -156,6 +162,25 @@ export interface ToolUseInfo {
   elapsedSeconds?: number
 }
 
+export interface ApprovalRequestInfo {
+  requestId: string
+  conversationId: string
+  messageId: string
+  toolUseId: string
+  toolName: string
+  displayName: string
+  title: string
+  description?: string
+  detail: string
+  decisionReason?: string
+}
+
+export interface ApprovalRespondPayload {
+  requestId: string
+  allowed: boolean
+  scope?: 'once' | 'conversation'
+}
+
 export type AgentEvent =
   | { type: 'message.started'; conversationId: string; messageId: string }
   | { type: 'message.delta'; conversationId: string; messageId: string; delta: string }
@@ -167,6 +192,8 @@ export type AgentEvent =
   | { type: 'tool.completed'; conversationId: string; messageId: string; toolUseId: string; summary?: string }
   | { type: 'session.updated'; conversationId: string; sessionId: string }
   | { type: 'session.cleared'; conversationId: string }
+  | ({ type: 'approval.requested' } & ApprovalRequestInfo)
+  | { type: 'approval.resolved'; requestId: string; conversationId: string; allowed: boolean; scope?: 'once' | 'conversation' }
 
 export interface AgentAPI {
   agents: {
@@ -178,6 +205,10 @@ export interface AgentAPI {
     sendFirstMessage: (payload: SendMessagePayload) => Promise<void>
     stop: (conversationId: string) => Promise<void>
     onAgentEvent: (callback: (event: AgentEvent) => void) => () => void
+  }
+  approval: {
+    respond: (payload: ApprovalRespondPayload) => Promise<boolean>
+    onNavigate: (callback: (conversationId: string) => void) => () => void
   }
   conversations: {
     list: (projectId?: string | null) => Promise<ConversationListItem[]>

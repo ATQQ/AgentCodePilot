@@ -30,6 +30,7 @@ workspaceStore.loadProjects().then(() => {
   chatStore.loadConversations()
 })
 chatStore.initAgentEventListener()
+chatStore.initApprovalNavigateListener()
 setupMarkstream()
 
 app.mount('#app')

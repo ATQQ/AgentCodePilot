@@ -9,6 +9,7 @@ import { useSettingsStore } from '@renderer/stores/settings.store'
 import PromptComposer from '@renderer/components/home/PromptComposer.vue'
 import AgentSelector from '@renderer/components/home/AgentSelector.vue'
 import ToolCallsSection from '@renderer/components/chat/ToolCallsSection.vue'
+import ApprovalRequestCard from '@renderer/components/chat/ApprovalRequestCard.vue'
 import claudeIcon from '@renderer/assets/claude-icon.svg'
 import codexIcon from '@renderer/assets/codex-icon.svg'
 import cursorIcon from '@renderer/assets/cursor-icon.svg'
@@ -80,6 +81,11 @@ watch(
     if (!msgs || msgs.length === 0) return ''
     return msgs[msgs.length - 1].content
   },
+  () => scrollToBottom()
+)
+
+watch(
+  () => chatStore.pendingApprovalConversationIds.size,
   () => scrollToBottom()
 )
 
@@ -156,6 +162,14 @@ async function copyText(text: string): Promise<void> {
 function resendMessage(content: string): void {
   composerRef.value?.setInput(content)
 }
+
+function getPendingApproval(msgId: string) {
+  return chatStore.getPendingApprovalForMessage(msgId)
+}
+
+function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once' | 'conversation'): void {
+  chatStore.respondToApproval(requestId, allowed, scope)
+}
 </script>
 
 <template>
@@ -163,6 +177,12 @@ function resendMessage(content: string): void {
     <template v-if="chatStore.activeConversation">
       <div class="chat-header">
         <h3 class="chat-title">{{ chatStore.activeConversation.title }}</h3>
+        <span
+          v-if="chatStore.hasPendingApproval(chatStore.activeConversation.id)"
+          class="approval-waiting-tag"
+        >
+          {{ t('approval.waitingTag') }}
+        </span>
       </div>
 
       <div class="messages-container">
@@ -176,10 +196,21 @@ function resendMessage(content: string): void {
             <span class="agent-avatar">
               <img :src="currentAgentIcon" width="14" height="14" alt="" />
             </span>
-            {{ agentStore.currentAgent?.name }}
+            <span class="message-role-name">{{ agentStore.currentAgent?.name }}</span>
+            <span v-if="getPendingApproval(msg.id)" class="approval-inline-tag">
+              {{ t('approval.waitingTag') }}
+            </span>
+            <span v-if="getPendingApproval(msg.id)" class="approval-inline-summary">
+              APPROVAL {{ getPendingApproval(msg.id)?.toolName }} {{ getPendingApproval(msg.id)?.detail }}
+            </span>
           </div>
           <div class="message-content">
             <template v-if="msg.role === 'assistant'">
+              <ApprovalRequestCard
+                v-if="getPendingApproval(msg.id)"
+                :request="getPendingApproval(msg.id)!"
+                @respond="(allowed, scope) => handleApprovalRespond(getPendingApproval(msg.id)!.requestId, allowed, scope)"
+              />
               <ToolCallsSection
                 v-if="msg.toolCalls?.length"
                 :tool-calls="msg.toolCalls"
@@ -270,9 +301,11 @@ function resendMessage(content: string): void {
           ref="composerRef"
           :streaming="chatStore.isStreaming"
           :queued-messages="chatStore.currentQueuedMessages"
+          :approval-level="chatStore.activeConversation.approvalLevel"
           @submit="handleSubmit"
           @stop="handleStop"
           @cancel-queue="handleCancelQueue"
+          @approval-change="(level) => chatStore.setConversationApprovalLevel(chatStore.activeConversation!.id, level)"
         >
           <template #selectors>
             <AgentSelector />
@@ -295,6 +328,9 @@ function resendMessage(content: string): void {
 }
 
 .chat-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: var(--spacing-md) var(--spacing-lg);
   border-bottom: 1px solid var(--sidebar-border);
   flex-shrink: 0;
@@ -337,11 +373,44 @@ function resendMessage(content: string): void {
 .message-role {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   font-size: var(--font-size-xs);
   font-weight: 500;
   color: var(--content-text-secondary);
   margin-bottom: 4px;
+}
+
+.message-role-name {
+  flex-shrink: 0;
+}
+
+.approval-waiting-tag,
+.approval-inline-tag {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: #dcfce7;
+  color: #166534;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+html.dark .approval-waiting-tag,
+html.dark .approval-inline-tag {
+  background: rgba(52, 211, 153, 0.15);
+  color: #6ee7b7;
+}
+
+.approval-inline-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--content-text-tertiary);
 }
 
 .agent-avatar {

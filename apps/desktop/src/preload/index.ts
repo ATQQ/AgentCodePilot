@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type {
   AgentEvent,
+  ApprovalRespondPayload,
   CreateConversationPayload,
   SendMessagePayload,
   SettingsPayload,
@@ -30,6 +31,18 @@ const agentAPI = {
       ipcRenderer.on(IPC_CHANNELS.AGENT_EVENT, listener)
       return () => {
         ipcRenderer.removeListener(IPC_CHANNELS.AGENT_EVENT, listener)
+      }
+    }
+  },
+  approval: {
+    respond: (payload: ApprovalRespondPayload) =>
+      ipcRenderer.invoke(IPC_CHANNELS.APPROVAL_RESPOND, payload),
+    onNavigate: (callback: (conversationId: string) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, conversationId: string): void =>
+        callback(conversationId)
+      ipcRenderer.on(IPC_CHANNELS.APPROVAL_NAVIGATE, listener)
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.APPROVAL_NAVIGATE, listener)
       }
     }
   },

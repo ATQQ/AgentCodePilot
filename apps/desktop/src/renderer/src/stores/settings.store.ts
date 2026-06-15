@@ -16,8 +16,9 @@ function applyThemeToDOM(mode: ThemeMode): void {
 
 export const useSettingsStore = defineStore('settings', () => {
   const theme = ref<ThemeMode>('light')
-  const approvalLevel = ref<ApprovalLevel>('request')
+  const approvalLevel = ref<ApprovalLevel>('auto')
   const language = ref('zh-CN')
+  const permissionNotificationsEnabled = ref(true)
 
   applyThemeToDOM(theme.value)
 
@@ -36,6 +37,7 @@ export const useSettingsStore = defineStore('settings', () => {
     theme.value = settings.theme
     approvalLevel.value = settings.approvalLevel
     language.value = settings.language
+    permissionNotificationsEnabled.value = settings.permissionNotificationsEnabled
     applyThemeToDOM(settings.theme)
   }
 
@@ -49,5 +51,19 @@ export const useSettingsStore = defineStore('settings', () => {
     await window.agentAPI.settings.update({ approvalLevel: level })
   }
 
-  return { theme, approvalLevel, language, fetchSettings, setTheme, setApprovalLevel }
+  async function setPermissionNotificationsEnabled(enabled: boolean): Promise<void> {
+    permissionNotificationsEnabled.value = enabled
+    await window.agentAPI.settings.update({ permissionNotificationsEnabled: enabled })
+  }
+
+  return {
+    theme,
+    approvalLevel,
+    language,
+    permissionNotificationsEnabled,
+    fetchSettings,
+    setTheme,
+    setApprovalLevel,
+    setPermissionNotificationsEnabled
+  }
 })

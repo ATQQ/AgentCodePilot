@@ -96,8 +96,12 @@ export class ClaudeAgentAdapter implements AgentAdapter {
     const toolInputBuffers = new Map<string, string>()
     const prompt = withWorkspaceContext(buildPrompt(input, sessionId), input.workspaceFolders)
 
-    const approvalLevel = (input.approvalLevel ?? 'request') as ApprovalLevel
-    const permissionOptions = buildPermissionOptions(approvalLevel)
+    const approvalLevel = (input.approvalLevel ?? 'auto') as ApprovalLevel
+    const permissionOptions = buildPermissionOptions(approvalLevel, {
+      conversationId: input.conversationId,
+      messageId: input.messageId,
+      emit
+    })
     const toolAccessOptions = buildToolAccessOptions(approvalLevel, AGENT_TOOLS)
 
     const queryOptions: Options = {

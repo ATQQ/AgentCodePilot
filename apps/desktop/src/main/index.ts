@@ -23,6 +23,8 @@ import type {
 } from '../preload/types'
 import { agentRegistry, initializeAgentRegistry } from './runtime'
 import { supervisedRun, supervisedStop } from './runtime/supervisor'
+import { respondToApproval, cancelApprovalsForConversation } from './runtime/approval-manager'
+import type { ApprovalRespondPayload } from '../preload/types'
 import { startGateway, stopGateway, getGatewayConfig, isGatewayRunning } from './gateway'
 import { logInfo, logError, cleanOldLogs } from './logger'
 import { getDatabase, closeDatabase } from './database'
@@ -141,9 +143,14 @@ function getSettingsFromDb(): SettingsInfo {
   const all = repo.getAllSettings()
   return {
     theme: (all['theme'] as SettingsInfo['theme']) || 'light',
-    approvalLevel: (all['approvalLevel'] as SettingsInfo['approvalLevel']) || 'request',
-    language: all['language'] || 'zh-CN'
+    approvalLevel: (all['approvalLevel'] as SettingsInfo['approvalLevel']) || 'auto',
+    language: all['language'] || 'zh-CN',
+    permissionNotificationsEnabled: all['permissionNotificationsEnabled'] !== 'false'
   }
+}
+
+function getRunApprovalLevel(conversationId: string): 'request' | 'auto' | 'full' {
+  return repo.getConversationApprovalLevel(conversationId)
 }
 
 function registerIpcHandlers(): void {
@@ -179,6 +186,7 @@ function registerIpcHandlers(): void {
         agentId: payload.agentId,
         projectId: payload.projectId ?? null,
         cwd,
+        approvalLevel: 'auto',
         createdAt: now,
         updatedAt: now
       })
@@ -206,7 +214,7 @@ function registerIpcHandlers(): void {
       rawInput: prompt
     })
     const runContext = getConversationRunContext(payload.conversationId)
-    const approvalLevel = getSettingsFromDb().approvalLevel
+    const approvalLevel = getRunApprovalLevel(payload.conversationId)
     const runInput = {
       conversationId: payload.conversationId,
       messageId: assistantMsgId,
@@ -246,7 +254,7 @@ function registerIpcHandlers(): void {
       rawInput: prompt
     })
     const runContext = getConversationRunContext(payload.conversationId)
-    const approvalLevel = getSettingsFromDb().approvalLevel
+    const approvalLevel = getRunApprovalLevel(payload.conversationId)
     const runInput = {
       conversationId: payload.conversationId,
       messageId: assistantMsgId,
@@ -266,8 +274,30 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC_CHANNELS.CHAT_STOP, (_e, conversationId: string): void => {
+    cancelApprovalsForConversation(conversationId)
     supervisedStop(conversationId)
   })
+
+  ipcMain.handle(
+    IPC_CHANNELS.APPROVAL_RESPOND,
+    (_e, payload: ApprovalRespondPayload): boolean => {
+      const result = respondToApproval(payload.requestId, payload.allowed)
+      if (!result.resolved || !result.conversationId) return false
+
+      if (payload.allowed && payload.scope === 'conversation') {
+        repo.updateConversation(result.conversationId, { approvalLevel: 'auto' })
+      }
+
+      emitAgentEvent({
+        type: 'approval.resolved',
+        requestId: payload.requestId,
+        conversationId: result.conversationId,
+        allowed: payload.allowed,
+        scope: payload.scope
+      })
+      return true
+    }
+  )
 
   // --- Conversations ---
 
@@ -286,6 +316,9 @@ function registerIpcHandlers(): void {
         cwd: r.cwd ?? null,
         pinned: r.pinned === 1,
         archived: r.archived === 1,
+        approvalLevel: (r.approval_level === 'request' || r.approval_level === 'auto' || r.approval_level === 'full'
+          ? r.approval_level
+          : 'auto') as 'request' | 'auto' | 'full',
         createdAt: r.created_at,
         updatedAt: r.updated_at
       }))
@@ -332,7 +365,8 @@ function registerIpcHandlers(): void {
       repo.updateConversation(payload.id, {
         title: payload.title,
         pinned: payload.pinned,
-        archived: payload.archived
+        archived: payload.archived,
+        approvalLevel: payload.approvalLevel
       })
     }
   )
@@ -407,6 +441,9 @@ function registerIpcHandlers(): void {
     if (payload.theme) repo.setSetting('theme', payload.theme)
     if (payload.approvalLevel) repo.setSetting('approvalLevel', payload.approvalLevel)
     if (payload.language) repo.setSetting('language', payload.language)
+    if (payload.permissionNotificationsEnabled !== undefined) {
+      repo.setSetting('permissionNotificationsEnabled', payload.permissionNotificationsEnabled ? 'true' : 'false')
+    }
   })
 
   // --- Gateway ---

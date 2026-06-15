@@ -97,11 +97,12 @@ function newChatForProject(e: MouseEvent, projectId: string): void {
 }
 
 function getConvTitle(conv: Conversation): string {
+  if (conv.title) return conv.title
   if (conv.messages.length > 0) {
     const first = conv.messages[0].content
     return first.length > 30 ? first.slice(0, 30) + '...' : first
   }
-  return conv.title
+  return '新对话'
 }
 
 function handleQuickPin(e: MouseEvent, conv: Conversation): void {
@@ -143,7 +144,7 @@ function handlePin(): void {
 
 function handleRename(): void {
   if (!contextMenu.conv) return
-  renaming.value = { id: contextMenu.conv.id, title: getConvTitle(contextMenu.conv) }
+  renaming.value = { id: contextMenu.conv.id, title: contextMenu.conv.title || getConvTitle(contextMenu.conv) }
   closeContextMenu()
   setTimeout(() => renameInputRef.value?.focus(), 50)
 }
@@ -371,6 +372,7 @@ onUnmounted(() => {
                     </svg>
                   </button>
                   <span class="conv-title">{{ getConvTitle(conv) }}</span>
+                  <span v-if="chatStore.hasPendingApproval(conv.id)" class="conv-approval-tag">{{ t('approval.waitingTag') }}</span>
                   <span class="conv-time">{{ formatRelativeTime(conv.updatedAt) }}</span>
                   <button class="conv-more-btn" @click="showContextMenuFromButton($event, conv)">
                     <el-icon :size="12"><MoreFilled /></el-icon>
@@ -455,6 +457,7 @@ onUnmounted(() => {
                     </svg>
                   </button>
                   <span class="conv-title">{{ getConvTitle(conv) }}</span>
+                  <span v-if="chatStore.hasPendingApproval(conv.id)" class="conv-approval-tag">{{ t('approval.waitingTag') }}</span>
                   <span class="conv-time">{{ formatRelativeTime(conv.updatedAt) }}</span>
                   <button class="conv-more-btn" @click="showContextMenuFromButton($event, conv)">
                     <el-icon :size="12"><MoreFilled /></el-icon>
@@ -501,6 +504,7 @@ onUnmounted(() => {
                   </svg>
                 </button>
                 <span class="conv-title">{{ getConvTitle(conv) }}</span>
+                <span v-if="chatStore.hasPendingApproval(conv.id)" class="conv-approval-tag">{{ t('approval.waitingTag') }}</span>
                 <span class="conv-time">{{ formatRelativeTime(conv.updatedAt) }}</span>
                 <button class="conv-more-btn" @click="showContextMenuFromButton($event, conv)">
                   <el-icon :size="12"><MoreFilled /></el-icon>
@@ -821,6 +825,21 @@ onUnmounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   margin-left: 2px;
+}
+
+.conv-approval-tag {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: #dcfce7;
+  color: #166534;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+html.dark .conv-approval-tag {
+  background: rgba(52, 211, 153, 0.15);
+  color: #6ee7b7;
 }
 
 .conv-time {

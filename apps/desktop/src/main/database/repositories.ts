@@ -7,6 +7,7 @@ export interface ConversationRow {
   project_id: string | null
   cwd: string | null
   agent_session_id: string | null
+  approval_level: string | null
   pinned: number
   archived: number
   created_at: string
@@ -44,14 +45,24 @@ export function createConversation(conv: {
   agentId: string
   projectId: string | null
   cwd: string | null
+  approvalLevel?: string
   createdAt: string
   updatedAt: string
 }): void {
   const db = getDatabase()
   db.prepare(
-    `INSERT INTO conversations (id, title, agent_id, project_id, cwd, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).run(conv.id, conv.title, conv.agentId, conv.projectId, conv.cwd, conv.createdAt, conv.updatedAt)
+    `INSERT INTO conversations (id, title, agent_id, project_id, cwd, approval_level, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    conv.id,
+    conv.title,
+    conv.agentId,
+    conv.projectId,
+    conv.cwd,
+    conv.approvalLevel ?? 'auto',
+    conv.createdAt,
+    conv.updatedAt
+  )
 }
 
 export function getConversationsByProject(projectId: string): ConversationRow[] {
@@ -133,7 +144,7 @@ export function resolveWorkspaceFoldersForProjectId(projectId: string): string[]
 
 export function updateConversation(
   id: string,
-  fields: { title?: string; pinned?: boolean; archived?: boolean }
+  fields: { title?: string; pinned?: boolean; archived?: boolean; approvalLevel?: string }
 ): void {
   const db = getDatabase()
   const sets: string[] = []
@@ -151,6 +162,10 @@ export function updateConversation(
     sets.push('archived = ?')
     values.push(fields.archived ? 1 : 0)
   }
+  if (fields.approvalLevel !== undefined) {
+    sets.push('approval_level = ?')
+    values.push(fields.approvalLevel)
+  }
 
   if (sets.length === 0) return
 
@@ -159,6 +174,13 @@ export function updateConversation(
   values.push(id)
 
   db.prepare(`UPDATE conversations SET ${sets.join(', ')} WHERE id = ?`).run(...values)
+}
+
+export function getConversationApprovalLevel(conversationId: string): 'request' | 'auto' | 'full' {
+  const conv = getConversationById(conversationId)
+  const level = conv?.approval_level
+  if (level === 'request' || level === 'auto' || level === 'full') return level
+  return 'auto'
 }
 
 export function deleteConversation(id: string): void {

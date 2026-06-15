@@ -1,14 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { storeToRefs } from 'pinia'
 import { Plus, Top } from '@element-plus/icons-vue'
-import { useSettingsStore } from '@renderer/stores/settings.store'
-import type { Attachment, FileAttachment, UrlAttachment } from '@renderer/types'
+import type { Attachment, ApprovalLevel, FileAttachment, UrlAttachment } from '@renderer/types'
 
 const { t } = useI18n()
-const settingsStore = useSettingsStore()
-const { approvalLevel } = storeToRefs(settingsStore)
 const input = ref('')
 const showAddMenu = ref(false)
 const showApprovalMenu = ref(false)
@@ -21,12 +17,16 @@ const urlInputValue = ref('')
 const props = defineProps<{
   streaming?: boolean
   queuedMessages?: { content: string }[]
+  approvalLevel?: ApprovalLevel
 }>()
+
+const approvalLevel = computed(() => props.approvalLevel ?? 'auto')
 
 const emit = defineEmits<{
   submit: [text: string, attachments: Attachment[]]
   stop: []
   cancelQueue: [index: number]
+  approvalChange: [level: ApprovalLevel]
 }>()
 
 function generateId(): string {
@@ -166,8 +166,8 @@ function handleCancelQueue(index: number): void {
   emit('cancelQueue', index)
 }
 
-function selectApproval(level: 'request' | 'auto' | 'full'): void {
-  settingsStore.setApprovalLevel(level)
+function selectApproval(level: ApprovalLevel): void {
+  emit('approvalChange', level)
   showApprovalMenu.value = false
 }
 
