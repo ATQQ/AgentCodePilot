@@ -281,12 +281,12 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.APPROVAL_RESPOND,
     (_e, payload: ApprovalRespondPayload): boolean => {
-      const result = respondToApproval(payload.requestId, payload.allowed)
+      const result = respondToApproval(
+        payload.requestId,
+        payload.allowed,
+        payload.scope ?? 'once'
+      )
       if (!result.resolved || !result.conversationId) return false
-
-      if (payload.allowed && payload.scope === 'conversation') {
-        repo.updateConversation(result.conversationId, { approvalLevel: 'auto' })
-      }
 
       emitAgentEvent({
         type: 'approval.resolved',

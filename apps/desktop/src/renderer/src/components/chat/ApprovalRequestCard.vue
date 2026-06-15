@@ -13,7 +13,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const scope = ref<'once' | 'conversation'>('conversation')
+const scope = ref<'once' | 'conversation'>('once')
 const showScopeMenu = ref(false)
 
 function handleAllow(): void {

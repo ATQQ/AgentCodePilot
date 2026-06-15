@@ -1,5 +1,14 @@
-import type { CanUseTool, Options, PermissionMode } from '@anthropic-ai/claude-agent-sdk'
+import type {
+  CanUseTool,
+  HookCallback,
+  Options,
+  PermissionMode,
+  PermissionRequestHookInput,
+  PermissionResult,
+  PermissionUpdate
+} from '@anthropic-ai/claude-agent-sdk'
 import type { AgentEvent } from '../../preload/types'
+import type { ApprovalRequestPayload, ApprovalResult } from './approval-manager'
 import { waitForApproval } from './approval-manager'
 
 export type ApprovalLevel = 'request' | 'auto' | 'full'
@@ -20,6 +29,8 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   WebFetch: '获取网页',
   WebSearch: '搜索网络'
 }
+
+const activeApprovalByToolUse = new Map<string, Promise<ApprovalResult>>()
 
 export function getToolDisplayName(toolName: string): string {
   return TOOL_DISPLAY_NAMES[toolName] || toolName
@@ -75,39 +86,148 @@ function getOperationLabel(toolName: string): string {
   }
 }
 
-function createCanUseToolHandler(context: PermissionContext): CanUseTool {
-  return async (toolName, input, options) => {
-    const displayName = options.displayName || getToolDisplayName(toolName)
-    const inputDetail = formatToolInputDetail(toolName, input)
-    const title = options.title || `允许${getOperationLabel(toolName)}继续执行？`
-    const detailParts = [
-      inputDetail ? inputDetail : undefined,
-      options.description,
-      options.decisionReason ? options.decisionReason : undefined
-    ].filter(Boolean)
-    const detail = detailParts.join('\n') || 'Claude Code 请求执行一项操作，请确认是否允许。'
-    const requestId = `apr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+function buildApprovalKey(
+  conversationId: string,
+  toolUseId: string | undefined,
+  toolName: string,
+  input: Record<string, unknown>
+): string {
+  if (toolUseId) return `${conversationId}:${toolUseId}`
+  return `${conversationId}:${toolName}:${formatToolInputDetail(toolName, input)}`
+}
 
-    const allowed = await waitForApproval(
-      {
-        requestId,
-        conversationId: context.conversationId,
-        messageId: context.messageId,
-        toolUseId: options.toolUseID,
-        toolName,
-        displayName,
-        title,
-        description: options.description,
-        detail,
-        decisionReason: options.decisionReason
-      },
-      context.emit
-    )
-
-    if (allowed) {
-      return { behavior: 'allow' }
+function buildPermissionResult(
+  approval: ApprovalResult,
+  suggestions?: PermissionUpdate[]
+): PermissionResult {
+  if (!approval.allowed) {
+    return {
+      behavior: 'deny',
+      message: '用户拒绝了此操作',
+      decisionClassification: 'user_reject'
     }
-    return { behavior: 'deny', message: '用户拒绝了此操作' }
+  }
+
+  const decisionClassification =
+    approval.scope === 'conversation' ? 'user_permanent' : 'user_temporary'
+
+  if (suggestions?.length) {
+    return {
+      behavior: 'allow',
+      updatedPermissions: suggestions,
+      decisionClassification
+    }
+  }
+
+  return {
+    behavior: 'allow',
+    decisionClassification
+  }
+}
+
+async function requestToolApproval(
+  context: PermissionContext,
+  params: {
+    toolUseId: string | undefined
+    toolName: string
+    input: Record<string, unknown>
+    title?: string
+    displayName?: string
+    description?: string
+    decisionReason?: string
+    suggestions?: PermissionUpdate[]
+  }
+): Promise<PermissionResult> {
+  const inputDetail = formatToolInputDetail(params.toolName, params.input)
+  const title = params.title || `允许${getOperationLabel(params.toolName)}继续执行？`
+  const detailParts = [
+    inputDetail ? inputDetail : undefined,
+    params.description,
+    params.decisionReason ? params.decisionReason : undefined
+  ].filter(Boolean)
+  const detail = detailParts.join('\n') || 'Claude Code 请求执行一项操作，请确认是否允许。'
+  const approvalKey = buildApprovalKey(context.conversationId, params.toolUseId, params.toolName, params.input)
+
+  let pending = activeApprovalByToolUse.get(approvalKey)
+  if (!pending) {
+    const requestId = `apr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const payload: ApprovalRequestPayload = {
+      requestId,
+      conversationId: context.conversationId,
+      messageId: context.messageId,
+      toolUseId: params.toolUseId || requestId,
+      toolName: params.toolName,
+      displayName: params.displayName || getToolDisplayName(params.toolName),
+      title,
+      description: params.description,
+      detail,
+      decisionReason: params.decisionReason
+    }
+
+    pending = waitForApproval(payload, context.emit).finally(() => {
+      activeApprovalByToolUse.delete(approvalKey)
+    })
+    activeApprovalByToolUse.set(approvalKey, pending)
+  }
+
+  const approval = await pending
+  return buildPermissionResult(approval, params.suggestions)
+}
+
+function createCanUseToolHandler(context: PermissionContext): CanUseTool {
+  return async (toolName, input, options) =>
+    requestToolApproval(context, {
+      toolUseId: options.toolUseID,
+      toolName,
+      input,
+      title: options.title,
+      displayName: options.displayName,
+      description: options.description,
+      decisionReason: options.decisionReason,
+      suggestions: options.suggestions
+    })
+}
+
+function createPermissionRequestHook(context: PermissionContext): HookCallback {
+  return async (input, toolUseID) => {
+    if (input.hook_event_name !== 'PermissionRequest') {
+      return {}
+    }
+
+    const hookInput = input as PermissionRequestHookInput
+    const toolInput =
+      hookInput.tool_input && typeof hookInput.tool_input === 'object'
+        ? (hookInput.tool_input as Record<string, unknown>)
+        : {}
+
+    const result = await requestToolApproval(context, {
+      toolUseId: toolUseID,
+      toolName: hookInput.tool_name,
+      input: toolInput,
+      suggestions: hookInput.permission_suggestions
+    })
+
+    if (result.behavior === 'deny') {
+      return {
+        hookSpecificOutput: {
+          hookEventName: 'PermissionRequest',
+          decision: {
+            behavior: 'deny',
+            message: result.message
+          }
+        }
+      }
+    }
+
+    return {
+      hookSpecificOutput: {
+        hookEventName: 'PermissionRequest',
+        decision: {
+          behavior: 'allow',
+          updatedPermissions: result.updatedPermissions
+        }
+      }
+    }
   }
 }
 
@@ -118,6 +238,7 @@ export function buildPermissionOptions(
   permissionMode: PermissionMode
   allowDangerouslySkipPermissions?: boolean
   canUseTool?: CanUseTool
+  hooks?: Options['hooks']
 } {
   const permissionMode = mapApprovalToPermissionMode(level)
 
@@ -131,7 +252,10 @@ export function buildPermissionOptions(
   if (context) {
     return {
       permissionMode,
-      canUseTool: createCanUseToolHandler(context)
+      canUseTool: createCanUseToolHandler(context),
+      hooks: {
+        PermissionRequest: [{ hooks: [createPermissionRequestHook(context)] }]
+      }
     }
   }
 

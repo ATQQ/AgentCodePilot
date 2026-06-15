@@ -394,10 +394,6 @@ export const useChatStore = defineStore('chat', () => {
           })
           pendingApprovals.value = next
         }
-        if (event.allowed && event.scope === 'conversation') {
-          const conv = conversations.value.find((c) => c.id === event.conversationId)
-          if (conv) conv.approvalLevel = 'auto'
-        }
         break
       }
     }

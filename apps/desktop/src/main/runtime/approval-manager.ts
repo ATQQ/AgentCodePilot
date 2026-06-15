@@ -16,8 +16,15 @@ export interface ApprovalRequestPayload {
   decisionReason?: string
 }
 
+export type ApprovalScope = 'once' | 'conversation'
+
+export interface ApprovalResult {
+  allowed: boolean
+  scope: ApprovalScope
+}
+
 interface PendingApproval {
-  resolve: (allowed: boolean) => void
+  resolve: (result: ApprovalResult) => void
   conversationId: string
 }
 
@@ -59,7 +66,7 @@ function showApprovalNotification(payload: ApprovalRequestPayload): void {
 export function waitForApproval(
   payload: ApprovalRequestPayload,
   emit: (event: AgentEvent) => void
-): Promise<boolean> {
+): Promise<ApprovalResult> {
   return new Promise((resolve) => {
     pendingApprovals.set(payload.requestId, {
       resolve,
@@ -77,13 +84,14 @@ export function waitForApproval(
 
 export function respondToApproval(
   requestId: string,
-  allowed: boolean
+  allowed: boolean,
+  scope: ApprovalScope = 'once'
 ): { resolved: boolean; conversationId?: string } {
   const pending = pendingApprovals.get(requestId)
   if (!pending) return { resolved: false }
 
   pendingApprovals.delete(requestId)
-  pending.resolve(allowed)
+  pending.resolve({ allowed, scope })
   return { resolved: true, conversationId: pending.conversationId }
 }
 
@@ -91,7 +99,7 @@ export function cancelApprovalsForConversation(conversationId: string): void {
   for (const [requestId, pending] of pendingApprovals) {
     if (pending.conversationId === conversationId) {
       pendingApprovals.delete(requestId)
-      pending.resolve(false)
+      pending.resolve({ allowed: false, scope: 'once' })
     }
   }
 }
