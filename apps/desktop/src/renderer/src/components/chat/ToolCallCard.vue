@@ -13,10 +13,16 @@ const detailLines = computed(() => getToolDetailLines(props.toolCall))
 
 const statusIcon = computed(() => {
   switch (props.toolCall.status) {
-    case 'running': return '⟳'
-    case 'completed': return '✓'
-    case 'error': return '✗'
-    default: return ''
+    case 'pending':
+      return '◷'
+    case 'running':
+      return '⟳'
+    case 'completed':
+      return '✓'
+    case 'error':
+      return '✗'
+    default:
+      return '◷'
   }
 })
 </script>
@@ -28,7 +34,7 @@ const statusIcon = computed(() => {
     :style="{ marginLeft: `${(depth ?? 0) * 16}px` }"
   >
     <div class="tool-header">
-      <span class="tool-status-icon">{{ statusIcon }}</span>
+      <span class="tool-status-icon" :title="toolCall.status">{{ statusIcon }}</span>
       <span class="tool-name-badge">{{ toolCall.toolName }}</span>
       <span class="tool-label">{{ label }}</span>
       <span v-if="toolCall.elapsedSeconds" class="tool-elapsed">
@@ -68,6 +74,10 @@ const statusIcon = computed(() => {
   background: var(--sidebar-bg);
 }
 
+.tool-call-card.status-pending {
+  border-color: var(--sidebar-border);
+}
+
 .tool-call-card.status-running {
   border-color: var(--el-color-primary-light-5);
 }
@@ -91,6 +101,11 @@ const statusIcon = computed(() => {
   width: 16px;
   text-align: center;
   flex-shrink: 0;
+  line-height: 1;
+}
+
+.status-pending .tool-status-icon {
+  color: var(--content-text-tertiary);
 }
 
 .status-running .tool-status-icon {

@@ -271,6 +271,13 @@ export const useChatStore = defineStore('chat', () => {
             if (event.usage) msg.usage = event.usage
             if (event.debugInput) msg.debugInput = event.debugInput
             if (event.debugOutput) msg.debugOutput = event.debugOutput
+            if (msg.toolCalls) {
+              for (const tc of msg.toolCalls) {
+                if (tc.status === 'pending' || tc.status === 'running') {
+                  tc.status = 'completed'
+                }
+              }
+            }
           }
         }
         streamingConversationIds.value.delete(event.conversationId)
@@ -308,7 +315,17 @@ export const useChatStore = defineStore('chat', () => {
         const msg = conv.messages.find((m) => m.id === event.messageId)
         if (!msg?.toolCalls) return
         const tc = msg.toolCalls.find((t) => t.toolUseId === event.toolUseId)
-        if (tc) tc.input = event.input
+        if (tc) {
+          tc.input = event.input
+          if (tc.status === 'pending') {
+            const hasRunning = msg.toolCalls.some(
+              (t) => t.toolUseId !== event.toolUseId && t.status === 'running'
+            )
+            if (!hasRunning) {
+              tc.status = 'running'
+            }
+          }
+        }
         break
       }
       case 'tool.progress': {
@@ -317,7 +334,10 @@ export const useChatStore = defineStore('chat', () => {
         const msg = conv.messages.find((m) => m.id === event.messageId)
         if (!msg?.toolCalls) return
         const tc = msg.toolCalls.find((t) => t.toolUseId === event.toolUseId)
-        if (tc) tc.elapsedSeconds = event.elapsedSeconds
+        if (tc) {
+          tc.status = 'running'
+          tc.elapsedSeconds = event.elapsedSeconds
+        }
         break
       }
       case 'tool.completed': {
@@ -329,6 +349,11 @@ export const useChatStore = defineStore('chat', () => {
         if (tc) {
           tc.status = 'completed'
           if (event.summary) tc.summary = event.summary
+          const nextPending = msg.toolCalls.find((t) => t.status === 'pending')
+          if (nextPending) {
+            const hasRunning = msg.toolCalls.some((t) => t.status === 'running')
+            if (!hasRunning) nextPending.status = 'running'
+          }
         }
         break
       }

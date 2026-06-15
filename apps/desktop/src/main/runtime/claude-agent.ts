@@ -152,7 +152,7 @@ export class ClaudeAgentAdapter implements AgentAdapter {
                 toolUseId,
                 toolName: block.name || 'unknown',
                 input: (block.input as Record<string, unknown>) || {},
-                status: 'running'
+                status: 'pending'
               }
             })
           } else if (event.type === 'content_block_delta') {

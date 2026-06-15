@@ -26,7 +26,7 @@ export interface ToolCall {
   toolUseId: string
   toolName: string
   input: Record<string, unknown>
-  status: 'running' | 'completed' | 'error'
+  status: 'pending' | 'running' | 'completed' | 'error'
   summary?: string
   elapsedSeconds?: number
 }

@@ -182,7 +182,7 @@ async function simulateToolCalls(
         toolUseId: step.toolUseId,
         toolName: step.toolName,
         input: {},
-        status: 'running'
+        status: 'pending'
       }
     })
 
@@ -195,6 +195,14 @@ async function simulateToolCalls(
       messageId: input.messageId,
       toolUseId: step.toolUseId,
       input: step.input
+    })
+
+    emit({
+      type: 'tool.progress',
+      conversationId: input.conversationId,
+      messageId: input.messageId,
+      toolUseId: step.toolUseId,
+      elapsedSeconds: 0.1
     })
 
     for (const elapsed of step.progressSeconds) {
