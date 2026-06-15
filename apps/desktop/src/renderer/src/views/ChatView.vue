@@ -330,6 +330,8 @@ function resendMessage(content: string): void {
 
 .message.assistant {
   align-self: flex-start;
+  width: 100%;
+  max-width: 85%;
 }
 
 .message-role {
@@ -372,6 +374,18 @@ function resendMessage(content: string): void {
 
 .message.assistant .message-content {
   color: var(--content-text);
+  width: 100%;
+  min-width: 0;
+}
+
+.message.assistant .message-content :deep(.markstream-vue) {
+  width: 100%;
+  max-width: 100%;
+}
+
+.message.assistant .message-content :deep(.code-block-container) {
+  width: 100%;
+  max-width: 100%;
 }
 
 .chat-input-area {

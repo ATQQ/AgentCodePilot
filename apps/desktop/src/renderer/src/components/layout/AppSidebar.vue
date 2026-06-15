@@ -626,6 +626,29 @@ onUnmounted(() => {
   flex: 1;
   overflow-y: auto;
   padding: 0 var(--spacing-sm);
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.sidebar-content:hover {
+  scrollbar-color: color-mix(in srgb, var(--sidebar-section-title) 30%, transparent) transparent;
+}
+
+.sidebar-content::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
+}
+
+.sidebar-content:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--sidebar-section-title) 30%, transparent);
 }
 
 .sidebar-nav {

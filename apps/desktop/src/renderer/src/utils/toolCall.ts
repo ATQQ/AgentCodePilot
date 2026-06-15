@@ -43,6 +43,13 @@ export function getToolDetailLines(toolCall: ToolCall): ToolDetailLine[] {
     case 'Write':
     case 'Edit':
       if (input.file_path) lines.push({ label: '路径', value: String(input.file_path) })
+      if (toolCall.toolName === 'Write' && input.content) {
+        lines.push({ label: '内容', value: truncateText(String(input.content), 200) })
+      }
+      if (toolCall.toolName === 'Edit') {
+        if (input.old_string) lines.push({ label: '原内容', value: truncateText(String(input.old_string), 120) })
+        if (input.new_string) lines.push({ label: '新内容', value: truncateText(String(input.new_string), 120) })
+      }
       break
     case 'Glob':
       if (input.pattern) lines.push({ label: '模式', value: String(input.pattern) })
@@ -84,11 +91,23 @@ export function getToolDetail(toolCall: ToolCall): string {
 }
 
 export function getToolDetailPreview(toolCall: ToolCall, maxLen = 60): string {
+  const label = getToolLabel(toolCall.toolName)
   const lines = getToolDetailLines(toolCall)
-  if (lines.length === 0) return getToolLabel(toolCall.toolName)
+  if (lines.length === 0) return `${toolCall.toolName} · ${label}`
 
-  const primary = lines.find((l) => l.label === '命令' || l.label === '路径' || l.label === '指令' || l.label === '任务') ?? lines[0]
-  const text = primary.label === '命令' ? `$ ${primary.value}` : primary.value
+  const primary = lines.find((l) => l.label === '命令' || l.label === '路径' || l.label === '指令' || l.label === '任务' || l.label === 'URL') ?? lines[0]
+  let text = primary.value
+  if (primary.label === '命令') text = `$ ${text}`
+  if (primary.label === '路径') text = text.split('/').pop() || text
+  const detail = text.length <= maxLen ? text : text.slice(0, maxLen) + '…'
+  return `${toolCall.toolName} ${label} · ${detail}`
+}
+
+function truncateText(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text
   return text.slice(0, maxLen) + '…'
+}
+
+export function getToolCallHeader(toolCall: ToolCall): string {
+  return getToolDetailPreview(toolCall, 40)
 }

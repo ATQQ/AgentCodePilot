@@ -3,7 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { ArrowRight } from '@element-plus/icons-vue'
 import ToolCallCard from './ToolCallCard.vue'
 import type { ToolCall } from '@renderer/types'
-import { getToolLabel, getToolDetailPreview } from '@renderer/utils/toolCall'
+import { getToolCallHeader } from '@renderer/utils/toolCall'
 
 const props = defineProps<{
   toolCalls: ToolCall[]
@@ -25,11 +25,7 @@ watch(
 )
 
 const collapsedSummary = computed(() => {
-  const labels = props.toolCalls.map((tc) => {
-    const detail = getToolDetailPreview(tc, 40)
-    return detail !== getToolLabel(tc.toolName) ? `${getToolLabel(tc.toolName)}: ${detail}` : getToolLabel(tc.toolName)
-  })
-  return labels.join(' · ')
+  return props.toolCalls.map((tc) => getToolCallHeader(tc)).join(' · ')
 })
 
 function toggle(): void {
@@ -44,7 +40,7 @@ function toggle(): void {
         <ArrowRight />
       </el-icon>
       <span class="toggle-label">{{ toolCalls.length }} 个工具调用</span>
-      <span v-if="!expanded" class="toggle-summary">{{ collapsedSummary }}</span>
+      <span class="toggle-summary">{{ collapsedSummary }}</span>
     </button>
     <div v-show="expanded" class="tool-calls-list">
       <ToolCallCard

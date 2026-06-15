@@ -29,6 +29,7 @@ const statusIcon = computed(() => {
   >
     <div class="tool-header">
       <span class="tool-status-icon">{{ statusIcon }}</span>
+      <span class="tool-name-badge">{{ toolCall.toolName }}</span>
       <span class="tool-label">{{ label }}</span>
       <span v-if="toolCall.elapsedSeconds" class="tool-elapsed">
         {{ toolCall.elapsedSeconds.toFixed(1) }}s
@@ -37,7 +38,7 @@ const statusIcon = computed(() => {
     <div v-if="detailLines.length" class="tool-details">
       <div v-for="(line, idx) in detailLines" :key="idx" class="tool-detail-row">
         <span class="tool-detail-label">{{ line.label }}</span>
-        <span class="tool-detail-value" :class="{ mono: line.label === '命令' || line.label === '路径' }">
+        <span class="tool-detail-value" :class="{ mono: line.label === '命令' || line.label === '路径' || line.label === '内容' || line.label === '原内容' || line.label === '新内容' }">
           {{ line.label === '命令' ? `$ ${line.value}` : line.value }}
         </span>
       </div>
@@ -114,6 +115,18 @@ const statusIcon = computed(() => {
   font-weight: 500;
   color: var(--content-text);
   flex-shrink: 0;
+}
+
+.tool-name-badge {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--sidebar-item-active);
+  color: var(--content-text-secondary);
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .tool-elapsed {

@@ -1,9 +1,11 @@
-import { query } from '@anthropic-ai/claude-agent-sdk'
+import { Options, query } from '@anthropic-ai/claude-agent-sdk'
 import { app } from 'electron'
 import type { AgentEvent, TokenUsage } from '../../preload/types'
 import type { AgentAdapter, AgentRunInput } from './types'
 import type { ApprovalLevel } from './permissions'
-import { buildPermissionOptions } from './permissions'
+import { buildPermissionOptions, buildToolAccessOptions } from './permissions'
+
+const AGENT_TOOLS = ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'WebFetch', 'WebSearch'] as const
 
 function isStaleSessionError(error: unknown): boolean {
   const msg = error instanceof Error ? error.message : String(error)
@@ -94,12 +96,14 @@ export class ClaudeAgentAdapter implements AgentAdapter {
     const toolInputBuffers = new Map<string, string>()
     const prompt = withWorkspaceContext(buildPrompt(input, sessionId), input.workspaceFolders)
 
-    const permissionOptions = buildPermissionOptions((input.approvalLevel ?? 'request') as ApprovalLevel)
+    const approvalLevel = (input.approvalLevel ?? 'request') as ApprovalLevel
+    const permissionOptions = buildPermissionOptions(approvalLevel)
+    const toolAccessOptions = buildToolAccessOptions(approvalLevel, AGENT_TOOLS)
 
-    const queryOptions = {
+    const queryOptions: Options = {
       abortController: controller,
       cwd: input.cwd || app.getPath('home'),
-      allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'WebFetch', 'WebSearch'],
+      ...toolAccessOptions,
       skills: 'all' as const,
       maxTurns: 20,
       ...permissionOptions,
