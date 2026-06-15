@@ -9,7 +9,7 @@ const input = ref('')
 const showAddMenu = ref(false)
 const showApprovalMenu = ref(false)
 const planMode = ref(false)
-const pursueGoals = ref(false)
+// const pursueGoals = ref(false) // TODO: 目标模式，后续实现
 const attachments = ref<Attachment[]>([])
 const showUrlInput = ref(false)
 const urlInputValue = ref('')
@@ -23,7 +23,7 @@ const props = defineProps<{
 const approvalLevel = computed(() => props.approvalLevel ?? 'auto')
 
 const emit = defineEmits<{
-  submit: [text: string, attachments: Attachment[]]
+  submit: [text: string, attachments: Attachment[], planMode: boolean]
   stop: []
   cancelQueue: [index: number]
   approvalChange: [level: ApprovalLevel]
@@ -44,7 +44,7 @@ function getFileName(path: string): string {
 function handleSubmit(): void {
   const text = input.value.trim()
   if (!text && attachments.value.length === 0) return
-  emit('submit', text, [...attachments.value])
+  emit('submit', text, [...attachments.value], planMode.value)
   input.value = ''
   attachments.value = []
 }
@@ -191,7 +191,7 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
 </script>
 
 <template>
-  <div class="composer">
+  <div class="composer" :class="{ 'composer--plan': planMode }">
     <!-- Queued messages -->
     <div v-if="props.queuedMessages?.length" class="queued-area">
       <div v-for="(msg, idx) in props.queuedMessages" :key="idx" class="queued-banner">
@@ -277,11 +277,13 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
                 <span>{{ t('composer.addMenu.planMode') }}</span>
                 <span class="toggle-indicator" :class="{ active: planMode }"></span>
               </button>
+              <!-- TODO: 目标模式，后续实现
               <button class="menu-item menu-item--toggle" @click.stop="pursueGoals = !pursueGoals">
                 <span class="menu-icon">&#x1F3AF;</span>
                 <span>{{ t('composer.addMenu.pursueGoals') }}</span>
                 <span class="toggle-indicator" :class="{ active: pursueGoals }"></span>
               </button>
+              -->
               <div class="menu-divider"></div>
               <button class="menu-item">
                 <span class="menu-icon">&#x1F9E9;</span>
@@ -291,6 +293,14 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
             </div>
           </Transition>
         </div>
+
+        <button
+          v-if="planMode"
+          class="plan-mode-badge"
+          @click="planMode = false"
+        >
+          {{ t('composer.planModeBadge') }}
+        </button>
 
         <!-- Approval Level -->
         <div class="dropdown-wrapper">
@@ -382,6 +392,14 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
 
 .composer:focus-within {
   border-color: var(--composer-border-focus);
+}
+
+.composer--plan {
+  border-color: var(--accent-color);
+}
+
+.composer--plan:focus-within {
+  border-color: var(--accent-color);
 }
 
 .queued-area {
@@ -668,6 +686,25 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
 
 .toolbar-btn--label {
   gap: 5px;
+}
+
+.plan-mode-badge {
+  display: flex;
+  align-items: center;
+  padding: 4px 10px;
+  border: 1px solid var(--accent-color);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+  color: var(--accent-color);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.plan-mode-badge:hover {
+  background: color-mix(in srgb, var(--accent-color) 20%, transparent);
+  opacity: 0.9;
 }
 
 .approval-icon {

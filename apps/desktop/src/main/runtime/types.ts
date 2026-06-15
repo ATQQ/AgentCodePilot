@@ -15,6 +15,7 @@ export interface AgentRunInput {
   agentSessionId?: string | null
   conversationHistory?: ConversationHistoryItem[]
   approvalLevel?: 'request' | 'auto' | 'full'
+  planMode?: boolean
 }
 
 export interface AgentAdapter {

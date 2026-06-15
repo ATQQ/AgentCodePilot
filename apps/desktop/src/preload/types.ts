@@ -52,6 +52,7 @@ export interface SendMessagePayload {
   cwd?: string
   workspaceFolders?: string[]
   attachments?: AttachmentPayload[]
+  planMode?: boolean
 }
 
 export interface CreateConversationPayload {
@@ -59,6 +60,7 @@ export interface CreateConversationPayload {
   firstMessage: string
   projectId?: string | null
   attachments?: AttachmentPayload[]
+  planMode?: boolean
 }
 
 export interface SettingsPayload {
@@ -132,6 +134,7 @@ export interface MessageInfo {
   role: 'user' | 'assistant'
   content: string
   createdAt: string
+  planMode?: boolean
   attachments?: AttachmentPayload[]
   usage?: TokenUsage
   debugInput?: string

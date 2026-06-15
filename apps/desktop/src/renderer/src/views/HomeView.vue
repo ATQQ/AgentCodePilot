@@ -14,10 +14,10 @@ const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const workspaceStore = useWorkspaceStore()
 
-async function handleSubmit(text: string, attachments: Attachment[]): Promise<void> {
+async function handleSubmit(text: string, attachments: Attachment[], planMode: boolean): Promise<void> {
   const agentId = agentStore.selectedAgentId
   const projectId = workspaceStore.selectedProjectId
-  const convId = await chatStore.createConversation(agentId, text, projectId, attachments)
+  const convId = await chatStore.createConversation(agentId, text, projectId, attachments, planMode)
   router.push('/chat')
   const conv = chatStore.activeConversation
   const cwd = conv?.cwd || workspaceStore.currentCwd
@@ -32,7 +32,8 @@ async function handleSubmit(text: string, attachments: Attachment[]): Promise<vo
     agentId,
     cwd,
     workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
-    attachments: attachmentPayloads.length > 0 ? attachmentPayloads : undefined
+    attachments: attachmentPayloads.length > 0 ? attachmentPayloads : undefined,
+    planMode
   })
 }
 </script>

@@ -198,7 +198,8 @@ function registerIpcHandlers(): void {
         role: 'user',
         content: payload.firstMessage,
         createdAt: now,
-        attachments: payload.attachments ? JSON.stringify(payload.attachments) : null
+        attachments: payload.attachments ? JSON.stringify(payload.attachments) : null,
+        planMode: payload.planMode ?? false
       })
 
       return { id, title, cwd }
@@ -227,7 +228,8 @@ function registerIpcHandlers(): void {
       ),
       agentSessionId: runContext.agentSessionId,
       conversationHistory: runContext.conversationHistory,
-      approvalLevel
+      approvalLevel,
+      planMode: payload.planMode ?? false
     }
 
     supervisedRun(runInput, emitAgentEvent)
@@ -244,7 +246,8 @@ function registerIpcHandlers(): void {
       role: 'user',
       content: payload.content,
       createdAt: now,
-      attachments: payload.attachments ? JSON.stringify(payload.attachments) : null
+      attachments: payload.attachments ? JSON.stringify(payload.attachments) : null,
+      planMode: payload.planMode ?? false
     })
 
     const prompt = buildPromptWithAttachments(payload.content, payload.attachments)
@@ -267,7 +270,8 @@ function registerIpcHandlers(): void {
       ),
       agentSessionId: runContext.agentSessionId,
       conversationHistory: runContext.conversationHistory,
-      approvalLevel
+      approvalLevel,
+      planMode: payload.planMode ?? false
     }
 
     supervisedRun(runInput, emitAgentEvent)
@@ -335,6 +339,9 @@ function registerIpcHandlers(): void {
           role: r.role as 'user' | 'assistant',
           content: r.content,
           createdAt: r.created_at
+        }
+        if (r.plan_mode === 1) {
+          msg.planMode = true
         }
         if (r.attachments) {
           try { msg.attachments = JSON.parse(r.attachments) } catch {}

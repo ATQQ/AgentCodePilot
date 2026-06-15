@@ -42,7 +42,8 @@ export default {
       fullAccessDesc: '可不受限制地访问互联网和您电脑上的任何文件'
     },
     agent: '自定义',
-    high: '高'
+    high: '高',
+    planModeBadge: 'Plan'
   },
   project: {
     searchProject: '搜索项目',
@@ -64,7 +65,8 @@ export default {
     queued: '排队中',
     copy: '复制',
     resend: '重新编辑',
-    thinking: '思考中'
+    thinking: '思考中',
+    planModeTag: '计划模式'
   },
   approval: {
     waitingTag: '等待批准',

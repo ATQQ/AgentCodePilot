@@ -36,6 +36,7 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   createdAt: string
+  planMode?: boolean
   usage?: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number; costUSD: number }
   attachments?: Attachment[]
   toolCalls?: ToolCall[]

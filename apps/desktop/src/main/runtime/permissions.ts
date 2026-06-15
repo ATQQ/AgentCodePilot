@@ -233,13 +233,18 @@ function createPermissionRequestHook(context: PermissionContext): HookCallback {
 
 export function buildPermissionOptions(
   level: ApprovalLevel = 'auto',
-  context?: PermissionContext
+  context?: PermissionContext,
+  planMode = false
 ): {
   permissionMode: PermissionMode
   allowDangerouslySkipPermissions?: boolean
   canUseTool?: CanUseTool
   hooks?: Options['hooks']
 } {
+  if (planMode) {
+    return { permissionMode: 'plan' }
+  }
+
   const permissionMode = mapApprovalToPermissionMode(level)
 
   if (level === 'full') {

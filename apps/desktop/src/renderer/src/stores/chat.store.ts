@@ -12,7 +12,7 @@ export const useChatStore = defineStore('chat', () => {
   const streamingConversationIds = ref<Set<string>>(new Set())
   const waitingConversationIds = ref<Set<string>>(new Set())
   const pendingApprovals = ref<Map<string, ApprovalRequest>>(new Map())
-  const queuedMessages = ref<{ conversationId: string; content: string; agentId: string }[]>([])
+  const queuedMessages = ref<{ conversationId: string; content: string; agentId: string; planMode?: boolean }[]>([])
   const toolUseIdAliases = ref<Map<string, string>>(new Map())
 
   const activeConversation = computed(
@@ -156,6 +156,7 @@ export const useChatStore = defineStore('chat', () => {
       role: m.role,
       content: m.content,
       createdAt: m.createdAt,
+      planMode: m.planMode,
       attachments: m.attachments as Attachment[] | undefined,
       usage: m.usage,
       debugInput: m.debugInput,
@@ -172,13 +173,15 @@ export const useChatStore = defineStore('chat', () => {
     agentId: string,
     firstMessage: string,
     projectId?: string | null,
-    attachments?: Attachment[]
+    attachments?: Attachment[],
+    planMode?: boolean
   ): Promise<string> {
     const result = await window.agentAPI.chat.createConversation({
       agentId,
       firstMessage,
       projectId,
-      attachments: toAttachmentPayloads(attachments)
+      attachments: toAttachmentPayloads(attachments),
+      planMode: planMode ?? false
     })
 
     const now = new Date().toISOString()
@@ -187,6 +190,7 @@ export const useChatStore = defineStore('chat', () => {
       role: 'user',
       content: firstMessage,
       createdAt: now,
+      ...(planMode ? { planMode: true } : {}),
       attachments: attachments && attachments.length > 0 ? attachments : undefined
     }
     conversations.value.unshift({
@@ -209,7 +213,8 @@ export const useChatStore = defineStore('chat', () => {
     conversationId: string,
     role: 'user' | 'assistant',
     content: string,
-    attachments?: Attachment[]
+    attachments?: Attachment[],
+    planMode?: boolean
   ): void {
     const conv = conversations.value.find((c) => c.id === conversationId)
     if (!conv) return
@@ -219,6 +224,7 @@ export const useChatStore = defineStore('chat', () => {
       role,
       content,
       createdAt: now,
+      ...(planMode ? { planMode: true } : {}),
       attachments: attachments && attachments.length > 0 ? attachments : undefined
     })
     conv.updatedAt = now
@@ -236,13 +242,14 @@ export const useChatStore = defineStore('chat', () => {
     conversationId: string,
     content: string,
     agentId: string,
-    attachments?: Attachment[]
+    attachments?: Attachment[],
+    planMode?: boolean
   ): Promise<void> {
     if (isConversationStreaming(conversationId)) {
-      queuedMessages.value.push({ conversationId, content, agentId })
+      queuedMessages.value.push({ conversationId, content, agentId, planMode: planMode ?? false })
       return
     }
-    addMessage(conversationId, 'user', content, attachments)
+    addMessage(conversationId, 'user', content, attachments, planMode)
     waitingConversationIds.value.add(conversationId)
     const conv = conversations.value.find((c) => c.id === conversationId)
     const workspaceStore = useWorkspaceStore()
@@ -253,7 +260,8 @@ export const useChatStore = defineStore('chat', () => {
       agentId,
       cwd: conv?.cwd || workspaceStore.currentCwd,
       workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
-      attachments: toAttachmentPayloads(attachments)
+      attachments: toAttachmentPayloads(attachments),
+      planMode: planMode ?? false
     })
   }
 
@@ -277,7 +285,7 @@ export const useChatStore = defineStore('chat', () => {
     const idx = queuedMessages.value.findIndex((m) => m.conversationId === conversationId)
     if (idx === -1) return
     const next = queuedMessages.value.splice(idx, 1)[0]
-    addMessage(next.conversationId, 'user', next.content)
+    addMessage(next.conversationId, 'user', next.content, undefined, next.planMode)
     waitingConversationIds.value.add(next.conversationId)
     const conv = conversations.value.find((c) => c.id === next.conversationId)
     const workspaceStore = useWorkspaceStore()
@@ -287,7 +295,8 @@ export const useChatStore = defineStore('chat', () => {
       content: next.content,
       agentId: next.agentId,
       cwd: conv?.cwd || workspaceStore.currentCwd,
-      workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined
+      workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
+      planMode: next.planMode ?? false
     })
   }
 

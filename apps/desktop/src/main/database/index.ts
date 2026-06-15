@@ -119,6 +119,9 @@ function runMigrations(database: Database.Database): void {
   if (!msgCols.find((c) => c.name === 'cost_usd')) {
     database.exec('ALTER TABLE messages ADD COLUMN cost_usd REAL')
   }
+  if (!msgCols.find((c) => c.name === 'plan_mode')) {
+    database.exec('ALTER TABLE messages ADD COLUMN plan_mode INTEGER DEFAULT 0')
+  }
 
   const convCols2 = database.pragma('table_info(conversations)') as { name: string }[]
   if (!convCols2.find((c) => c.name === 'agent_session_id')) {

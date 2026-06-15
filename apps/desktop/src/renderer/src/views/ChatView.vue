@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch, nextTick, ref, computed, onUnmounted } from 'vue'
+import { watch, nextTick, ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import MarkdownRender from 'markstream-vue'
@@ -26,7 +26,7 @@ const router = useRouter()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const settingsStore = useSettingsStore()
-const messagesEnd = ref<HTMLElement | null>(null)
+const messagesContainer = ref<HTMLElement | null>(null)
 const composerRef = ref<InstanceType<typeof PromptComposer> | null>(null)
 const streamedMessageIds = ref<Set<string>>(new Set())
 const copiedMessageId = ref<string | null>(null)
@@ -35,6 +35,7 @@ const debugMode = ref(false)
 let debugClickCount = 0
 let debugClickTimer: ReturnType<typeof setTimeout> | null = null
 let waitingTimer: ReturnType<typeof setInterval> | null = null
+let scrollRetryTimer: ReturnType<typeof setTimeout> | null = null
 
 function handleDebugClick(): void {
   debugClickCount++
@@ -50,11 +51,40 @@ if (!chatStore.activeConversation) {
   router.replace('/')
 }
 
-function scrollToBottom(): void {
+function scrollToBottom(smooth = true): void {
   nextTick(() => {
-    messagesEnd.value?.scrollIntoView({ behavior: 'smooth' })
+    const el = messagesContainer.value
+    if (!el) return
+    el.scrollTo({
+      top: el.scrollHeight,
+      behavior: smooth ? 'smooth' : 'instant'
+    })
   })
 }
+
+function scheduleScrollToBottom(instant = true): void {
+  if (scrollRetryTimer) {
+    clearTimeout(scrollRetryTimer)
+    scrollRetryTimer = null
+  }
+  const scroll = () => scrollToBottom(!instant)
+  scroll()
+  nextTick(scroll)
+  requestAnimationFrame(scroll)
+  scrollRetryTimer = setTimeout(scroll, 100)
+  setTimeout(scroll, 300)
+}
+
+onMounted(() => {
+  if (chatStore.activeConversation?.messages.length) {
+    scheduleScrollToBottom(true)
+  }
+})
+
+watch(
+  () => chatStore.activeConversationId,
+  () => scheduleScrollToBottom(true)
+)
 
 watch(
   () => chatStore.isWaiting,
@@ -72,7 +102,7 @@ watch(
 
 watch(
   () => chatStore.activeConversation?.messages.length,
-  () => scrollToBottom()
+  () => scheduleScrollToBottom(true)
 )
 
 watch(
@@ -91,6 +121,7 @@ watch(
 
 onUnmounted(() => {
   if (waitingTimer) clearInterval(waitingTimer)
+  if (scrollRetryTimer) clearTimeout(scrollRetryTimer)
 })
 
 function isStreamingMessage(msgId: string): boolean {
@@ -108,10 +139,10 @@ function wasStreamed(msgId: string): boolean {
   return streamedMessageIds.value.has(msgId)
 }
 
-function handleSubmit(text: string, attachments: Attachment[]): void {
+function handleSubmit(text: string, attachments: Attachment[], planMode: boolean): void {
   if ((!text && attachments.length === 0) || !chatStore.activeConversationId) return
   const agentId = chatStore.activeConversation?.agentId ?? agentStore.selectedAgentId
-  chatStore.sendMessage(chatStore.activeConversationId, text, agentId, attachments)
+  chatStore.sendMessage(chatStore.activeConversationId, text, agentId, attachments, planMode)
 }
 
 function handleStop(): void {
@@ -185,12 +216,12 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
         </span>
       </div>
 
-      <div class="messages-container">
+      <div ref="messagesContainer" class="messages-container">
         <div
           v-for="msg in chatStore.activeConversation.messages"
           :key="msg.id"
           class="message"
-          :class="msg.role"
+          :class="[msg.role, { 'message--plan': msg.role === 'user' && msg.planMode }]"
         >
           <div v-if="msg.role === 'assistant'" class="message-role">
             <span class="agent-avatar">
@@ -204,7 +235,7 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
               APPROVAL {{ getPendingApproval(msg.id)?.toolName }} {{ getPendingApproval(msg.id)?.detail }}
             </span>
           </div>
-          <div class="message-content">
+          <div class="message-content" :class="{ 'message-content--plan': msg.role === 'user' && msg.planMode }">
             <template v-if="msg.role === 'assistant'">
               <ApprovalRequestCard
                 v-if="getPendingApproval(msg.id)"
@@ -235,6 +266,7 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
               />
             </template>
             <template v-else>
+              <span v-if="msg.planMode" class="plan-mode-tag">{{ t('chat.planModeTag') }}</span>
               <div v-if="msg.attachments?.length" class="message-attachments">
                 <div v-for="(att, idx) in msg.attachments" :key="att.id" class="msg-attachment">
                   <template v-if="att.type === 'image'">
@@ -292,7 +324,6 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
           </div>
           <span class="thinking-text">{{ t('chat.thinking') }} {{ waitingSeconds }}s</span>
         </div>
-        <div ref="messagesEnd"></div>
       </div>
 
       <div class="chat-input-area">
@@ -439,6 +470,23 @@ html.dark .approval-inline-tag {
   background: var(--btn-primary-bg);
   color: var(--btn-primary-text);
   white-space: pre-wrap;
+}
+
+.message.user .message-content--plan {
+  background: transparent;
+  color: var(--content-text);
+  border: 1.5px solid var(--accent-color);
+}
+
+.plan-mode-tag {
+  display: inline-block;
+  margin-bottom: 6px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+  color: var(--accent-color);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .message.assistant .message-content {
