@@ -4,6 +4,7 @@ import type { Attachment, ApprovalRequest, Conversation, Message } from '@render
 import type { AgentEvent, AttachmentPayload } from '../../../preload/types'
 import type { ApprovalLevel } from '@renderer/types'
 import { useWorkspaceStore } from './workspace.store'
+import { getToolCallFingerprint } from '@renderer/utils/toolCall'
 
 export const useChatStore = defineStore('chat', () => {
   const conversations = ref<Conversation[]>([])
@@ -12,9 +13,10 @@ export const useChatStore = defineStore('chat', () => {
   const waitingConversationIds = ref<Set<string>>(new Set())
   const pendingApprovals = ref<Map<string, ApprovalRequest>>(new Map())
   const queuedMessages = ref<{ conversationId: string; content: string; agentId: string }[]>([])
+  const toolUseIdAliases = ref<Map<string, string>>(new Map())
 
-  const activeConversation = computed(() =>
-    conversations.value.find((c) => c.id === activeConversationId.value) ?? null
+  const activeConversation = computed(
+    () => conversations.value.find((c) => c.id === activeConversationId.value) ?? null
   )
 
   const streamingConversationId = computed(() =>
@@ -37,8 +39,10 @@ export const useChatStore = defineStore('chat', () => {
     [...conversations.value].sort((a, b) => (a.updatedAt > b.updatedAt ? -1 : 1))
   )
 
-  const isWaiting = computed(() =>
-    activeConversationId.value !== null && waitingConversationIds.value.has(activeConversationId.value)
+  const isWaiting = computed(
+    () =>
+      activeConversationId.value !== null &&
+      waitingConversationIds.value.has(activeConversationId.value)
   )
 
   const pendingApprovalConversationIds = computed(() => {
@@ -58,6 +62,44 @@ export const useChatStore = defineStore('chat', () => {
 
   function hasPendingApproval(conversationId: string): boolean {
     return pendingApprovalConversationIds.value.has(conversationId)
+  }
+
+  function resolveToolUseId(messageId: string, toolUseId: string): string {
+    return toolUseIdAliases.value.get(`${messageId}:${toolUseId}`) ?? toolUseId
+  }
+
+  function aliasDuplicateToolCall(
+    messageId: string,
+    toolUseId: string,
+    canonicalToolUseId: string
+  ): void {
+    if (toolUseId === canonicalToolUseId) return
+    const next = new Map(toolUseIdAliases.value)
+    next.set(`${messageId}:${toolUseId}`, canonicalToolUseId)
+    toolUseIdAliases.value = next
+  }
+
+  function dedupeToolCallByFingerprint(
+    message: Message,
+    messageId: string,
+    toolUseId: string,
+    toolName: string,
+    input: Record<string, unknown>
+  ): void {
+    const fingerprint = getToolCallFingerprint(toolName, input)
+    if (!message.toolCalls?.length || fingerprint.endsWith(':{}')) return
+
+    const resolvedId = resolveToolUseId(messageId, toolUseId)
+    const duplicate = message.toolCalls.find(
+      (t) =>
+        t.toolUseId !== resolvedId &&
+        resolveToolUseId(messageId, t.toolUseId) === t.toolUseId &&
+        getToolCallFingerprint(t.toolName, t.input) === fingerprint
+    )
+    if (!duplicate) return
+
+    aliasDuplicateToolCall(messageId, resolvedId, duplicate.toolUseId)
+    message.toolCalls = message.toolCalls.filter((t) => t.toolUseId !== resolvedId)
   }
 
   function getConversationsByProject(projectId: string): Conversation[] {
@@ -163,7 +205,12 @@ export const useChatStore = defineStore('chat', () => {
     return result.id
   }
 
-  function addMessage(conversationId: string, role: 'user' | 'assistant', content: string, attachments?: Attachment[]): void {
+  function addMessage(
+    conversationId: string,
+    role: 'user' | 'assistant',
+    content: string,
+    attachments?: Attachment[]
+  ): void {
     const conv = conversations.value.find((c) => c.id === conversationId)
     if (!conv) return
     const now = new Date().toISOString()
@@ -256,7 +303,12 @@ export const useChatStore = defineStore('chat', () => {
         waitingConversationIds.value.delete(event.conversationId)
         let msg = conv.messages.find((m) => m.id === event.messageId)
         if (!msg) {
-          msg = { id: event.messageId, role: 'assistant', content: '', createdAt: new Date().toISOString() }
+          msg = {
+            id: event.messageId,
+            role: 'assistant',
+            content: '',
+            createdAt: new Date().toISOString()
+          }
           conv.messages.push(msg)
         }
         msg.content += event.delta
@@ -299,7 +351,12 @@ export const useChatStore = defineStore('chat', () => {
         if (!conv) return
         let msg = conv.messages.find((m) => m.id === event.messageId)
         if (!msg) {
-          msg = { id: event.messageId, role: 'assistant', content: '', createdAt: new Date().toISOString() }
+          msg = {
+            id: event.messageId,
+            role: 'assistant',
+            content: '',
+            createdAt: new Date().toISOString()
+          }
           conv.messages.push(msg)
         }
         if (!msg.toolCalls) msg.toolCalls = []
@@ -314,15 +371,24 @@ export const useChatStore = defineStore('chat', () => {
         if (!conv) return
         const msg = conv.messages.find((m) => m.id === event.messageId)
         if (!msg?.toolCalls) return
-        const tc = msg.toolCalls.find((t) => t.toolUseId === event.toolUseId)
+        const resolvedToolUseId = resolveToolUseId(event.messageId, event.toolUseId)
+        const tc = msg.toolCalls.find((t) => t.toolUseId === resolvedToolUseId)
         if (tc) {
           tc.input = event.input
-          if (tc.status === 'pending') {
+          dedupeToolCallByFingerprint(
+            msg,
+            event.messageId,
+            resolvedToolUseId,
+            tc.toolName,
+            event.input
+          )
+          const activeTool = msg.toolCalls.find((t) => t.toolUseId === resolvedToolUseId)
+          if (activeTool?.status === 'pending') {
             const hasRunning = msg.toolCalls.some(
-              (t) => t.toolUseId !== event.toolUseId && t.status === 'running'
+              (t) => t.toolUseId !== resolvedToolUseId && t.status === 'running'
             )
             if (!hasRunning) {
-              tc.status = 'running'
+              activeTool.status = 'running'
             }
           }
         }
@@ -333,7 +399,8 @@ export const useChatStore = defineStore('chat', () => {
         if (!conv) return
         const msg = conv.messages.find((m) => m.id === event.messageId)
         if (!msg?.toolCalls) return
-        const tc = msg.toolCalls.find((t) => t.toolUseId === event.toolUseId)
+        const resolvedToolUseId = resolveToolUseId(event.messageId, event.toolUseId)
+        const tc = msg.toolCalls.find((t) => t.toolUseId === resolvedToolUseId)
         if (tc) {
           tc.status = 'running'
           tc.elapsedSeconds = event.elapsedSeconds
@@ -345,7 +412,8 @@ export const useChatStore = defineStore('chat', () => {
         if (!conv) return
         const msg = conv.messages.find((m) => m.id === event.messageId)
         if (!msg?.toolCalls) return
-        const tc = msg.toolCalls.find((t) => t.toolUseId === event.toolUseId)
+        const resolvedToolUseId = resolveToolUseId(event.messageId, event.toolUseId)
+        const tc = msg.toolCalls.find((t) => t.toolUseId === resolvedToolUseId)
         if (tc) {
           tc.status = 'completed'
           if (event.summary) tc.summary = event.summary
@@ -362,7 +430,12 @@ export const useChatStore = defineStore('chat', () => {
         if (conv) {
           let msg = conv.messages.find((m) => m.id === event.messageId)
           if (!msg) {
-            msg = { id: event.messageId, role: 'assistant', content: '', createdAt: new Date().toISOString() }
+            msg = {
+              id: event.messageId,
+              role: 'assistant',
+              content: '',
+              createdAt: new Date().toISOString()
+            }
             conv.messages.push(msg)
           }
         }

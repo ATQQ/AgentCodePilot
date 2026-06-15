@@ -22,6 +22,24 @@ export function getToolLabel(toolName: string): string {
   return TOOL_LABELS[toolName] || toolName
 }
 
+function stableStringify(input: Record<string, unknown>): string {
+  const sorted = Object.keys(input)
+    .sort()
+    .reduce<Record<string, unknown>>((acc, key) => {
+      acc[key] = input[key]
+      return acc
+    }, {})
+  try {
+    return JSON.stringify(sorted)
+  } catch {
+    return String(input)
+  }
+}
+
+export function getToolCallFingerprint(toolName: string, input: Record<string, unknown>): string {
+  return `${toolName}:${stableStringify(input)}`
+}
+
 export function getToolDetailLines(toolCall: ToolCall): ToolDetailLine[] {
   const input = toolCall.input
   const lines: ToolDetailLine[] = []
