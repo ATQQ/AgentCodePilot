@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, inject, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, inject, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -53,6 +53,57 @@ const projectMenu = reactive({
   id: '',
   type: '' as 'project' | 'workspace'
 })
+
+const contextMenuRef = ref<HTMLElement | null>(null)
+const projectMenuRef = ref<HTMLElement | null>(null)
+
+const CONTEXT_MENU_ESTIMATED_HEIGHT = 320
+const CONTEXT_MENU_MIN_WIDTH = 180
+
+function clampMenuPosition(x: number, y: number, menuWidth: number, menuHeight: number): { x: number; y: number } {
+  const padding = 8
+  const maxX = window.innerWidth - menuWidth - padding
+  const maxY = window.innerHeight - menuHeight - padding
+  return {
+    x: Math.min(Math.max(padding, x), Math.max(padding, maxX)),
+    y: Math.min(Math.max(padding, y), Math.max(padding, maxY))
+  }
+}
+
+async function adjustMenuPosition(
+  initialX: number,
+  initialY: number,
+  menuRef: typeof contextMenuRef,
+  fallbackHeight = CONTEXT_MENU_ESTIMATED_HEIGHT
+): Promise<{ x: number; y: number }> {
+  await nextTick()
+  const menu = menuRef.value
+  const menuWidth = menu?.offsetWidth ?? CONTEXT_MENU_MIN_WIDTH
+  const menuHeight = menu?.offsetHeight ?? fallbackHeight
+  return clampMenuPosition(initialX, initialY, menuWidth, menuHeight)
+}
+
+async function openContextMenu(x: number, y: number, conv: Conversation): Promise<void> {
+  contextMenu.visible = true
+  contextMenu.x = x
+  contextMenu.y = y
+  contextMenu.conv = conv
+  contextMenu.showCopySubmenu = false
+  const pos = await adjustMenuPosition(x, y, contextMenuRef)
+  contextMenu.x = pos.x
+  contextMenu.y = pos.y
+}
+
+async function openProjectMenu(x: number, y: number, id: string, type: 'project' | 'workspace'): Promise<void> {
+  projectMenu.visible = true
+  projectMenu.x = x
+  projectMenu.y = y
+  projectMenu.id = id
+  projectMenu.type = type
+  const pos = await adjustMenuPosition(x, y, projectMenuRef, 96)
+  projectMenu.x = pos.x
+  projectMenu.y = pos.y
+}
 
 function navigate(path: string): void {
   if (path === '/search') {
@@ -113,22 +164,14 @@ function handleQuickPin(e: MouseEvent, conv: Conversation): void {
 function showContextMenu(e: MouseEvent, conv: Conversation): void {
   e.preventDefault()
   e.stopPropagation()
-  contextMenu.visible = true
-  contextMenu.x = e.clientX
-  contextMenu.y = e.clientY
-  contextMenu.conv = conv
-  contextMenu.showCopySubmenu = false
+  void openContextMenu(e.clientX, e.clientY, conv)
 }
 
 function showContextMenuFromButton(e: MouseEvent, conv: Conversation): void {
   e.stopPropagation()
   const btn = e.currentTarget as HTMLElement
   const rect = btn.getBoundingClientRect()
-  contextMenu.visible = true
-  contextMenu.x = rect.right
-  contextMenu.y = rect.top
-  contextMenu.conv = conv
-  contextMenu.showCopySubmenu = false
+  void openContextMenu(rect.right, rect.top, conv)
 }
 
 function closeContextMenu(): void {
@@ -199,11 +242,7 @@ function showProjectMenu(e: MouseEvent, id: string, type: 'project' | 'workspace
   e.stopPropagation()
   const btn = e.currentTarget as HTMLElement
   const rect = btn.getBoundingClientRect()
-  projectMenu.visible = true
-  projectMenu.x = rect.right
-  projectMenu.y = rect.top
-  projectMenu.id = id
-  projectMenu.type = type
+  void openProjectMenu(rect.right, rect.top, id, type)
 }
 
 function closeProjectMenu(): void {
@@ -534,6 +573,7 @@ onUnmounted(() => {
       <Transition name="ctx-fade">
         <div
           v-if="contextMenu.visible"
+          ref="contextMenuRef"
           class="context-menu"
           :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
           @click.stop
@@ -588,6 +628,7 @@ onUnmounted(() => {
       <Transition name="ctx-fade">
         <div
           v-if="projectMenu.visible"
+          ref="projectMenuRef"
           class="context-menu"
           :style="{ left: projectMenu.x + 'px', top: projectMenu.y + 'px' }"
           @click.stop

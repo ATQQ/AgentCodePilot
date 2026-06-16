@@ -88,6 +88,22 @@ export function getAllConversations(): ConversationRow[] {
     .all() as ConversationRow[]
 }
 
+export function getArchivedConversations(): ConversationRow[] {
+  const db = getDatabase()
+  return db
+    .prepare(
+      `SELECT * FROM conversations
+       WHERE archived = 1
+       ORDER BY updated_at DESC`
+    )
+    .all() as ConversationRow[]
+}
+
+export function deleteAllArchivedConversations(): void {
+  const db = getDatabase()
+  db.prepare('DELETE FROM conversations WHERE archived = 1').run()
+}
+
 export function getConversationById(id: string): ConversationRow | undefined {
   const db = getDatabase()
   return db.prepare('SELECT * FROM conversations WHERE id = ?').get(id) as ConversationRow | undefined
@@ -170,8 +186,17 @@ export function updateConversation(
 
   if (sets.length === 0) return
 
-  sets.push('updated_at = ?')
-  values.push(new Date().toISOString())
+  const onlyArchiveChange =
+    fields.archived !== undefined &&
+    fields.title === undefined &&
+    fields.pinned === undefined &&
+    fields.approvalLevel === undefined
+
+  if (!onlyArchiveChange) {
+    sets.push('updated_at = ?')
+    values.push(new Date().toISOString())
+  }
+
   values.push(id)
 
   db.prepare(`UPDATE conversations SET ${sets.join(', ')} WHERE id = ?`).run(...values)

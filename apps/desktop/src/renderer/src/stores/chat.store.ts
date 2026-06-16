@@ -122,27 +122,59 @@ export const useChatStore = defineStore('chat', () => {
       })
   }
 
+  function getArchivedConversations(): Conversation[] {
+    return conversations.value
+      .filter((c) => c.archived)
+      .sort((a, b) => (a.updatedAt > b.updatedAt ? -1 : 1))
+  }
+
+  function mergeConversationItem(item: {
+    id: string
+    title: string
+    agentId: string
+    projectId: string | null
+    cwd: string | null
+    pinned: boolean
+    archived: boolean
+    approvalLevel?: 'request' | 'auto' | 'full'
+    createdAt: string
+    updatedAt: string
+  }): void {
+    const exists = conversations.value.find((c) => c.id === item.id)
+    if (exists) {
+      exists.title = item.title
+      exists.pinned = item.pinned
+      exists.archived = item.archived
+      exists.approvalLevel = item.approvalLevel ?? 'auto'
+      exists.updatedAt = item.updatedAt
+    } else {
+      conversations.value.push({
+        id: item.id,
+        title: item.title,
+        agentId: item.agentId,
+        projectId: item.projectId,
+        cwd: item.cwd,
+        pinned: item.pinned,
+        archived: item.archived,
+        approvalLevel: item.approvalLevel ?? 'auto',
+        messages: [],
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt
+      })
+    }
+  }
+
+  async function loadArchivedConversations(): Promise<void> {
+    const list = await window.agentAPI.conversations.listArchived()
+    for (const item of list) {
+      mergeConversationItem(item)
+    }
+  }
+
   async function loadConversations(projectId?: string | null): Promise<void> {
     const list = await window.agentAPI.conversations.list(projectId)
     for (const item of list) {
-      const exists = conversations.value.find((c) => c.id === item.id)
-      if (exists) {
-        exists.approvalLevel = item.approvalLevel ?? 'auto'
-      } else {
-        conversations.value.push({
-          id: item.id,
-          title: item.title,
-          agentId: item.agentId,
-          projectId: item.projectId,
-          cwd: item.cwd,
-          pinned: item.pinned,
-          archived: item.archived,
-          approvalLevel: item.approvalLevel ?? 'auto',
-          messages: [],
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt
-        })
-      }
+      mergeConversationItem(item)
     }
   }
 
@@ -533,6 +565,33 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  function unarchiveConversation(conversationId: string): void {
+    const conv = conversations.value.find((c) => c.id === conversationId)
+    if (conv) {
+      conv.archived = false
+      window.agentAPI.conversations.update({ id: conversationId, archived: false })
+    }
+  }
+
+  function deleteArchivedConversation(conversationId: string): void {
+    const conv = conversations.value.find((c) => c.id === conversationId)
+    if (!conv?.archived) return
+    conversations.value = conversations.value.filter((c) => c.id !== conversationId)
+    window.agentAPI.conversations.delete(conversationId)
+    if (activeConversationId.value === conversationId) {
+      activeConversationId.value = null
+    }
+  }
+
+  async function deleteAllArchivedConversations(): Promise<void> {
+    const archivedIds = conversations.value.filter((c) => c.archived).map((c) => c.id)
+    conversations.value = conversations.value.filter((c) => !c.archived)
+    await window.agentAPI.conversations.deleteAllArchived()
+    if (activeConversationId.value && archivedIds.includes(activeConversationId.value)) {
+      activeConversationId.value = null
+    }
+  }
+
   function deleteConversation(conversationId: string): void {
     conversations.value = conversations.value.filter((c) => c.id !== conversationId)
     window.agentAPI.conversations.delete(conversationId)
@@ -570,7 +629,9 @@ export const useChatStore = defineStore('chat', () => {
     conversationList,
     getConversationsByProject,
     getOrphanConversations,
+    getArchivedConversations,
     loadConversations,
+    loadArchivedConversations,
     loadMessages,
     setActive,
     createConversation,
@@ -581,6 +642,9 @@ export const useChatStore = defineStore('chat', () => {
     togglePin,
     renameConversation,
     archiveConversation,
+    unarchiveConversation,
+    deleteArchivedConversation,
+    deleteAllArchivedConversations,
     deleteConversation,
     getConversationAsMarkdown,
     respondToApproval,

@@ -160,6 +160,13 @@ const currentAgentIcon = computed(() => {
   return agentIcons[agentId] || claudeIcon
 })
 
+const isArchived = computed(() => chatStore.activeConversation?.archived === true)
+
+function handleUnarchive(): void {
+  if (!chatStore.activeConversationId) return
+  chatStore.unarchiveConversation(chatStore.activeConversationId)
+}
+
 const isDark = computed(() => {
   if (settingsStore.theme === 'dark') return true
   if (settingsStore.theme === 'light') return false
@@ -327,21 +334,29 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
       </div>
 
       <div class="chat-input-area">
-        <div class="debug-trigger" @click="handleDebugClick"></div>
-        <PromptComposer
-          ref="composerRef"
-          :streaming="chatStore.isStreaming"
-          :queued-messages="chatStore.currentQueuedMessages"
-          :approval-level="chatStore.activeConversation.approvalLevel"
-          @submit="handleSubmit"
-          @stop="handleStop"
-          @cancel-queue="handleCancelQueue"
-          @approval-change="(level) => chatStore.setConversationApprovalLevel(chatStore.activeConversation!.id, level)"
-        >
-          <template #selectors>
-            <AgentSelector />
-          </template>
-        </PromptComposer>
+        <div v-if="isArchived" class="archived-banner">
+          <span class="archived-banner-text">{{ t('archived.readOnlyHint') }}</span>
+          <button class="archived-unarchive-btn" @click="handleUnarchive">
+            {{ t('archived.unarchive') }}
+          </button>
+        </div>
+        <template v-else>
+          <div class="debug-trigger" @click="handleDebugClick"></div>
+          <PromptComposer
+            ref="composerRef"
+            :streaming="chatStore.isStreaming"
+            :queued-messages="chatStore.currentQueuedMessages"
+            :approval-level="chatStore.activeConversation.approvalLevel"
+            @submit="handleSubmit"
+            @stop="handleStop"
+            @cancel-queue="handleCancelQueue"
+            @approval-change="(level) => chatStore.setConversationApprovalLevel(chatStore.activeConversation!.id, level)"
+          >
+            <template #selectors>
+              <AgentSelector />
+            </template>
+          </PromptComposer>
+        </template>
       </div>
     </template>
 
@@ -509,6 +524,38 @@ html.dark .approval-inline-tag {
   position: relative;
   padding: var(--spacing-md) var(--spacing-lg);
   flex-shrink: 0;
+}
+
+.archived-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-lg);
+  background: var(--btn-secondary-bg);
+}
+
+.archived-banner-text {
+  font-size: var(--font-size-sm);
+  color: var(--content-text-secondary);
+}
+
+.archived-unarchive-btn {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-md);
+  background: var(--content-bg);
+  color: var(--content-text);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.archived-unarchive-btn:hover {
+  background: var(--sidebar-item-hover);
 }
 
 .message-actions {

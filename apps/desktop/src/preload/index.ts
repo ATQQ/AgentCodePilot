@@ -49,12 +49,14 @@ const agentAPI = {
   conversations: {
     list: (projectId?: string | null) =>
       ipcRenderer.invoke(IPC_CHANNELS.CONVERSATIONS_LIST, projectId),
+    listArchived: () => ipcRenderer.invoke(IPC_CHANNELS.CONVERSATIONS_LIST_ARCHIVED),
     getMessages: (conversationId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.CONVERSATIONS_GET_MESSAGES, conversationId),
     update: (payload: ConversationUpdatePayload) =>
       ipcRenderer.invoke(IPC_CHANNELS.CONVERSATIONS_UPDATE, payload),
     delete: (conversationId: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.CONVERSATIONS_DELETE, conversationId)
+      ipcRenderer.invoke(IPC_CHANNELS.CONVERSATIONS_DELETE, conversationId),
+    deleteAllArchived: () => ipcRenderer.invoke(IPC_CHANNELS.CONVERSATIONS_DELETE_ALL_ARCHIVED)
   },
   projects: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_LIST),

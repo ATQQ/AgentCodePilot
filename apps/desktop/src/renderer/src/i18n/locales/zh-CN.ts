@@ -131,5 +131,18 @@ export default {
     off: '关闭',
     language: '语言',
     zhCN: '简体中文'
+  },
+  archived: {
+    searchPlaceholder: '搜索已归档聊天',
+    allChats: '全部聊天',
+    noProject: '未分类对话',
+    empty: '暂无已归档对话',
+    deleteAll: '全部删除',
+    deleteAllConfirm: '确定删除所有已归档对话吗？此操作不可撤销。',
+    deleteConfirm: '确定删除此已归档对话吗？',
+    delete: '删除',
+    unarchive: '取消归档',
+    readOnlyHint: '此对话已归档，仅可查看历史消息。',
+    chatCount: '{count} 个聊天'
   }
 }

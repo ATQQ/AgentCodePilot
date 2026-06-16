@@ -153,6 +153,23 @@ function getRunApprovalLevel(conversationId: string): 'request' | 'auto' | 'full
   return repo.getConversationApprovalLevel(conversationId)
 }
 
+function mapConversationRow(r: repo.ConversationRow): ConversationListItem {
+  return {
+    id: r.id,
+    title: r.title,
+    agentId: r.agent_id,
+    projectId: r.project_id,
+    cwd: r.cwd ?? null,
+    pinned: r.pinned === 1,
+    archived: r.archived === 1,
+    approvalLevel: (r.approval_level === 'request' || r.approval_level === 'auto' || r.approval_level === 'full'
+      ? r.approval_level
+      : 'auto') as 'request' | 'auto' | 'full',
+    createdAt: r.created_at,
+    updatedAt: r.updated_at
+  }
+}
+
 function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.AGENTS_LIST, (): AgentInfo[] => {
     return agentRegistry.list().map((a) => ({
@@ -312,22 +329,13 @@ function registerIpcHandlers(): void {
         ? repo.getConversationsByProject(projectId)
         : repo.getAllConversations()
 
-      return rows.map((r) => ({
-        id: r.id,
-        title: r.title,
-        agentId: r.agent_id,
-        projectId: r.project_id,
-        cwd: r.cwd ?? null,
-        pinned: r.pinned === 1,
-        archived: r.archived === 1,
-        approvalLevel: (r.approval_level === 'request' || r.approval_level === 'auto' || r.approval_level === 'full'
-          ? r.approval_level
-          : 'auto') as 'request' | 'auto' | 'full',
-        createdAt: r.created_at,
-        updatedAt: r.updated_at
-      }))
+      return rows.map(mapConversationRow)
     }
   )
+
+  ipcMain.handle(IPC_CHANNELS.CONVERSATIONS_LIST_ARCHIVED, (): ConversationListItem[] => {
+    return repo.getArchivedConversations().map(mapConversationRow)
+  })
 
   ipcMain.handle(
     IPC_CHANNELS.CONVERSATIONS_GET_MESSAGES,
@@ -380,6 +388,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.CONVERSATIONS_DELETE, (_e, conversationId: string): void => {
     repo.deleteConversation(conversationId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.CONVERSATIONS_DELETE_ALL_ARCHIVED, (): void => {
+    repo.deleteAllArchivedConversations()
   })
 
   // --- Projects ---

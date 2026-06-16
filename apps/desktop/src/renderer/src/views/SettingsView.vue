@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import type { ThemeMode } from '@renderer/types'
-import { ArrowLeft, Bell, Brush } from '@element-plus/icons-vue'
+import { ArrowLeft, Bell, Brush, Document } from '@element-plus/icons-vue'
+import ArchivedConversationsSection from '@renderer/components/settings/ArchivedConversationsSection.vue'
 // TODO: 恢复未实现设置项时取消注释
 // import {
 //   Setting,
@@ -22,9 +23,25 @@ import { ArrowLeft, Bell, Brush } from '@element-plus/icons-vue'
 
 const { t } = useI18n()
 const router = useRouter()
+const route = useRoute()
 const settingsStore = useSettingsStore()
 
 const activeSection = ref('appearance')
+
+watch(
+  () => route.query.section,
+  (section) => {
+    if (typeof section === 'string' && (section === 'appearance' || section === 'notifications' || section === 'archived')) {
+      activeSection.value = section
+    }
+  },
+  { immediate: true }
+)
+
+function selectSection(key: string): void {
+  activeSection.value = key
+  router.replace({ path: '/settings', query: key === 'appearance' ? {} : { section: key } })
+}
 
 interface NavItem {
   key: string
@@ -44,6 +61,10 @@ const navGroups: NavGroup[] = [
       { key: 'appearance', labelKey: 'settings.appearance', icon: Brush },
       { key: 'notifications', labelKey: 'settings.notifications', icon: Bell }
     ]
+  },
+  {
+    titleKey: 'settings.archived',
+    items: [{ key: 'archived', labelKey: 'settings.archivedConversations', icon: Document }]
   }
 ]
 
@@ -124,7 +145,7 @@ function goBack(): void {
             :key="item.key"
             class="nav-item"
             :class="{ active: activeSection === item.key }"
-            @click="activeSection = item.key"
+            @click="selectSection(item.key)"
           >
             <el-icon :size="14"><component :is="item.icon" /></el-icon>
             <span>{{ t(item.labelKey) }}</span>
@@ -217,6 +238,8 @@ function goBack(): void {
             </div>
           </div>
         </div>
+
+        <ArchivedConversationsSection v-else-if="activeSection === 'archived'" />
 
         <!-- TODO: General Section 实现后恢复
         <div v-else-if="activeSection === 'general'" class="content-section">

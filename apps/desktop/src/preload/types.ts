@@ -13,9 +13,11 @@ export const IPC_CHANNELS = {
   DIALOG_SELECT_FILES: 'dialog:selectFiles',
   FILE_SAVE_TEMP_IMAGE: 'file:saveTempImage',
   CONVERSATIONS_LIST: 'conversations:list',
+  CONVERSATIONS_LIST_ARCHIVED: 'conversations:listArchived',
   CONVERSATIONS_GET_MESSAGES: 'conversations:getMessages',
   CONVERSATIONS_UPDATE: 'conversations:update',
   CONVERSATIONS_DELETE: 'conversations:delete',
+  CONVERSATIONS_DELETE_ALL_ARCHIVED: 'conversations:deleteAllArchived',
   PROJECTS_LIST: 'projects:list',
   PROJECTS_SAVE: 'projects:save',
   PROJECTS_DELETE: 'projects:delete',
@@ -215,9 +217,11 @@ export interface AgentAPI {
   }
   conversations: {
     list: (projectId?: string | null) => Promise<ConversationListItem[]>
+    listArchived: () => Promise<ConversationListItem[]>
     getMessages: (conversationId: string) => Promise<MessageInfo[]>
     update: (payload: ConversationUpdatePayload) => Promise<void>
     delete: (conversationId: string) => Promise<void>
+    deleteAllArchived: () => Promise<void>
   }
   projects: {
     list: () => Promise<ProjectPayload[]>
