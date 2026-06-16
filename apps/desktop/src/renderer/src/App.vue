@@ -2,9 +2,12 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import AppShell from './components/layout/AppShell.vue'
+import { useGlobalShortcuts } from './composables/useGlobalShortcuts'
 
 const route = useRoute()
 const isFullscreenPage = computed(() => route.meta.fullscreen === true)
+
+useGlobalShortcuts()
 </script>
 
 <template>

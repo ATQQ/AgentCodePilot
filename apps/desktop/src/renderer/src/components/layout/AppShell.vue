@@ -1,41 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, provide } from 'vue'
+import { provide } from 'vue'
 import { useRouter } from 'vue-router'
 import AppSidebar from './AppSidebar.vue'
 import SearchDialog from './SearchDialog.vue'
+import { useUiStore } from '@renderer/stores/ui.store'
+import { formatShortcutKey } from '@renderer/composables/useShortcutLabel'
 
 const router = useRouter()
-const searchVisible = ref(false)
-const sidebarCollapsed = ref(false)
+const uiStore = useUiStore()
 
-function openSearch(): void {
-  searchVisible.value = true
-}
-
-function closeSearch(): void {
-  searchVisible.value = false
-}
-
-function toggleSidebar(): void {
-  sidebarCollapsed.value = !sidebarCollapsed.value
-}
-
-function handleGlobalKeydown(e: KeyboardEvent): void {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'g') {
-    e.preventDefault()
-    searchVisible.value = !searchVisible.value
-  }
-}
-
-provide('openSearch', openSearch)
-
-onMounted(() => {
-  document.addEventListener('keydown', handleGlobalKeydown)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('keydown', handleGlobalKeydown)
-})
+provide('openSearch', () => uiStore.openSearch())
 </script>
 
 <template>
@@ -43,18 +17,18 @@ onUnmounted(() => {
     <div class="window-controls">
       <div class="controls-drag-zone"></div>
       <div class="controls-actions">
-        <button class="control-btn" @click="toggleSidebar" title="收起/展开侧边栏">
+        <button class="control-btn" :title="`收起/展开侧边栏 (${formatShortcutKey('s')})`" @click="uiStore.toggleSidebar()">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
             <rect x="2" y="3" width="12" height="10" rx="1.5" />
             <line x1="6" y1="3" x2="6" y2="13" />
           </svg>
         </button>
-        <button class="control-btn" @click="router.back()" title="后退">
+        <button class="control-btn" title="后退" @click="router.back()">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="10,3 5,8 10,13" />
           </svg>
         </button>
-        <button class="control-btn" @click="router.forward()" title="前进">
+        <button class="control-btn" title="前进" @click="router.forward()">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="6,3 11,8 6,13" />
           </svg>
@@ -62,14 +36,14 @@ onUnmounted(() => {
       </div>
     </div>
     <Transition name="sidebar-slide">
-      <AppSidebar v-show="!sidebarCollapsed" />
+      <AppSidebar v-show="!uiStore.sidebarCollapsed" />
     </Transition>
     <div class="main-content">
       <div class="page-content">
         <router-view />
       </div>
     </div>
-    <SearchDialog :visible="searchVisible" @close="closeSearch" />
+    <SearchDialog :visible="uiStore.searchVisible" @close="uiStore.closeSearch()" />
   </div>
 </template>
 

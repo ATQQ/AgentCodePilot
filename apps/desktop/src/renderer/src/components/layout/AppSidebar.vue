@@ -15,6 +15,7 @@ import {
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
 import { useChatStore } from '@renderer/stores/chat.store'
 import { formatRelativeTime } from '@renderer/composables/useRelativeTime'
+import { formatShortcutKey } from '@renderer/composables/useShortcutLabel'
 import type { Conversation } from '@renderer/types'
 
 const { t } = useI18n()
@@ -25,8 +26,8 @@ const chatStore = useChatStore()
 const openSearch = inject<() => void>('openSearch', () => {})
 
 const topNavItems = [
-  { name: 'new-chat', path: '/', icon: EditPen, labelKey: 'sidebar.newChat' },
-  { name: 'search', path: '/search', icon: Search, labelKey: 'sidebar.search' },
+  { name: 'new-chat', path: '/', icon: EditPen, labelKey: 'sidebar.newChat', shortcutKey: 'n' },
+  { name: 'search', path: '/search', icon: Search, labelKey: 'sidebar.search', shortcutKey: 'g' },
   { name: 'skills', path: '/skills', icon: MagicStick, labelKey: 'sidebar.skills' }
 ]
 
@@ -324,7 +325,8 @@ onUnmounted(() => {
           @click="navigate(item.path)"
         >
           <el-icon :size="15"><component :is="item.icon" /></el-icon>
-          <span>{{ t(item.labelKey) }}</span>
+          <span class="nav-item-label">{{ t(item.labelKey) }}</span>
+          <span v-if="item.shortcutKey" class="nav-shortcut">{{ formatShortcutKey(item.shortcutKey) }}</span>
         </button>
       </nav>
 
@@ -741,6 +743,28 @@ onUnmounted(() => {
 .nav-item span {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.nav-item-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.nav-shortcut {
+  flex-shrink: 0;
+  opacity: 0;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--sidebar-section-title) 18%, var(--sidebar-bg));
+  color: var(--sidebar-section-title);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  transition: opacity 0.12s;
+}
+
+.nav-item:hover .nav-shortcut {
+  opacity: 1;
 }
 
 .nav-item:hover {
