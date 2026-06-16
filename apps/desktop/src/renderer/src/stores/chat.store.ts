@@ -4,6 +4,7 @@ import type { Attachment, ApprovalRequest, Conversation, Message } from '@render
 import type { AgentEvent, AttachmentPayload } from '../../../preload/types'
 import type { ApprovalLevel } from '@renderer/types'
 import { useWorkspaceStore } from './workspace.store'
+import { useModelStore } from './model.store'
 import { getToolCallFingerprint } from '@renderer/utils/toolCall'
 
 export const useChatStore = defineStore('chat', () => {
@@ -12,7 +13,7 @@ export const useChatStore = defineStore('chat', () => {
   const streamingConversationIds = ref<Set<string>>(new Set())
   const waitingConversationIds = ref<Set<string>>(new Set())
   const pendingApprovals = ref<Map<string, ApprovalRequest>>(new Map())
-  const queuedMessages = ref<{ conversationId: string; content: string; agentId: string; planMode?: boolean }[]>([])
+  const queuedMessages = ref<{ conversationId: string; content: string; agentId: string; modelId?: string; planMode?: boolean }[]>([])
   const toolUseIdAliases = ref<Map<string, string>>(new Map())
 
   const activeConversation = computed(
@@ -132,6 +133,7 @@ export const useChatStore = defineStore('chat', () => {
     id: string
     title: string
     agentId: string
+    modelId?: string | null
     projectId: string | null
     cwd: string | null
     pinned: boolean
@@ -146,12 +148,14 @@ export const useChatStore = defineStore('chat', () => {
       exists.pinned = item.pinned
       exists.archived = item.archived
       exists.approvalLevel = item.approvalLevel ?? 'auto'
+      exists.modelId = item.modelId ?? exists.modelId
       exists.updatedAt = item.updatedAt
     } else {
       conversations.value.push({
         id: item.id,
         title: item.title,
         agentId: item.agentId,
+        modelId: item.modelId ?? null,
         projectId: item.projectId,
         cwd: item.cwd,
         pinned: item.pinned,
@@ -206,10 +210,14 @@ export const useChatStore = defineStore('chat', () => {
     firstMessage: string,
     projectId?: string | null,
     attachments?: Attachment[],
-    planMode?: boolean
+    planMode?: boolean,
+    modelId?: string
   ): Promise<string> {
+    const modelStore = useModelStore()
+    const resolvedModelId = modelId ?? modelStore.getEffectiveModelId()
     const result = await window.agentAPI.chat.createConversation({
       agentId,
+      modelId: resolvedModelId,
       firstMessage,
       projectId,
       attachments: toAttachmentPayloads(attachments),
@@ -229,6 +237,7 @@ export const useChatStore = defineStore('chat', () => {
       id: result.id,
       title: result.title,
       agentId,
+      modelId: resolvedModelId,
       projectId: projectId ?? null,
       cwd: result.cwd,
       approvalLevel: 'auto',
@@ -277,19 +286,22 @@ export const useChatStore = defineStore('chat', () => {
     attachments?: Attachment[],
     planMode?: boolean
   ): Promise<void> {
+    const conv = conversations.value.find((c) => c.id === conversationId)
+    const modelStore = useModelStore()
+    const modelId = modelStore.getEffectiveModelId(conv?.modelId)
     if (isConversationStreaming(conversationId)) {
-      queuedMessages.value.push({ conversationId, content, agentId, planMode: planMode ?? false })
+      queuedMessages.value.push({ conversationId, content, agentId, modelId, planMode: planMode ?? false })
       return
     }
     addMessage(conversationId, 'user', content, attachments, planMode)
     waitingConversationIds.value.add(conversationId)
-    const conv = conversations.value.find((c) => c.id === conversationId)
     const workspaceStore = useWorkspaceStore()
     const wsFolders = workspaceStore.currentWorkspace?.folders
     await window.agentAPI.chat.sendMessage({
       conversationId,
       content,
       agentId,
+      modelId,
       cwd: conv?.cwd || workspaceStore.currentCwd,
       workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
       attachments: toAttachmentPayloads(attachments),
@@ -321,11 +333,13 @@ export const useChatStore = defineStore('chat', () => {
     waitingConversationIds.value.add(next.conversationId)
     const conv = conversations.value.find((c) => c.id === next.conversationId)
     const workspaceStore = useWorkspaceStore()
+    const modelStore = useModelStore()
     const wsFolders = workspaceStore.currentWorkspace?.folders
     window.agentAPI.chat.sendMessage({
       conversationId: next.conversationId,
       content: next.content,
       agentId: next.agentId,
+      modelId: next.modelId ?? modelStore.getEffectiveModelId(conv?.modelId),
       cwd: conv?.cwd || workspaceStore.currentCwd,
       workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
       planMode: next.planMode ?? false
@@ -532,6 +546,14 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  async function setConversationModelId(conversationId: string, modelId: string): Promise<void> {
+    const conv = conversations.value.find((c) => c.id === conversationId)
+    if (conv) {
+      conv.modelId = modelId
+      await window.agentAPI.conversations.update({ id: conversationId, modelId })
+    }
+  }
+
   function initApprovalNavigateListener(): () => void {
     return window.agentAPI.approval.onNavigate((conversationId) => {
       setActive(conversationId)
@@ -649,6 +671,7 @@ export const useChatStore = defineStore('chat', () => {
     getConversationAsMarkdown,
     respondToApproval,
     setConversationApprovalLevel,
+    setConversationModelId,
     initAgentEventListener,
     initApprovalNavigateListener
   }

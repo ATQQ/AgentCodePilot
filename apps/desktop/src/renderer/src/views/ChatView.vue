@@ -8,6 +8,7 @@ import { useAgentStore } from '@renderer/stores/agent.store'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import PromptComposer from '@renderer/components/home/PromptComposer.vue'
 import AgentSelector from '@renderer/components/home/AgentSelector.vue'
+import ModelSelector from '@renderer/components/home/ModelSelector.vue'
 import ToolCallsSection from '@renderer/components/chat/ToolCallsSection.vue'
 import ApprovalRequestCard from '@renderer/components/chat/ApprovalRequestCard.vue'
 import claudeIcon from '@renderer/assets/claude-icon.svg'
@@ -354,6 +355,7 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
           >
             <template #selectors>
               <AgentSelector />
+              <ModelSelector />
             </template>
           </PromptComposer>
         </template>

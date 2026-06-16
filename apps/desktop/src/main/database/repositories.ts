@@ -4,6 +4,7 @@ export interface ConversationRow {
   id: string
   title: string
   agent_id: string
+  model_id: string | null
   project_id: string | null
   cwd: string | null
   agent_session_id: string | null
@@ -44,6 +45,7 @@ export function createConversation(conv: {
   id: string
   title: string
   agentId: string
+  modelId?: string | null
   projectId: string | null
   cwd: string | null
   approvalLevel?: string
@@ -52,12 +54,13 @@ export function createConversation(conv: {
 }): void {
   const db = getDatabase()
   db.prepare(
-    `INSERT INTO conversations (id, title, agent_id, project_id, cwd, approval_level, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO conversations (id, title, agent_id, model_id, project_id, cwd, approval_level, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     conv.id,
     conv.title,
     conv.agentId,
+    conv.modelId ?? null,
     conv.projectId,
     conv.cwd,
     conv.approvalLevel ?? 'auto',
@@ -161,7 +164,7 @@ export function resolveWorkspaceFoldersForProjectId(projectId: string): string[]
 
 export function updateConversation(
   id: string,
-  fields: { title?: string; pinned?: boolean; archived?: boolean; approvalLevel?: string }
+  fields: { title?: string; pinned?: boolean; archived?: boolean; approvalLevel?: string; modelId?: string }
 ): void {
   const db = getDatabase()
   const sets: string[] = []
@@ -183,6 +186,10 @@ export function updateConversation(
     sets.push('approval_level = ?')
     values.push(fields.approvalLevel)
   }
+  if (fields.modelId !== undefined) {
+    sets.push('model_id = ?')
+    values.push(fields.modelId)
+  }
 
   if (sets.length === 0) return
 
@@ -190,7 +197,8 @@ export function updateConversation(
     fields.archived !== undefined &&
     fields.title === undefined &&
     fields.pinned === undefined &&
-    fields.approvalLevel === undefined
+    fields.approvalLevel === undefined &&
+    fields.modelId === undefined
 
   if (!onlyArchiveChange) {
     sets.push('updated_at = ?')

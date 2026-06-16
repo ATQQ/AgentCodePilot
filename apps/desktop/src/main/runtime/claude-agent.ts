@@ -116,6 +116,7 @@ export class ClaudeAgentAdapter implements AgentAdapter {
       maxTurns: 20,
       ...permissionOptions,
       includePartialMessages: true,
+      ...(input.model ? { model: input.model } : {}),
       ...(sessionId ? { resume: sessionId } : {})
     }
 

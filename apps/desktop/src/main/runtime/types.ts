@@ -10,6 +10,7 @@ export interface AgentRunInput {
   messageId: string
   content: string
   agentId: string
+  model?: string
   cwd?: string
   workspaceFolders?: string[]
   agentSessionId?: string | null

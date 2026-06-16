@@ -10,6 +10,7 @@ import router from './router'
 import i18n from './i18n'
 import { useSettingsStore } from './stores/settings.store'
 import { useAgentStore } from './stores/agent.store'
+import { useModelStore } from './stores/model.store'
 import { useChatStore } from './stores/chat.store'
 
 const pinia = createPinia()
@@ -19,6 +20,7 @@ app.use(pinia).use(router).use(ElementPlus).use(i18n)
 
 const settingsStore = useSettingsStore()
 const agentStore = useAgentStore()
+const modelStore = useModelStore()
 const chatStore = useChatStore()
 
 import { useWorkspaceStore } from './stores/workspace.store'
@@ -26,6 +28,7 @@ const workspaceStore = useWorkspaceStore()
 
 settingsStore.fetchSettings()
 agentStore.fetchAgents()
+modelStore.fetchCatalog('claude-code')
 workspaceStore.loadProjects().then(() => {
   chatStore.loadConversations()
 })

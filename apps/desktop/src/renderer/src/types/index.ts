@@ -1,3 +1,5 @@
+export type { AgentModelOption, AgentConfigSettings, ModelCatalogSource, ModelCatalogResult } from '../../../preload/types'
+
 export interface AgentConfig {
   id: string
   name: string
@@ -62,6 +64,7 @@ export interface Conversation {
   id: string
   title: string
   agentId: string
+  modelId?: string | null
   projectId: string | null
   cwd: string | null
   messages: Message[]

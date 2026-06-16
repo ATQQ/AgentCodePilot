@@ -1,5 +1,8 @@
 export const IPC_CHANNELS = {
   AGENTS_LIST: 'agents:list',
+  AGENTS_MODELS_LIST: 'agents:listModels',
+  AGENTS_CONFIG_GET: 'agents:getConfig',
+  AGENTS_CONFIG_UPDATE: 'agents:updateConfig',
   CHAT_CREATE: 'chat:createConversation',
   CHAT_SEND: 'chat:sendMessage',
   CHAT_SEND_FIRST: 'chat:sendFirstMessage',
@@ -51,6 +54,7 @@ export interface SendMessagePayload {
   conversationId: string
   content: string
   agentId: string
+  modelId?: string
   cwd?: string
   workspaceFolders?: string[]
   attachments?: AttachmentPayload[]
@@ -59,6 +63,7 @@ export interface SendMessagePayload {
 
 export interface CreateConversationPayload {
   agentId: string
+  modelId?: string
   firstMessage: string
   projectId?: string | null
   attachments?: AttachmentPayload[]
@@ -78,6 +83,7 @@ export interface ConversationUpdatePayload {
   pinned?: boolean
   archived?: boolean
   approvalLevel?: 'request' | 'auto' | 'full'
+  modelId?: string
 }
 
 export interface ProjectPayload {
@@ -112,6 +118,29 @@ export interface AgentInfo {
   enabled: boolean
 }
 
+export interface AgentModelOption {
+  id: string
+  name: string
+  description?: string
+}
+
+export interface AgentConfigSettings {
+  defaultModelId?: string
+  models?: AgentModelOption[]
+}
+
+export type ModelCatalogSource = 'sdk' | 'claude-settings' | 'app-config' | 'fallback'
+
+export interface ModelCatalogResult {
+  agentId: string
+  models: AgentModelOption[]
+  discoveredModels: AgentModelOption[]
+  defaultModelId: string
+  source: ModelCatalogSource
+  discoveredSource: ModelCatalogSource
+  claudeDefaultModelId?: string | null
+}
+
 export interface ConversationInfo {
   id: string
   title: string
@@ -122,6 +151,7 @@ export interface ConversationListItem {
   id: string
   title: string
   agentId: string
+  modelId: string | null
   projectId: string | null
   cwd: string | null
   pinned: boolean
@@ -203,6 +233,9 @@ export type AgentEvent =
 export interface AgentAPI {
   agents: {
     list: () => Promise<AgentInfo[]>
+    listModels: (agentId: string, forceRefresh?: boolean) => Promise<ModelCatalogResult>
+    getConfig: (agentId: string) => Promise<AgentConfigSettings>
+    updateConfig: (agentId: string, config: AgentConfigSettings) => Promise<ModelCatalogResult>
   }
   chat: {
     createConversation: (payload: CreateConversationPayload) => Promise<ConversationInfo>

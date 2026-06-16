@@ -4,8 +4,9 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import type { ThemeMode } from '@renderer/types'
-import { ArrowLeft, Bell, Brush, Document } from '@element-plus/icons-vue'
+import { ArrowLeft, Bell, Brush, Document, Cpu } from '@element-plus/icons-vue'
 import ArchivedConversationsSection from '@renderer/components/settings/ArchivedConversationsSection.vue'
+import AgentSettingsSection from '@renderer/components/settings/AgentSettingsSection.vue'
 // TODO: 恢复未实现设置项时取消注释
 // import {
 //   Setting,
@@ -31,7 +32,7 @@ const activeSection = ref('appearance')
 watch(
   () => route.query.section,
   (section) => {
-    if (typeof section === 'string' && (section === 'appearance' || section === 'notifications' || section === 'archived')) {
+    if (typeof section === 'string' && (section === 'appearance' || section === 'notifications' || section === 'archived' || section === 'agents')) {
       activeSection.value = section
     }
   },
@@ -61,6 +62,10 @@ const navGroups: NavGroup[] = [
       { key: 'appearance', labelKey: 'settings.appearance', icon: Brush },
       { key: 'notifications', labelKey: 'settings.notifications', icon: Bell }
     ]
+  },
+  {
+    titleKey: 'settings.integration',
+    items: [{ key: 'agents', labelKey: 'settings.agentConfig.title', icon: Cpu }]
   },
   {
     titleKey: 'settings.archived',
@@ -237,6 +242,10 @@ function goBack(): void {
               />
             </div>
           </div>
+        </div>
+
+        <div v-else-if="activeSection === 'agents'" class="content-section">
+          <AgentSettingsSection />
         </div>
 
         <ArchivedConversationsSection v-else-if="activeSection === 'archived'" />

@@ -3,15 +3,18 @@ import { useRouter } from 'vue-router'
 import HomeEmptyState from '@renderer/components/home/HomeEmptyState.vue'
 import PromptComposer from '@renderer/components/home/PromptComposer.vue'
 import AgentSelector from '@renderer/components/home/AgentSelector.vue'
+import ModelSelector from '@renderer/components/home/ModelSelector.vue'
 import WorkspaceSelector from '@renderer/components/home/WorkspaceSelector.vue'
 import { useChatStore } from '@renderer/stores/chat.store'
 import { useAgentStore } from '@renderer/stores/agent.store'
+import { useModelStore } from '@renderer/stores/model.store'
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
 import type { Attachment } from '@renderer/types'
 
 const router = useRouter()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
+const modelStore = useModelStore()
 const workspaceStore = useWorkspaceStore()
 
 async function handleSubmit(text: string, attachments: Attachment[], planMode: boolean): Promise<void> {
@@ -30,6 +33,7 @@ async function handleSubmit(text: string, attachments: Attachment[], planMode: b
     conversationId: convId,
     content: text,
     agentId,
+    modelId: modelStore.getEffectiveModelId(),
     cwd,
     workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
     attachments: attachmentPayloads.length > 0 ? attachmentPayloads : undefined,
@@ -46,6 +50,7 @@ async function handleSubmit(text: string, attachments: Attachment[], planMode: b
         <PromptComposer @submit="handleSubmit">
           <template #selectors>
             <AgentSelector />
+            <ModelSelector />
           </template>
         </PromptComposer>
         <WorkspaceSelector />

@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type {
   AgentEvent,
+  AgentConfigSettings,
   ApprovalRespondPayload,
   CreateConversationPayload,
   SendMessagePayload,
@@ -15,7 +16,12 @@ import { IPC_CHANNELS } from './types'
 
 const agentAPI = {
   agents: {
-    list: () => ipcRenderer.invoke(IPC_CHANNELS.AGENTS_LIST)
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.AGENTS_LIST),
+    listModels: (agentId: string, forceRefresh?: boolean) =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENTS_MODELS_LIST, agentId, forceRefresh),
+    getConfig: (agentId: string) => ipcRenderer.invoke(IPC_CHANNELS.AGENTS_CONFIG_GET, agentId),
+    updateConfig: (agentId: string, config: AgentConfigSettings) =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENTS_CONFIG_UPDATE, agentId, config)
   },
   chat: {
     createConversation: (payload: CreateConversationPayload) =>

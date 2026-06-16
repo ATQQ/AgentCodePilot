@@ -6,6 +6,7 @@ import icon from '../../resources/icon.png?asset'
 import { IPC_CHANNELS } from '../preload/types'
 import type {
   AgentEvent,
+  AgentConfigSettings,
   AgentInfo,
   AttachmentPayload,
   ConversationInfo,
@@ -23,6 +24,11 @@ import type {
 } from '../preload/types'
 import { agentRegistry, initializeAgentRegistry } from './runtime'
 import { supervisedRun, supervisedStop } from './runtime/supervisor'
+import {
+  getAgentConfig,
+  getModelCatalog,
+  saveAgentConfig
+} from './runtime/claude-model-catalog'
 import { respondToApproval, cancelApprovalsForConversation } from './runtime/approval-manager'
 import type { ApprovalRespondPayload } from '../preload/types'
 import { startGateway, stopGateway, getGatewayConfig, isGatewayRunning } from './gateway'
@@ -158,6 +164,7 @@ function mapConversationRow(r: repo.ConversationRow): ConversationListItem {
     id: r.id,
     title: r.title,
     agentId: r.agent_id,
+    modelId: r.model_id ?? null,
     projectId: r.project_id,
     cwd: r.cwd ?? null,
     pinned: r.pinned === 1,
@@ -178,6 +185,21 @@ function registerIpcHandlers(): void {
       enabled: a.enabled
     }))
   })
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENTS_MODELS_LIST,
+    (_e, agentId: string, forceRefresh?: boolean) => getModelCatalog(agentId, forceRefresh ?? false)
+  )
+
+  ipcMain.handle(IPC_CHANNELS.AGENTS_CONFIG_GET, (_e, agentId: string) => getAgentConfig(agentId))
+
+  ipcMain.handle(
+    IPC_CHANNELS.AGENTS_CONFIG_UPDATE,
+    (_e, agentId: string, config: AgentConfigSettings) => {
+      saveAgentConfig(agentId, config)
+      return getModelCatalog(agentId, false)
+    }
+  )
 
   ipcMain.handle(
     IPC_CHANNELS.CHAT_CREATE,
@@ -201,6 +223,7 @@ function registerIpcHandlers(): void {
         id,
         title,
         agentId: payload.agentId,
+        modelId: payload.modelId ?? null,
         projectId: payload.projectId ?? null,
         cwd,
         approvalLevel: 'auto',
@@ -238,6 +261,7 @@ function registerIpcHandlers(): void {
       messageId: assistantMsgId,
       content: prompt,
       agentId: payload.agentId,
+      model: payload.modelId,
       cwd: resolveConversationCwd(payload.conversationId, payload.cwd),
       workspaceFolders: resolveConversationWorkspaceFolders(
         payload.conversationId,
@@ -280,6 +304,7 @@ function registerIpcHandlers(): void {
       messageId: assistantMsgId,
       content: prompt,
       agentId: payload.agentId,
+      model: payload.modelId,
       cwd: resolveConversationCwd(payload.conversationId, payload.cwd),
       workspaceFolders: resolveConversationWorkspaceFolders(
         payload.conversationId,
@@ -381,7 +406,8 @@ function registerIpcHandlers(): void {
         title: payload.title,
         pinned: payload.pinned,
         archived: payload.archived,
-        approvalLevel: payload.approvalLevel
+        approvalLevel: payload.approvalLevel,
+        modelId: payload.modelId
       })
     }
   )
