@@ -15,6 +15,7 @@ export interface AgentRunInput {
   workspaceFolders?: string[]
   agentSessionId?: string | null
   conversationHistory?: ConversationHistoryItem[]
+  attachmentDirectories?: string[]
   approvalLevel?: 'request' | 'auto' | 'full'
   planMode?: boolean
 }

@@ -23,7 +23,7 @@ export default {
   },
   composer: {
     addMenu: {
-      addPhotosAndFiles: '添加照片和文件',
+      addPhotosAndFiles: '图片或文件',
       attachUrl: '附加外部链接内容',
       planMode: '计划模式',
       pursueGoals: '追求目标',

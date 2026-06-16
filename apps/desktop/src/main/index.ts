@@ -35,7 +35,12 @@ import { startGateway, stopGateway, getGatewayConfig, isGatewayRunning } from '.
 import { logInfo, logError, cleanOldLogs } from './logger'
 import { getDatabase, closeDatabase } from './database'
 import * as repo from './database/repositories'
-import { persistAttachments } from './file/attachments'
+import { persistAttachments, deleteConversationAttachments } from './file/attachments'
+import {
+  buildPromptWithAttachments,
+  collectAttachmentDirectories,
+  formatMessageContentWithAttachments
+} from './file/prompt-attachments'
 import { registerLocalFileProtocol, registerLocalFileScheme } from './file/local-file-protocol'
 
 registerLocalFileScheme()
@@ -43,19 +48,6 @@ registerLocalFileScheme()
 let mainWindow: BrowserWindow | null = null
 
 const streamingMessages = new Map<string, { conversationId: string; content: string; rawInput: string }>()
-
-function buildPromptWithAttachments(content: string, attachments?: AttachmentPayload[]): string {
-  if (!attachments || attachments.length === 0) return content
-  const parts: string[] = []
-  for (const att of attachments) {
-    if (att.type === 'url') {
-      parts.push(`[参考链接: ${att.url}]`)
-    } else {
-      parts.push(`[附件: ${att.path}]`)
-    }
-  }
-  return parts.join('\n') + '\n\n' + content
-}
 
 function resolveConversationCwd(conversationId: string, payloadCwd?: string): string {
   const conv = repo.getConversationById(conversationId)
@@ -96,7 +88,10 @@ function getConversationRunContext(conversationId: string): {
     agentSessionId: conv?.agent_session_id ?? null,
     conversationHistory: messages.map((m) => ({
       role: m.role as 'user' | 'assistant',
-      content: m.content
+      content:
+        m.role === 'user'
+          ? formatMessageContentWithAttachments(m.content, m.attachments)
+          : m.content
     }))
   }
 }
@@ -274,6 +269,7 @@ function registerIpcHandlers(): void {
       ),
       agentSessionId: runContext.agentSessionId,
       conversationHistory: runContext.conversationHistory,
+      attachmentDirectories: collectAttachmentDirectories(payload.attachments),
       approvalLevel,
       planMode: payload.planMode ?? false
     }
@@ -324,6 +320,9 @@ function registerIpcHandlers(): void {
       ),
       agentSessionId: runContext.agentSessionId,
       conversationHistory: runContext.conversationHistory,
+      attachmentDirectories: collectAttachmentDirectories(
+        persistedAttachments ?? payload.attachments
+      ),
       approvalLevel,
       planMode: payload.planMode ?? false
     }
@@ -426,10 +425,15 @@ function registerIpcHandlers(): void {
   )
 
   ipcMain.handle(IPC_CHANNELS.CONVERSATIONS_DELETE, (_e, conversationId: string): void => {
+    deleteConversationAttachments(conversationId)
     repo.deleteConversation(conversationId)
   })
 
   ipcMain.handle(IPC_CHANNELS.CONVERSATIONS_DELETE_ALL_ARCHIVED, (): void => {
+    const archived = repo.getArchivedConversations()
+    for (const conv of archived) {
+      deleteConversationAttachments(conv.id)
+    }
     repo.deleteAllArchivedConversations()
   })
 
@@ -531,11 +535,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.DIALOG_SELECT_FILES, async (): Promise<string[] | null> => {
     const result = await dialog.showOpenDialog({
-      properties: ['openFile', 'multiSelections'],
-      filters: [
-        { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'] },
-        { name: 'All Files', extensions: ['*'] }
-      ]
+      properties: ['openFile', 'multiSelections']
     })
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths

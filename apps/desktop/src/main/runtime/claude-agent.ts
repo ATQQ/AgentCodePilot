@@ -18,7 +18,14 @@ function buildPrompt(input: AgentRunInput, sessionId: string | undefined): strin
   }
 
   if (input.conversationHistory && input.conversationHistory.length > 0) {
-    return input.conversationHistory
+    const history = [...input.conversationHistory]
+    const last = history[history.length - 1]
+    if (last?.role === 'user') {
+      history[history.length - 1] = { role: 'user', content: input.content }
+    } else {
+      history.push({ role: 'user', content: input.content })
+    }
+    return history
       .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
       .join('\n\n')
   }
@@ -111,6 +118,9 @@ export class ClaudeAgentAdapter implements AgentAdapter {
     const queryOptions: Options = {
       abortController: controller,
       cwd: input.cwd || app.getPath('home'),
+      ...(input.attachmentDirectories?.length
+        ? { additionalDirectories: input.attachmentDirectories }
+        : {}),
       ...toolAccessOptions,
       skills: 'all' as const,
       maxTurns: 20,
