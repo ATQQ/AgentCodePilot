@@ -6,6 +6,30 @@ import type { AgentEvent } from '../../preload/types'
 const MAX_RETRIES = 2
 const activeRuns = new Map<string, { adapter: AgentAdapter; retries: number }>()
 
+function formatRunContext(input: AgentRunInput, attempt = 0): string {
+  const parts = [
+    `agent=${input.agentId}`,
+    `conv=${input.conversationId}`,
+    `msg=${input.messageId}`,
+    `model=${input.model ?? '(cli-default)'}`,
+    `cwd=${input.cwd ?? '-'}`,
+    `approval=${input.approvalLevel ?? 'auto'}`,
+    `planMode=${input.planMode ? 'true' : 'false'}`,
+    `resume=${input.agentSessionId ? 'true' : 'false'}`,
+    `promptLen=${input.content.length}`
+  ]
+
+  if (input.workspaceFolders?.length) {
+    parts.push(`workspaceFolders=${input.workspaceFolders.length}`)
+  }
+
+  if (attempt > 0) {
+    parts.push(`attempt=${attempt + 1}`)
+  }
+
+  return parts.join(', ')
+}
+
 export function supervisedRun(
   input: AgentRunInput,
   emit: (event: AgentEvent) => void
@@ -21,7 +45,7 @@ export function supervisedRun(
   }
 
   activeRuns.set(input.conversationId, { adapter, retries: 0 })
-  logInfo('Supervisor', `Starting run: agent=${input.agentId}, conv=${input.conversationId}`)
+  logInfo('Supervisor', `Starting run: ${formatRunContext(input)}`)
 
   runWithRetry(adapter, input, emit, 0)
 }
@@ -40,7 +64,7 @@ function runWithRetry(
     logError('Supervisor', `Run failed (attempt ${attempt + 1}): ${errMsg}`, error)
 
     if (attempt < MAX_RETRIES && isRetryable(error)) {
-      logInfo('Supervisor', `Retrying (${attempt + 1}/${MAX_RETRIES})...`)
+      logInfo('Supervisor', `Retrying (${attempt + 1}/${MAX_RETRIES}): ${formatRunContext(input, attempt + 1)}`)
       entry.retries = attempt + 1
       setTimeout(() => runWithRetry(adapter, input, emit, attempt + 1), 1000 * (attempt + 1))
     } else {
