@@ -32,6 +32,9 @@ const topNavItems = [
 ]
 
 const collapsedProjects = ref<Set<string>>(new Set())
+const collapsedSections = ref<Set<string>>(new Set())
+
+type SidebarSection = 'workspaces' | 'projects' | 'conversations'
 
 const contextMenu = reactive({
   visible: false,
@@ -128,6 +131,18 @@ function toggleProjectCollapse(projId: string): void {
 
 function isProjectCollapsed(projId: string): boolean {
   return collapsedProjects.value.has(projId)
+}
+
+function toggleSectionCollapse(section: SidebarSection): void {
+  if (collapsedSections.value.has(section)) {
+    collapsedSections.value.delete(section)
+  } else {
+    collapsedSections.value.add(section)
+  }
+}
+
+function isSectionCollapsed(section: SidebarSection): boolean {
+  return collapsedSections.value.has(section)
 }
 
 function isProjectHeaderActive(projectId: string): boolean {
@@ -331,8 +346,14 @@ onUnmounted(() => {
       </nav>
 
       <div v-if="workspaceStore.workspaces.length" class="sidebar-section">
-        <div class="section-title">{{ t('sidebar.workspaces') }}</div>
+        <div class="section-header" @click="toggleSectionCollapse('workspaces')">
+          <span class="section-label">{{ t('sidebar.workspaces') }}</span>
+          <el-icon :size="10" class="section-collapse-icon" :class="{ collapsed: isSectionCollapsed('workspaces') }">
+            <ArrowDown />
+          </el-icon>
+        </div>
 
+        <template v-if="!isSectionCollapsed('workspaces')">
         <div
           v-for="ws in workspaceStore.workspaces"
           :key="ws.id"
@@ -424,11 +445,18 @@ onUnmounted(() => {
             <div v-else class="no-conversations">{{ t('sidebar.noChats') }}</div>
           </div>
         </div>
+        </template>
       </div>
 
       <div class="sidebar-section">
-        <div class="section-title">{{ t('sidebar.projects') }}</div>
+        <div class="section-header" @click="toggleSectionCollapse('projects')">
+          <span class="section-label">{{ t('sidebar.projects') }}</span>
+          <el-icon :size="10" class="section-collapse-icon" :class="{ collapsed: isSectionCollapsed('projects') }">
+            <ArrowDown />
+          </el-icon>
+        </div>
 
+        <template v-if="!isSectionCollapsed('projects')">
         <div
           v-for="proj in workspaceStore.standaloneProjects"
           :key="proj.id"
@@ -509,11 +537,22 @@ onUnmounted(() => {
             <div v-else class="no-conversations">{{ t('sidebar.noChats') }}</div>
           </div>
         </div>
+        </template>
       </div>
 
       <div class="sidebar-section">
-        <div class="section-title">{{ t('sidebar.conversations') }}</div>
-        <div class="project-conversations">
+        <div class="section-header" @click="toggleSectionCollapse('conversations')">
+          <span class="section-label">{{ t('sidebar.conversations') }}</span>
+          <el-icon :size="10" class="section-collapse-icon" :class="{ collapsed: isSectionCollapsed('conversations') }">
+            <ArrowDown />
+          </el-icon>
+          <div class="section-actions">
+            <button class="action-btn" @click.stop="navigate('/')">
+              <el-icon :size="12"><EditPen /></el-icon>
+            </button>
+          </div>
+        </div>
+        <div v-if="!isSectionCollapsed('conversations')" class="project-conversations">
           <template v-if="chatStore.getOrphanConversations().length">
             <div
               v-for="conv in chatStore.getOrphanConversations()"
@@ -709,11 +748,48 @@ onUnmounted(() => {
   padding: var(--spacing-sm) 0;
 }
 
-.section-title {
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+
+.section-header:hover {
+  background: var(--sidebar-item-hover);
+}
+
+.section-label {
   font-size: var(--font-size-xs);
   font-weight: 500;
   color: var(--sidebar-section-title);
+}
+
+.section-collapse-icon {
+  flex-shrink: 0;
+  transition: transform 0.15s;
+  opacity: 0.5;
+  color: var(--sidebar-section-title);
+}
+
+.section-collapse-icon.collapsed {
+  transform: rotate(-90deg);
+}
+
+.section-actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.section-header:hover .section-actions {
+  display: flex;
 }
 
 .sidebar-footer {
