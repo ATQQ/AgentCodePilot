@@ -24,7 +24,8 @@ async function handleSubmit(text: string, attachments: Attachment[], planMode: b
   router.push('/chat')
   const conv = chatStore.activeConversation
   const cwd = conv?.cwd || workspaceStore.currentCwd
-  const attachmentPayloads = attachments.map((a) => {
+  const persistedAttachments = conv?.messages[0]?.attachments
+  const attachmentPayloads = persistedAttachments?.map((a) => {
     if (a.type === 'url') return { id: a.id, type: 'url' as const, url: a.url }
     return { id: a.id, type: a.type, name: a.name, path: a.path }
   })
@@ -36,7 +37,7 @@ async function handleSubmit(text: string, attachments: Attachment[], planMode: b
     modelId: modelStore.getEffectiveModelId(),
     cwd,
     workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
-    attachments: attachmentPayloads.length > 0 ? attachmentPayloads : undefined,
+    attachments: attachmentPayloads && attachmentPayloads.length > 0 ? attachmentPayloads : undefined,
     planMode
   })
 }

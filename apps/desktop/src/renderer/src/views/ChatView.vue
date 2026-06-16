@@ -11,6 +11,7 @@ import AgentSelector from '@renderer/components/home/AgentSelector.vue'
 import ModelSelector from '@renderer/components/home/ModelSelector.vue'
 import ToolCallsSection from '@renderer/components/chat/ToolCallsSection.vue'
 import ApprovalRequestCard from '@renderer/components/chat/ApprovalRequestCard.vue'
+import MessageAttachmentImage from '@renderer/components/chat/MessageAttachmentImage.vue'
 import claudeIcon from '@renderer/assets/claude-icon.svg'
 import codexIcon from '@renderer/assets/codex-icon.svg'
 import cursorIcon from '@renderer/assets/cursor-icon.svg'
@@ -146,6 +147,11 @@ function handleSubmit(text: string, attachments: Attachment[], planMode: boolean
   chatStore.sendMessage(chatStore.activeConversationId, text, agentId, attachments, planMode)
 }
 
+async function openAttachment(att: Attachment): Promise<void> {
+  if (att.type !== 'file') return
+  await window.agentAPI.file.openAttachment(att.path, att.type)
+}
+
 function handleStop(): void {
   if (chatStore.activeConversationId) {
     chatStore.stopConversation(chatStore.activeConversationId)
@@ -278,10 +284,21 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
               <div v-if="msg.attachments?.length" class="message-attachments">
                 <div v-for="(att, idx) in msg.attachments" :key="att.id" class="msg-attachment">
                   <template v-if="att.type === 'image'">
-                    <img class="msg-attachment-img" :src="att.previewUrl || `file://${att.path}`" :alt="att.name" />
+                    <MessageAttachmentImage
+                      :path="att.path"
+                      :name="att.name"
+                      :title="t('chat.previewAttachment')"
+                    />
                   </template>
                   <template v-else-if="att.type === 'file'">
-                    <span class="msg-attachment-chip">&#x1F4C4; {{ att.name }}</span>
+                    <button
+                      type="button"
+                      class="msg-attachment-chip msg-attachment-action"
+                      :title="t('chat.showInFolder')"
+                      @click="openAttachment(att)"
+                    >
+                      &#x1F4C4; {{ att.name }}
+                    </button>
                   </template>
                   <template v-else-if="att.type === 'url'">
                     <span class="msg-attachment-chip msg-attachment-url">
@@ -656,12 +673,15 @@ html.dark .approval-inline-tag {
   margin-bottom: 6px;
 }
 
-.msg-attachment-img {
-  width: 48px;
-  height: 48px;
-  object-fit: cover;
-  border-radius: var(--radius-md);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+.msg-attachment-action {
+  cursor: pointer;
+  border: none;
+  color: inherit;
+  font: inherit;
+}
+
+.msg-attachment-action:hover {
+  background: rgba(255, 255, 255, 0.25);
 }
 
 .msg-attachment-chip {

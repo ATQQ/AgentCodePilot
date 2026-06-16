@@ -1,6 +1,6 @@
-import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, nativeImage } from 'electron'
 import { join } from 'path'
-import { mkdirSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, writeFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { IPC_CHANNELS } from '../preload/types'
@@ -35,6 +35,10 @@ import { startGateway, stopGateway, getGatewayConfig, isGatewayRunning } from '.
 import { logInfo, logError, cleanOldLogs } from './logger'
 import { getDatabase, closeDatabase } from './database'
 import * as repo from './database/repositories'
+import { persistAttachments } from './file/attachments'
+import { registerLocalFileProtocol, registerLocalFileScheme } from './file/local-file-protocol'
+
+registerLocalFileScheme()
 
 let mainWindow: BrowserWindow | null = null
 
@@ -232,17 +236,18 @@ function registerIpcHandlers(): void {
       })
 
       const userMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      const persistedAttachments = persistAttachments(id, userMsgId, payload.attachments)
       repo.addMessage({
         id: userMsgId,
         conversationId: id,
         role: 'user',
         content: payload.firstMessage,
         createdAt: now,
-        attachments: payload.attachments ? JSON.stringify(payload.attachments) : null,
+        attachments: persistedAttachments ? JSON.stringify(persistedAttachments) : null,
         planMode: payload.planMode ?? false
       })
 
-      return { id, title, cwd }
+      return { id, title, cwd, attachments: persistedAttachments }
     }
   )
 
@@ -276,10 +281,17 @@ function registerIpcHandlers(): void {
     supervisedRun(runInput, emitAgentEvent)
   })
 
-  ipcMain.handle(IPC_CHANNELS.CHAT_SEND, (_e, payload: SendMessagePayload): void => {
+  ipcMain.handle(
+    IPC_CHANNELS.CHAT_SEND,
+    (_e, payload: SendMessagePayload): AttachmentPayload[] | undefined => {
     const userMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
     const assistantMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-a`
     const now = new Date().toISOString()
+    const persistedAttachments = persistAttachments(
+      payload.conversationId,
+      userMsgId,
+      payload.attachments
+    )
 
     repo.addMessage({
       id: userMsgId,
@@ -287,11 +299,11 @@ function registerIpcHandlers(): void {
       role: 'user',
       content: payload.content,
       createdAt: now,
-      attachments: payload.attachments ? JSON.stringify(payload.attachments) : null,
+      attachments: persistedAttachments ? JSON.stringify(persistedAttachments) : null,
       planMode: payload.planMode ?? false
     })
 
-    const prompt = buildPromptWithAttachments(payload.content, payload.attachments)
+    const prompt = buildPromptWithAttachments(payload.content, persistedAttachments ?? payload.attachments)
     streamingMessages.set(assistantMsgId, {
       conversationId: payload.conversationId,
       content: '',
@@ -317,6 +329,7 @@ function registerIpcHandlers(): void {
     }
 
     supervisedRun(runInput, emitAgentEvent)
+    return persistedAttachments
   })
 
   ipcMain.handle(IPC_CHANNELS.CHAT_STOP, (_e, conversationId: string): void => {
@@ -539,6 +552,29 @@ function registerIpcHandlers(): void {
       return filePath
     }
   )
+
+  ipcMain.handle(
+    IPC_CHANNELS.FILE_OPEN_ATTACHMENT,
+    (_e, filePath: string, type: 'image' | 'file'): boolean => {
+      if (!existsSync(filePath)) return false
+      if (type === 'image') {
+        void shell.openPath(filePath)
+      } else {
+        shell.showItemInFolder(filePath)
+      }
+      return true
+    }
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.FILE_GET_IMAGE_DATA_URL,
+    (_e, filePath: string): string | null => {
+      if (!existsSync(filePath)) return null
+      const image = nativeImage.createFromPath(filePath)
+      if (image.isEmpty()) return null
+      return image.toDataURL()
+    }
+  )
 }
 
 function createWindow(): void {
@@ -581,6 +617,7 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.agentcodepilot.app')
+  registerLocalFileProtocol()
 
   logInfo('App', `Starting AgentCodePilot v${app.getVersion()}`)
   cleanOldLogs()

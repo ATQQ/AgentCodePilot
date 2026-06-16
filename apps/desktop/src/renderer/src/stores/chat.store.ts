@@ -6,6 +6,7 @@ import type { ApprovalLevel } from '@renderer/types'
 import { useWorkspaceStore } from './workspace.store'
 import { useModelStore } from './model.store'
 import { getToolCallFingerprint } from '@renderer/utils/toolCall'
+import { attachmentFromPayload, enrichAttachment } from '@renderer/utils/localFile'
 
 export const useChatStore = defineStore('chat', () => {
   const conversations = ref<Conversation[]>([])
@@ -193,7 +194,7 @@ export const useChatStore = defineStore('chat', () => {
       content: m.content,
       createdAt: m.createdAt,
       planMode: m.planMode,
-      attachments: m.attachments as Attachment[] | undefined,
+      attachments: m.attachments?.map((att) => enrichAttachment(att as Attachment)),
       usage: m.usage,
       debugInput: m.debugInput,
       debugOutput: m.debugOutput
@@ -224,6 +225,10 @@ export const useChatStore = defineStore('chat', () => {
       planMode: planMode ?? false
     })
 
+    const persistedAttachments =
+      result.attachments?.map((att) => attachmentFromPayload(att)) ??
+      (attachments && attachments.length > 0 ? attachments.map((att) => enrichAttachment(att)) : undefined)
+
     const now = new Date().toISOString()
     const msg: Message = {
       id: `msg-${Date.now()}`,
@@ -231,7 +236,7 @@ export const useChatStore = defineStore('chat', () => {
       content: firstMessage,
       createdAt: now,
       ...(planMode ? { planMode: true } : {}),
-      attachments: attachments && attachments.length > 0 ? attachments : undefined
+      attachments: persistedAttachments
     }
     conversations.value.unshift({
       id: result.id,
@@ -297,7 +302,7 @@ export const useChatStore = defineStore('chat', () => {
     waitingConversationIds.value.add(conversationId)
     const workspaceStore = useWorkspaceStore()
     const wsFolders = workspaceStore.currentWorkspace?.folders
-    await window.agentAPI.chat.sendMessage({
+    const persistedAttachments = await window.agentAPI.chat.sendMessage({
       conversationId,
       content,
       agentId,
@@ -307,6 +312,12 @@ export const useChatStore = defineStore('chat', () => {
       attachments: toAttachmentPayloads(attachments),
       planMode: planMode ?? false
     })
+    if (persistedAttachments?.length && conv) {
+      const lastUserMessage = [...conv.messages].reverse().find((m) => m.role === 'user')
+      if (lastUserMessage) {
+        lastUserMessage.attachments = persistedAttachments.map((att) => attachmentFromPayload(att))
+      }
+    }
   }
 
   function cancelQueuedMessage(index: number): void {

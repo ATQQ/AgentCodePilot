@@ -66,7 +66,11 @@ export default {
     copy: '复制',
     resend: '重新编辑',
     thinking: '思考中',
-    planModeTag: '计划模式'
+    planModeTag: '计划模式',
+    previewAttachment: '预览图片',
+    showInFolder: '在访达中显示',
+    closePreview: '关闭预览',
+    closePreviewHint: '按 Esc 关闭'
   },
   approval: {
     waitingTag: '等待批准',

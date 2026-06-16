@@ -4,6 +4,7 @@ import type {
   AgentEvent,
   AgentConfigSettings,
   ApprovalRespondPayload,
+  AttachmentPayload,
   CreateConversationPayload,
   SendMessagePayload,
   SettingsPayload,
@@ -27,7 +28,7 @@ const agentAPI = {
     createConversation: (payload: CreateConversationPayload) =>
       ipcRenderer.invoke(IPC_CHANNELS.CHAT_CREATE, payload),
     sendMessage: (payload: SendMessagePayload) =>
-      ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND, payload),
+      ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND, payload) as Promise<AttachmentPayload[] | undefined>,
     sendFirstMessage: (payload: SendMessagePayload) =>
       ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND_FIRST, payload),
     stop: (conversationId: string) => ipcRenderer.invoke(IPC_CHANNELS.CHAT_STOP, conversationId),
@@ -95,7 +96,11 @@ const agentAPI = {
   },
   file: {
     saveTempImage: (data: ArrayBuffer, filename: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.FILE_SAVE_TEMP_IMAGE, data, filename)
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_SAVE_TEMP_IMAGE, data, filename),
+    openAttachment: (filePath: string, type: 'image' | 'file') =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_OPEN_ATTACHMENT, filePath, type),
+    getImageDataUrl: (filePath: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_GET_IMAGE_DATA_URL, filePath) as Promise<string | null>
   }
 }
 

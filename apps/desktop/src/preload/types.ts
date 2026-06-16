@@ -15,6 +15,8 @@ export const IPC_CHANNELS = {
   DIALOG_SELECT_FOLDER: 'dialog:selectFolder',
   DIALOG_SELECT_FILES: 'dialog:selectFiles',
   FILE_SAVE_TEMP_IMAGE: 'file:saveTempImage',
+  FILE_OPEN_ATTACHMENT: 'file:openAttachment',
+  FILE_GET_IMAGE_DATA_URL: 'file:getImageDataUrl',
   CONVERSATIONS_LIST: 'conversations:list',
   CONVERSATIONS_LIST_ARCHIVED: 'conversations:listArchived',
   CONVERSATIONS_GET_MESSAGES: 'conversations:getMessages',
@@ -145,6 +147,7 @@ export interface ConversationInfo {
   id: string
   title: string
   cwd: string | null
+  attachments?: AttachmentPayload[]
 }
 
 export interface ConversationListItem {
@@ -239,7 +242,7 @@ export interface AgentAPI {
   }
   chat: {
     createConversation: (payload: CreateConversationPayload) => Promise<ConversationInfo>
-    sendMessage: (payload: SendMessagePayload) => Promise<void>
+    sendMessage: (payload: SendMessagePayload) => Promise<AttachmentPayload[] | undefined>
     sendFirstMessage: (payload: SendMessagePayload) => Promise<void>
     stop: (conversationId: string) => Promise<void>
     onAgentEvent: (callback: (event: AgentEvent) => void) => () => void
@@ -286,5 +289,7 @@ export interface AgentAPI {
   }
   file: {
     saveTempImage: (data: ArrayBuffer, filename: string) => Promise<string>
+    openAttachment: (filePath: string, type: 'image' | 'file') => Promise<boolean>
+    getImageDataUrl: (filePath: string) => Promise<string | null>
   }
 }

@@ -3,8 +3,11 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Plus, Top } from '@element-plus/icons-vue'
 import type { Attachment, ApprovalLevel, FileAttachment, UrlAttachment } from '@renderer/types'
+import { toLocalFileUrl } from '@renderer/utils/localFile'
+import { useImagePreview } from '@renderer/composables/useImagePreview'
 
 const { t } = useI18n()
+const { openImagePreview } = useImagePreview()
 const input = ref('')
 const showAddMenu = ref(false)
 const showApprovalMenu = ref(false)
@@ -112,7 +115,7 @@ async function handleSelectFiles(): Promise<void> {
       type: isImage ? 'image' : 'file',
       name,
       path,
-      previewUrl: isImage ? `file://${path}` : undefined
+      previewUrl: isImage ? toLocalFileUrl(path) : undefined
     }
     attachments.value.push(att)
   }
@@ -187,6 +190,14 @@ function getUrlIndex(id: string): number {
   return urls.findIndex((a) => a.id === id) + 1
 }
 
+function previewComposerImage(att: FileAttachment): void {
+  openImagePreview({
+    name: att.name,
+    path: att.path,
+    previewUrl: att.previewUrl
+  })
+}
+
 defineExpose({ setInput: (text: string) => { input.value = text } })
 </script>
 
@@ -205,9 +216,9 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
     <div v-if="attachments.length > 0" class="attachments-area">
       <div v-for="att in attachments" :key="att.id" class="attachment-item">
         <template v-if="att.type === 'image'">
-          <div class="attachment-image">
+          <div class="attachment-image" @click="previewComposerImage(att)">
             <img :src="att.previewUrl" :alt="att.name" />
-            <button class="attachment-remove" @click="removeAttachment(att.id)">&times;</button>
+            <button class="attachment-remove" @click.stop="removeAttachment(att.id)">&times;</button>
           </div>
         </template>
         <template v-else-if="att.type === 'file'">
@@ -484,6 +495,11 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
   border-radius: var(--radius-md);
   overflow: hidden;
   border: 1px solid var(--sidebar-border);
+  cursor: zoom-in;
+}
+
+.attachment-image:hover {
+  border-color: var(--content-text-secondary);
 }
 
 .attachment-image img {
