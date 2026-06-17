@@ -3,6 +3,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useUiStore } from '@renderer/stores/ui.store'
 import { useChatStore } from '@renderer/stores/chat.store'
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
+import { useLayoutStore } from '@renderer/stores/layout.store'
 
 export function useGlobalShortcuts(): void {
   const router = useRouter()
@@ -10,6 +11,7 @@ export function useGlobalShortcuts(): void {
   const uiStore = useUiStore()
   const chatStore = useChatStore()
   const workspaceStore = useWorkspaceStore()
+  const layoutStore = useLayoutStore()
 
   function startNewChat(): void {
     if (route.path === '/chat' && chatStore.activeConversation) {
@@ -28,9 +30,37 @@ export function useGlobalShortcuts(): void {
 
     const key = e.key.toLowerCase()
 
-    if (key === 'g') {
+    // Backtick ` → toggle terminal
+    if (key === '`') {
+      e.preventDefault()
+      layoutStore.toggleBottomPanel()
+      return
+    }
+
+    // Cmd+Shift+G → review tab
+    if (key === 'g' && e.shiftKey) {
+      e.preventDefault()
+      layoutStore.openExtensionTab('review')
+      return
+    }
+
+    if (key === 'g' && !e.shiftKey) {
       e.preventDefault()
       uiStore.toggleSearch()
+      return
+    }
+
+    // Cmd+P → files tab
+    if (key === 'p') {
+      e.preventDefault()
+      layoutStore.openExtensionTab('files')
+      return
+    }
+
+    // Cmd+T → browser tab
+    if (key === 't') {
+      e.preventDefault()
+      layoutStore.openExtensionTab('browser')
       return
     }
 

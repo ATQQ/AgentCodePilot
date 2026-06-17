@@ -34,7 +34,22 @@ export const IPC_CHANNELS = {
   PROVIDERS_DELETE: 'providers:delete',
   GATEWAY_STATUS: 'gateway:status',
   GATEWAY_START: 'gateway:start',
-  GATEWAY_STOP: 'gateway:stop'
+  GATEWAY_STOP: 'gateway:stop',
+  GIT_STATUS: 'git:status',
+  GIT_CHANGED_FILES: 'git:changedFiles',
+  GIT_DIFF: 'git:diff',
+  FILE_LIST: 'file:list',
+  FILE_READ: 'file:read',
+  FILE_WRITE: 'file:write',
+  FILE_DELETE: 'file:delete',
+  FILE_COPY: 'file:copy',
+  TERMINAL_CREATE: 'terminal:create',
+  TERMINAL_WRITE: 'terminal:write',
+  TERMINAL_RESIZE: 'terminal:resize',
+  TERMINAL_KILL: 'terminal:kill',
+  TERMINAL_LIST: 'terminal:list',
+  TERMINAL_DATA: 'terminal:data',
+  TERMINAL_EXIT: 'terminal:exit'
 } as const
 
 export interface FileAttachmentPayload {
@@ -112,6 +127,60 @@ export interface GatewayStatus {
   host: string
   port: number
   token: string
+}
+
+export interface GitChangedFile {
+  path: string
+  additions: number
+  deletions: number
+  status: string
+}
+
+export interface GitStatusResult {
+  isRepo: boolean
+  gitAvailable: boolean
+  branch: string | null
+  tracking: string | null
+  ahead: number
+  behind: number
+  additions: number
+  deletions: number
+  changedFiles: number
+  files: GitChangedFile[]
+  error?: string
+}
+
+export type GitDiffScope = 'unstaged' | 'staged'
+
+export interface GitDiffResult {
+  original: string
+  modified: string
+  unified: string
+}
+
+export interface FileEntry {
+  name: string
+  path: string
+  relativePath: string
+  isDirectory: boolean
+  size?: number
+}
+
+export interface TerminalInfo {
+  id: string
+  title: string
+  cwd: string
+  shell: string
+}
+
+export interface TerminalDataEvent {
+  terminalId: string
+  data: string
+}
+
+export interface TerminalExitEvent {
+  terminalId: string
+  exitCode: number
 }
 
 export interface AgentInfo {
@@ -291,5 +360,24 @@ export interface AgentAPI {
     saveTempImage: (data: ArrayBuffer, filename: string) => Promise<string>
     openAttachment: (filePath: string, type: 'image' | 'file') => Promise<boolean>
     getImageDataUrl: (filePath: string) => Promise<string | null>
+    list: (dirPath: string, roots: string[]) => Promise<FileEntry[]>
+    read: (filePath: string, roots: string[]) => Promise<string>
+    write: (filePath: string, content: string, roots: string[]) => Promise<void>
+    delete: (filePath: string, roots: string[]) => Promise<void>
+    copy: (srcPath: string, destPath: string, roots: string[]) => Promise<void>
+  }
+  git: {
+    status: (cwd: string) => Promise<GitStatusResult>
+    changedFiles: (cwd: string, scope: GitDiffScope) => Promise<GitChangedFile[]>
+    diff: (cwd: string, file: string, staged?: boolean) => Promise<GitDiffResult>
+  }
+  terminal: {
+    create: (projectId: string, cwd: string, title?: string) => Promise<TerminalInfo>
+    write: (terminalId: string, data: string) => Promise<void>
+    resize: (terminalId: string, cols: number, rows: number) => Promise<void>
+    kill: (terminalId: string) => Promise<void>
+    list: (projectId: string) => Promise<TerminalInfo[]>
+    onData: (callback: (event: TerminalDataEvent) => void) => () => void
+    onExit: (callback: (event: TerminalExitEvent) => void) => () => void
   }
 }

@@ -42,6 +42,24 @@ import {
   formatMessageContentWithAttachments
 } from './file/prompt-attachments'
 import { registerLocalFileProtocol, registerLocalFileScheme } from './file/local-file-protocol'
+import { getGitStatus, getChangedFiles, getGitDiff } from './git/git-service'
+import type { GitDiffScope } from '../preload/types'
+import {
+  listDirectory,
+  readWorkspaceFile,
+  writeWorkspaceFile,
+  deleteWorkspaceFile,
+  copyWorkspaceFile
+} from './file/workspace-file-service'
+import {
+  createTerminal,
+  writeTerminal,
+  resizeTerminal,
+  killTerminal,
+  listTerminals,
+  cleanupProjectTerminals,
+  setTerminalWindow
+} from './terminal/pty-manager'
 
 registerLocalFileScheme()
 
@@ -448,6 +466,7 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC_CHANNELS.PROJECTS_DELETE, (_e, id: string): void => {
+    cleanupProjectTerminals(id)
     repo.deleteProject(id)
   })
 
@@ -466,6 +485,7 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC_CHANNELS.WORKSPACES_DELETE, (_e, id: string): void => {
+    cleanupProjectTerminals(id)
     repo.deleteWorkspace(id)
   })
 
@@ -575,6 +595,71 @@ function registerIpcHandlers(): void {
       return image.toDataURL()
     }
   )
+
+  // --- Git ---
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STATUS, (_e, cwd: string) => getGitStatus(cwd))
+
+  ipcMain.handle(IPC_CHANNELS.GIT_CHANGED_FILES, (_e, cwd: string, scope: GitDiffScope) =>
+    getChangedFiles(cwd, scope)
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_DIFF,
+    (_e, cwd: string, file: string, staged?: boolean) =>
+      getGitDiff(cwd, { file, staged: staged ?? false })
+  )
+
+  // --- Workspace files ---
+
+  ipcMain.handle(IPC_CHANNELS.FILE_LIST, (_e, dirPath: string, roots: string[]) =>
+    listDirectory(dirPath, roots)
+  )
+
+  ipcMain.handle(IPC_CHANNELS.FILE_READ, (_e, filePath: string, roots: string[]) =>
+    readWorkspaceFile(filePath, roots)
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.FILE_WRITE,
+    (_e, filePath: string, content: string, roots: string[]) =>
+      writeWorkspaceFile(filePath, content, roots)
+  )
+
+  ipcMain.handle(IPC_CHANNELS.FILE_DELETE, (_e, filePath: string, roots: string[]) =>
+    deleteWorkspaceFile(filePath, roots)
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.FILE_COPY,
+    (_e, srcPath: string, destPath: string, roots: string[]) =>
+      copyWorkspaceFile(srcPath, destPath, roots)
+  )
+
+  // --- Terminal ---
+
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_CREATE, (_e, projectId: string, cwd: string, title?: string) =>
+    createTerminal(projectId, cwd, title)
+  )
+
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_WRITE, (_e, terminalId: string, data: string) => {
+    writeTerminal(terminalId, data)
+  })
+
+  ipcMain.handle(
+    IPC_CHANNELS.TERMINAL_RESIZE,
+    (_e, terminalId: string, cols: number, rows: number) => {
+      resizeTerminal(terminalId, cols, rows)
+    }
+  )
+
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_KILL, (_e, terminalId: string) => {
+    killTerminal(terminalId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_LIST, (_e, projectId: string) =>
+    listTerminals(projectId)
+  )
 }
 
 function createWindow(): void {
@@ -591,12 +676,14 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      webviewTag: true
     }
   })
 
   mainWindow.on('ready-to-show', () => {
     mainWindow!.show()
+    setTerminalWindow(mainWindow)
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -611,6 +698,7 @@ function createWindow(): void {
   }
 
   mainWindow.on('closed', () => {
+    setTerminalWindow(null)
     mainWindow = null
   })
 }

@@ -11,7 +11,10 @@ import type {
   ConversationUpdatePayload,
   ProjectPayload,
   WorkspacePayload,
-  ProviderConfigPayload
+  ProviderConfigPayload,
+  GitDiffScope,
+  TerminalDataEvent,
+  TerminalExitEvent
 } from './types'
 import { IPC_CHANNELS } from './types'
 
@@ -100,7 +103,46 @@ const agentAPI = {
     openAttachment: (filePath: string, type: 'image' | 'file') =>
       ipcRenderer.invoke(IPC_CHANNELS.FILE_OPEN_ATTACHMENT, filePath, type),
     getImageDataUrl: (filePath: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.FILE_GET_IMAGE_DATA_URL, filePath) as Promise<string | null>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_GET_IMAGE_DATA_URL, filePath) as Promise<string | null>,
+    list: (dirPath: string, roots: string[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_LIST, dirPath, roots),
+    read: (filePath: string, roots: string[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_READ, filePath, roots),
+    write: (filePath: string, content: string, roots: string[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_WRITE, filePath, content, roots),
+    delete: (filePath: string, roots: string[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_DELETE, filePath, roots),
+    copy: (srcPath: string, destPath: string, roots: string[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_COPY, srcPath, destPath, roots)
+  },
+  git: {
+    status: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STATUS, cwd),
+    changedFiles: (cwd: string, scope: GitDiffScope) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_CHANGED_FILES, cwd, scope),
+    diff: (cwd: string, file: string, staged?: boolean) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF, cwd, file, staged)
+  },
+  terminal: {
+    create: (projectId: string, cwd: string, title?: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_CREATE, projectId, cwd, title),
+    write: (terminalId: string, data: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_WRITE, terminalId, data),
+    resize: (terminalId: string, cols: number, rows: number) =>
+      ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_RESIZE, terminalId, cols, rows),
+    kill: (terminalId: string) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_KILL, terminalId),
+    list: (projectId: string) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_LIST, projectId),
+    onData: (callback: (event: TerminalDataEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: TerminalDataEvent): void =>
+        callback(data)
+      ipcRenderer.on(IPC_CHANNELS.TERMINAL_DATA, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_DATA, listener)
+    },
+    onExit: (callback: (event: TerminalExitEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: TerminalExitEvent): void =>
+        callback(data)
+      ipcRenderer.on(IPC_CHANNELS.TERMINAL_EXIT, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_EXIT, listener)
+    }
   }
 }
 

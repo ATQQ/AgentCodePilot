@@ -1,4 +1,14 @@
 export type { AgentModelOption, AgentConfigSettings, ModelCatalogSource, ModelCatalogResult } from '../../../preload/types'
+export type {
+  GitChangedFile,
+  GitStatusResult,
+  GitDiffScope,
+  GitDiffResult,
+  FileEntry,
+  TerminalInfo,
+  TerminalDataEvent,
+  TerminalExitEvent
+} from '../../../preload/types'
 
 export interface AgentConfig {
   id: string

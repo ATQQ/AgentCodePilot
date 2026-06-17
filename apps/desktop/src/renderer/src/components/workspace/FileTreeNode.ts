@@ -1,0 +1,49 @@
+import { defineComponent, h, type PropType } from 'vue'
+import type { FileEntry } from '@renderer/types'
+
+export const FileTreeNode = defineComponent({
+  name: 'FileTreeNode',
+  props: {
+    entry: { type: Object as PropType<FileEntry>, required: true },
+    depth: { type: Number, default: 0 },
+    getItems: { type: Function as PropType<(dir: string) => FileEntry[]>, required: true },
+    isExpanded: { type: Function as PropType<(dir: string) => boolean>, required: true }
+  },
+  emits: ['clickEntry', 'contextMenu'],
+  setup(props, { emit }) {
+    return () => {
+      const entry = props.entry
+      const expanded = entry.isDirectory && props.isExpanded(entry.path)
+      const children = expanded ? props.getItems(entry.path) : []
+
+      return h('div', { class: 'file-tree-node' }, [
+        h(
+          'button',
+          {
+            class: `file-row ${entry.isDirectory ? 'dir' : 'leaf'}`,
+            style: { paddingLeft: `${8 + props.depth * 14}px` },
+            onClick: () => emit('clickEntry', entry),
+            onContextmenu: (e: MouseEvent) => emit('contextMenu', e, entry)
+          },
+          [
+            entry.isDirectory
+              ? h('span', { class: 'expand-icon' }, expanded ? '▾' : '▸')
+              : h('span', { class: 'file-icon-spacer' }),
+            h('span', { class: 'file-name', title: entry.relativePath }, entry.name)
+          ]
+        ),
+        ...children.map((child: FileEntry) =>
+          h(FileTreeNode, {
+            key: child.path,
+            entry: child,
+            depth: props.depth + 1,
+            getItems: props.getItems,
+            isExpanded: props.isExpanded,
+            onClickEntry: (e: FileEntry) => emit('clickEntry', e),
+            onContextMenu: (e: MouseEvent, f: FileEntry) => emit('contextMenu', e, f)
+          })
+        )
+      ])
+    }
+  }
+})

@@ -1,14 +1,30 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Plus, Top } from '@element-plus/icons-vue'
 import type { Attachment, ApprovalLevel, FileAttachment, UrlAttachment } from '@renderer/types'
 import { toLocalFileUrl } from '@renderer/utils/localFile'
 import { useImagePreview } from '@renderer/composables/useImagePreview'
+import { useComposerStore } from '@renderer/stores/composer.store'
 
 const { t } = useI18n()
 const { openImagePreview } = useImagePreview()
+const composerStore = useComposerStore()
 const input = ref('')
+
+watch(
+  () => composerStore.pendingInsert,
+  (req) => {
+    if (!req) return
+    const consumed = composerStore.consumeInsert()
+    if (!consumed) return
+    if (consumed.text) {
+      input.value += consumed.text
+    } else if (consumed.attachment) {
+      attachments.value.push(consumed.attachment)
+    }
+  }
+)
 const showAddMenu = ref(false)
 const showApprovalMenu = ref(false)
 const planMode = ref(false)
