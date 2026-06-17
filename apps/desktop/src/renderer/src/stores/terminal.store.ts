@@ -175,6 +175,12 @@ export const useTerminalStore = defineStore('terminal', () => {
     return terminalMetaByScope.value[key] ?? {}
   })
 
+  function markScopeNotReady(scopeKey: string): void {
+    const nextReady = new Set(readyScopes.value)
+    nextReady.delete(scopeKey)
+    readyScopes.value = nextReady
+  }
+
   function bindListeners(): void {
     if (listenersBound) return
     listenersBound = true
@@ -192,9 +198,25 @@ export const useTerminalStore = defineStore('terminal', () => {
         const { tabs: nextTabs, activeTabId: nextActive } = reconcileTabs(tabs, validIds, activeId)
         terminalTabsByScope.value[scopeKey] = nextTabs
         activeTabIdByScope.value[scopeKey] = nextActive
+        if (nextTabs.length === 0) {
+          markScopeNotReady(scopeKey)
+          clearLayout(scopeKey)
+        }
         persistScope(scopeKey)
       }
     })
+  }
+
+  function clearLayout(scopeKey: string): void {
+    try {
+      const raw = localStorage.getItem(LAYOUT_STORAGE_KEY)
+      if (!raw) return
+      const all = JSON.parse(raw) as Record<string, PersistedTerminalLayout>
+      delete all[scopeKey]
+      localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(all))
+    } catch {
+      /* ignore */
+    }
   }
 
   function persistScope(scopeKey: string): void {
@@ -365,19 +387,26 @@ export const useTerminalStore = defineStore('terminal', () => {
   }
 
   async function doEnsureTerminals(scopeKey: string, defaultCwd: string): Promise<void> {
-    if (readyScopes.value.has(scopeKey) && (terminalTabsByScope.value[scopeKey]?.length ?? 0) > 0) {
+    const tabCount = terminalTabsByScope.value[scopeKey]?.length ?? 0
+    const hasLivePanes = (terminalTabsByScope.value[scopeKey] ?? []).some((t) => t.panes.length > 0)
+    if (readyScopes.value.has(scopeKey) && tabCount > 0 && hasLivePanes) {
       return
+    }
+
+    if (!hasLivePanes) {
+      markScopeNotReady(scopeKey)
     }
 
     initializingScopes.value = new Set([...initializingScopes.value, scopeKey])
     try {
       const remote = await window.agentAPI.terminal.list(scopeKey)
 
-      if (readyScopes.value.has(scopeKey) && (terminalTabsByScope.value[scopeKey]?.length ?? 0) > 0) {
+      if (readyScopes.value.has(scopeKey) && tabCount > 0 && hasLivePanes) {
         return
       }
 
       if (remote.length === 0) {
+        clearLayout(scopeKey)
         await restoreFromLayout(scopeKey, defaultCwd)
       } else {
         await syncFromRemote(scopeKey, remote)
@@ -394,8 +423,11 @@ export const useTerminalStore = defineStore('terminal', () => {
       nextInit.delete(scopeKey)
       initializingScopes.value = nextInit
 
-      if ((terminalTabsByScope.value[scopeKey]?.length ?? 0) > 0) {
+      const tabs = terminalTabsByScope.value[scopeKey] ?? []
+      if (tabs.some((t) => t.panes.length > 0)) {
         readyScopes.value = new Set([...readyScopes.value, scopeKey])
+      } else {
+        markScopeNotReady(scopeKey)
       }
     }
   }
@@ -407,7 +439,9 @@ export const useTerminalStore = defineStore('terminal', () => {
     bindListeners()
 
     if (readyScopes.value.has(scopeKey) && (terminalTabsByScope.value[scopeKey]?.length ?? 0) > 0) {
-      return
+      const hasLivePanes = (terminalTabsByScope.value[scopeKey] ?? []).some((t) => t.panes.length > 0)
+      if (hasLivePanes) return
+      markScopeNotReady(scopeKey)
     }
 
     const inflight = ensureInflight.get(scopeKey)

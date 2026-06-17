@@ -39,8 +39,7 @@ export function createTerminal(
   const id = `term-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
   const shell = process.env.SHELL || (process.platform === 'win32' ? 'powershell.exe' : 'zsh')
   const tabTitle = title || shell.split('/').pop() || 'terminal'
-  const displayTitle =
-    scopeSessions.size > 0 ? `${tabTitle} (${scopeSessions.size + 1})` : tabTitle
+  const displayTitle = scopeSessions.size > 0 ? `${tabTitle} (${scopeSessions.size + 1})` : tabTitle
 
   const ptyProcess = pty.spawn(shell, [], {
     name: 'xterm-256color',
@@ -58,7 +57,13 @@ export function createTerminal(
   }
 
   ptyProcess.onData((data) => emitData(id, data))
-  ptyProcess.onExit(({ exitCode }) => emitExit(id, exitCode))
+  ptyProcess.onExit(({ exitCode }) => {
+    emitExit(id, exitCode)
+    scopeSessions.delete(id)
+    if (scopeSessions.size === 0) {
+      sessionsByScope.delete(scopeKey)
+    }
+  })
 
   scopeSessions.set(id, session)
 
