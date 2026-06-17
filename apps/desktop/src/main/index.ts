@@ -57,7 +57,7 @@ import {
   resizeTerminal,
   killTerminal,
   listTerminals,
-  cleanupProjectTerminals,
+  cleanupScopeTerminals,
   setTerminalWindow
 } from './terminal/pty-manager'
 
@@ -444,6 +444,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.CONVERSATIONS_DELETE, (_e, conversationId: string): void => {
     deleteConversationAttachments(conversationId)
+    cleanupScopeTerminals(`conv:${conversationId}`)
     repo.deleteConversation(conversationId)
   })
 
@@ -451,6 +452,7 @@ function registerIpcHandlers(): void {
     const archived = repo.getArchivedConversations()
     for (const conv of archived) {
       deleteConversationAttachments(conv.id)
+      cleanupScopeTerminals(`conv:${conv.id}`)
     }
     repo.deleteAllArchivedConversations()
   })
@@ -466,7 +468,7 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC_CHANNELS.PROJECTS_DELETE, (_e, id: string): void => {
-    cleanupProjectTerminals(id)
+    cleanupScopeTerminals(`shared:${id}`)
     repo.deleteProject(id)
   })
 
@@ -485,7 +487,7 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC_CHANNELS.WORKSPACES_DELETE, (_e, id: string): void => {
-    cleanupProjectTerminals(id)
+    cleanupScopeTerminals(`shared:${id}`)
     repo.deleteWorkspace(id)
   })
 
@@ -638,8 +640,8 @@ function registerIpcHandlers(): void {
 
   // --- Terminal ---
 
-  ipcMain.handle(IPC_CHANNELS.TERMINAL_CREATE, (_e, projectId: string, cwd: string, title?: string) =>
-    createTerminal(projectId, cwd, title)
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_CREATE, (_e, scopeKey: string, cwd: string, title?: string) =>
+    createTerminal(scopeKey, cwd, title)
   )
 
   ipcMain.handle(IPC_CHANNELS.TERMINAL_WRITE, (_e, terminalId: string, data: string) => {
@@ -657,8 +659,8 @@ function registerIpcHandlers(): void {
     killTerminal(terminalId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.TERMINAL_LIST, (_e, projectId: string) =>
-    listTerminals(projectId)
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_LIST, (_e, scopeKey: string) =>
+    listTerminals(scopeKey)
   )
 }
 

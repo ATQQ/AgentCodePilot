@@ -372,11 +372,11 @@ export interface AgentAPI {
     diff: (cwd: string, file: string, staged?: boolean) => Promise<GitDiffResult>
   }
   terminal: {
-    create: (projectId: string, cwd: string, title?: string) => Promise<TerminalInfo>
+    create: (scopeKey: string, cwd: string, title?: string) => Promise<TerminalInfo>
     write: (terminalId: string, data: string) => Promise<void>
     resize: (terminalId: string, cols: number, rows: number) => Promise<void>
     kill: (terminalId: string) => Promise<void>
-    list: (projectId: string) => Promise<TerminalInfo[]>
+    list: (scopeKey: string) => Promise<TerminalInfo[]>
     onData: (callback: (event: TerminalDataEvent) => void) => () => void
     onExit: (callback: (event: TerminalExitEvent) => void) => () => void
   }

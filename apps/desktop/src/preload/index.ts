@@ -123,14 +123,14 @@ const agentAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF, cwd, file, staged)
   },
   terminal: {
-    create: (projectId: string, cwd: string, title?: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_CREATE, projectId, cwd, title),
+    create: (scopeKey: string, cwd: string, title?: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_CREATE, scopeKey, cwd, title),
     write: (terminalId: string, data: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_WRITE, terminalId, data),
     resize: (terminalId: string, cols: number, rows: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_RESIZE, terminalId, cols, rows),
     kill: (terminalId: string) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_KILL, terminalId),
-    list: (projectId: string) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_LIST, projectId),
+    list: (scopeKey: string) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_LIST, scopeKey),
     onData: (callback: (event: TerminalDataEvent) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, data: TerminalDataEvent): void =>
         callback(data)

@@ -4,14 +4,14 @@ import { IPC_CHANNELS } from '../../preload/types'
 
 export interface PtySession {
   id: string
-  projectId: string
+  scopeKey: string
   title: string
   cwd: string
   shell: string
   process: pty.IPty
 }
 
-const sessionsByProject = new Map<string, Map<string, PtySession>>()
+const sessionsByScope = new Map<string, Map<string, PtySession>>()
 let windowRef: BrowserWindow | null = null
 
 export function setTerminalWindow(win: BrowserWindow | null): void {
@@ -27,20 +27,20 @@ function emitExit(terminalId: string, exitCode: number): void {
 }
 
 export function createTerminal(
-  projectId: string,
+  scopeKey: string,
   cwd: string,
   title?: string
 ): { id: string; title: string; cwd: string; shell: string } {
-  if (!sessionsByProject.has(projectId)) {
-    sessionsByProject.set(projectId, new Map())
+  if (!sessionsByScope.has(scopeKey)) {
+    sessionsByScope.set(scopeKey, new Map())
   }
 
-  const projectSessions = sessionsByProject.get(projectId)!
+  const scopeSessions = sessionsByScope.get(scopeKey)!
   const id = `term-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
   const shell = process.env.SHELL || (process.platform === 'win32' ? 'powershell.exe' : 'zsh')
   const tabTitle = title || shell.split('/').pop() || 'terminal'
   const displayTitle =
-    projectSessions.size > 0 ? `${tabTitle} (${projectSessions.size + 1})` : tabTitle
+    scopeSessions.size > 0 ? `${tabTitle} (${scopeSessions.size + 1})` : tabTitle
 
   const ptyProcess = pty.spawn(shell, [], {
     name: 'xterm-256color',
@@ -50,7 +50,7 @@ export function createTerminal(
 
   const session: PtySession = {
     id,
-    projectId,
+    scopeKey,
     title: displayTitle,
     cwd,
     shell: tabTitle,
@@ -60,13 +60,13 @@ export function createTerminal(
   ptyProcess.onData((data) => emitData(id, data))
   ptyProcess.onExit(({ exitCode }) => emitExit(id, exitCode))
 
-  projectSessions.set(id, session)
+  scopeSessions.set(id, session)
 
   return { id, title: displayTitle, cwd, shell: tabTitle }
 }
 
 export function writeTerminal(terminalId: string, data: string): void {
-  for (const sessions of sessionsByProject.values()) {
+  for (const sessions of sessionsByScope.values()) {
     const session = sessions.get(terminalId)
     if (session) {
       session.process.write(data)
@@ -76,23 +76,28 @@ export function writeTerminal(terminalId: string, data: string): void {
 }
 
 export function resizeTerminal(terminalId: string, cols: number, rows: number): void {
-  for (const sessions of sessionsByProject.values()) {
+  if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols < 1 || rows < 1) return
+  for (const sessions of sessionsByScope.values()) {
     const session = sessions.get(terminalId)
     if (session) {
-      session.process.resize(cols, rows)
+      try {
+        session.process.resize(cols, rows)
+      } catch {
+        // PTY may not be ready or process already exited (ENOTTY on macOS)
+      }
       return
     }
   }
 }
 
 export function killTerminal(terminalId: string): void {
-  for (const [projectId, sessions] of sessionsByProject) {
+  for (const [scopeKey, sessions] of sessionsByScope) {
     const session = sessions.get(terminalId)
     if (session) {
       session.process.kill()
       sessions.delete(terminalId)
       if (sessions.size === 0) {
-        sessionsByProject.delete(projectId)
+        sessionsByScope.delete(scopeKey)
       }
       return
     }
@@ -100,9 +105,9 @@ export function killTerminal(terminalId: string): void {
 }
 
 export function listTerminals(
-  projectId: string
+  scopeKey: string
 ): { id: string; title: string; cwd: string; shell: string }[] {
-  const sessions = sessionsByProject.get(projectId)
+  const sessions = sessionsByScope.get(scopeKey)
   if (!sessions) return []
   return [...sessions.values()].map((s) => ({
     id: s.id,
@@ -112,11 +117,11 @@ export function listTerminals(
   }))
 }
 
-export function cleanupProjectTerminals(projectId: string): void {
-  const sessions = sessionsByProject.get(projectId)
+export function cleanupScopeTerminals(scopeKey: string): void {
+  const sessions = sessionsByScope.get(scopeKey)
   if (!sessions) return
   for (const session of sessions.values()) {
     session.process.kill()
   }
-  sessionsByProject.delete(projectId)
+  sessionsByScope.delete(scopeKey)
 }
