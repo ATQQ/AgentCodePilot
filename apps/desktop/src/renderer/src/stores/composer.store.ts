@@ -1,11 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { Attachment } from '@renderer/types'
+import type { Attachment, PlanReference } from '@renderer/types'
 
 export interface ComposerInsertRequest {
   id: string
   text?: string
   attachment?: Attachment
+  planRef?: PlanReference
 }
 
 export const useComposerStore = defineStore('composer', () => {
@@ -29,6 +30,10 @@ export const useComposerStore = defineStore('composer', () => {
     insertText(`\n${lineRef}\n`)
   }
 
+  function addPlanReference(plan: PlanReference): void {
+    pendingInsert.value = { id: `ins-${Date.now()}`, planRef: plan }
+  }
+
   function consumeInsert(): ComposerInsertRequest | null {
     const req = pendingInsert.value
     pendingInsert.value = null
@@ -40,6 +45,7 @@ export const useComposerStore = defineStore('composer', () => {
     insertText,
     addAttachment,
     addFileReference,
+    addPlanReference,
     consumeInsert
   }
 })

@@ -59,7 +59,7 @@ function toggleRight(): void {
     <button
       class="topbar-btn"
       :class="{ active: layoutStore.rightPanelVisible }"
-      title="扩展栏"
+      title="扩展栏 (⌘B)"
       @click="toggleRight"
     >
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">

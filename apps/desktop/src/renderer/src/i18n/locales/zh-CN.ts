@@ -26,10 +26,15 @@ export default {
       addPhotosAndFiles: '图片或文件',
       attachUrl: '附加外部链接内容',
       planMode: '计划模式',
+      referencePlan: '引用计划',
       pursueGoals: '追求目标',
       plugins: '插件'
     },
     urlPlaceholder: '输入 URL 链接...',
+    planModeClose: '关闭计划模式',
+    planPicker: {
+      title: '选择要引用的计划'
+    },
     approval: {
       label: '请求批准',
       title: '应如何批准操作？',
@@ -67,6 +72,7 @@ export default {
     resend: '重新编辑',
     thinking: '思考中',
     planModeTag: '计划模式',
+    planRefTag: '引用计划: {title}',
     previewAttachment: '预览图片',
     showInFolder: '在访达中显示',
     closePreview: '关闭预览',
@@ -84,6 +90,19 @@ export default {
     deny: '拒绝',
     allowed: '已允许',
     denied: '已拒绝'
+  },
+  plans: {
+    tabLabel: '计划',
+    empty: '暂无执行计划，开启计划模式发送消息即可生成',
+    loading: '加载中…',
+    scopeConversation: '当前对话',
+    scopeProject: '项目全部',
+    scopeWorkspace: '工作空间全部',
+    referenceToChat: '引用到对话',
+    copy: '复制',
+    viewPlan: '查看计划',
+    viewProjectPlans: '查看项目执行计划',
+    headerButton: '执行计划 ({count})'
   },
   settings: {
     title: '设置',

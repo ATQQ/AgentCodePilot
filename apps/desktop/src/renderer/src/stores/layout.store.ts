@@ -1,8 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
+import type { PlanOwnerType } from '../../../preload/types'
 
-export type ExtensionTab = 'review' | 'terminal' | 'browser' | 'files'
+export type ExtensionTab = 'review' | 'terminal' | 'browser' | 'files' | 'plans'
 export type ReviewScope = 'unstaged' | 'staged'
+export type PlansScope = 'conversation' | 'owner'
 
 const STORAGE_KEY = 'workbench-layout'
 
@@ -28,6 +30,10 @@ export const useLayoutStore = defineStore('layout', () => {
   const bottomPanelVisible = ref(false)
   const activeExtensionTab = ref<ExtensionTab>('review')
   const reviewScope = ref<ReviewScope>('unstaged')
+  const activePlanId = ref<string | null>(null)
+  const plansScope = ref<PlansScope>('conversation')
+  const plansOwnerType = ref<PlanOwnerType | null>(null)
+  const plansOwnerId = ref<string | null>(null)
   const rightPanelWidth = ref(persisted.rightPanelWidth)
   const bottomPanelHeight = ref(persisted.bottomPanelHeight)
   const envInfoVisible = ref(false)
@@ -61,6 +67,29 @@ export const useLayoutStore = defineStore('layout', () => {
     }
   }
 
+  function openPlansPanel(
+    planId?: string,
+    options?: {
+      scope?: PlansScope
+      ownerType?: PlanOwnerType
+      ownerId?: string
+    }
+  ): void {
+    activeExtensionTab.value = 'plans'
+    rightPanelVisible.value = true
+    if (options?.scope) {
+      plansScope.value = options.scope
+    }
+    if (options?.ownerType && options?.ownerId) {
+      plansOwnerType.value = options.ownerType
+      plansOwnerId.value = options.ownerId
+    } else if (plansScope.value === 'conversation') {
+      plansOwnerType.value = null
+      plansOwnerId.value = null
+    }
+    activePlanId.value = planId ?? null
+  }
+
   function closeRightPanel(): void {
     rightPanelVisible.value = false
   }
@@ -82,6 +111,10 @@ export const useLayoutStore = defineStore('layout', () => {
     bottomPanelVisible,
     activeExtensionTab,
     reviewScope,
+    activePlanId,
+    plansScope,
+    plansOwnerType,
+    plansOwnerId,
     rightPanelWidth,
     bottomPanelHeight,
     envInfoVisible,
@@ -91,6 +124,7 @@ export const useLayoutStore = defineStore('layout', () => {
     closeRightPanel,
     closeBottomPanel,
     toggleEnvInfo,
-    openReviewFromChanges
+    openReviewFromChanges,
+    openPlansPanel
   }
 })

@@ -9,7 +9,7 @@ import { useChatStore } from '@renderer/stores/chat.store'
 import { useAgentStore } from '@renderer/stores/agent.store'
 import { useModelStore } from '@renderer/stores/model.store'
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
-import type { Attachment } from '@renderer/types'
+import type { Attachment, PlanReference } from '@renderer/types'
 
 const router = useRouter()
 const chatStore = useChatStore()
@@ -17,7 +17,12 @@ const agentStore = useAgentStore()
 const modelStore = useModelStore()
 const workspaceStore = useWorkspaceStore()
 
-async function handleSubmit(text: string, attachments: Attachment[], planMode: boolean): Promise<void> {
+async function handleSubmit(
+  text: string,
+  attachments: Attachment[],
+  planMode: boolean,
+  _planRefs: PlanReference[]
+): Promise<void> {
   const agentId = agentStore.selectedAgentId
   const projectId = workspaceStore.selectedProjectId
   const convId = await chatStore.createConversation(agentId, text, projectId, attachments, planMode)

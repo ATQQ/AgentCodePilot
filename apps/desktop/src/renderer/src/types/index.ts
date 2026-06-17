@@ -7,7 +7,10 @@ export type {
   FileEntry,
   TerminalInfo,
   TerminalDataEvent,
-  TerminalExitEvent
+  TerminalExitEvent,
+  PlanReference,
+  PlanInfo,
+  PlanOwnerType
 } from '../../../preload/types'
 
 export interface AgentConfig {
@@ -49,6 +52,7 @@ export interface Message {
   content: string
   createdAt: string
   planMode?: boolean
+  planRefs?: import('../../../preload/types').PlanReference[]
   usage?: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number; costUSD: number }
   attachments?: Attachment[]
   toolCalls?: ToolCall[]

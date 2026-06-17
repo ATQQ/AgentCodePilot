@@ -37,6 +37,13 @@ export function useGlobalShortcuts(): void {
       return
     }
 
+    // Cmd+B → toggle extension panel
+    if (key === 'b' && !e.shiftKey) {
+      e.preventDefault()
+      layoutStore.toggleRightPanel()
+      return
+    }
+
     // Cmd+Shift+G → review tab
     if (key === 'g' && e.shiftKey) {
       e.preventDefault()

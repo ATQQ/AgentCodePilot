@@ -14,6 +14,7 @@ import {
 } from '@element-plus/icons-vue'
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
 import { useChatStore } from '@renderer/stores/chat.store'
+import { useLayoutStore } from '@renderer/stores/layout.store'
 import { formatRelativeTime } from '@renderer/composables/useRelativeTime'
 import { formatShortcutKey } from '@renderer/composables/useShortcutLabel'
 import type { Conversation } from '@renderer/types'
@@ -23,6 +24,7 @@ const router = useRouter()
 const route = useRoute()
 const workspaceStore = useWorkspaceStore()
 const chatStore = useChatStore()
+const layoutStore = useLayoutStore()
 const openSearch = inject<() => void>('openSearch', () => {})
 
 const topNavItems = [
@@ -161,6 +163,14 @@ function newChatForProject(e: MouseEvent, projectId: string): void {
   e.stopPropagation()
   workspaceStore.selectProject(projectId)
   router.push('/')
+}
+
+function openProjectPlans(e: MouseEvent, projectId: string): void {
+  e.stopPropagation()
+  const ownerType = workspaceStore.workspaces.some((w) => w.id === projectId)
+    ? 'workspace'
+    : 'project'
+  layoutStore.openPlansPanel(undefined, { scope: 'owner', ownerType, ownerId: projectId })
 }
 
 function getConvTitle(conv: Conversation): string {
@@ -382,6 +392,18 @@ onUnmounted(() => {
               <span class="project-name" :title="ws.folders.join('\n')">{{ ws.name }}</span>
             </template>
             <div class="project-actions">
+              <button
+                class="action-btn"
+                :title="t('plans.viewProjectPlans')"
+                @click="openProjectPlans($event, ws.id)"
+              >
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <rect x="2" y="1" width="12" height="14" rx="1.5" />
+                  <line x1="5" y1="5" x2="11" y2="5" />
+                  <line x1="5" y1="8" x2="11" y2="8" />
+                  <line x1="5" y1="11" x2="9" y2="11" />
+                </svg>
+              </button>
               <button class="action-btn" @click="showProjectMenu($event, ws.id, 'workspace')">
                 <el-icon :size="12"><MoreFilled /></el-icon>
               </button>
@@ -485,6 +507,18 @@ onUnmounted(() => {
               <span class="project-name">{{ proj.name }}</span>
             </template>
             <div class="project-actions">
+              <button
+                class="action-btn"
+                :title="t('plans.viewProjectPlans')"
+                @click="openProjectPlans($event, proj.id)"
+              >
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <rect x="2" y="1" width="12" height="14" rx="1.5" />
+                  <line x1="5" y1="5" x2="11" y2="5" />
+                  <line x1="5" y1="8" x2="11" y2="8" />
+                  <line x1="5" y1="11" x2="9" y2="11" />
+                </svg>
+              </button>
               <button class="action-btn" @click="showProjectMenu($event, proj.id, 'project')">
                 <el-icon :size="12"><MoreFilled /></el-icon>
               </button>

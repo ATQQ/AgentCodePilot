@@ -2,10 +2,11 @@
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Plus, Top } from '@element-plus/icons-vue'
-import type { Attachment, ApprovalLevel, FileAttachment, UrlAttachment } from '@renderer/types'
+import type { Attachment, ApprovalLevel, FileAttachment, UrlAttachment, PlanReference } from '@renderer/types'
 import { toLocalFileUrl } from '@renderer/utils/localFile'
 import { useImagePreview } from '@renderer/composables/useImagePreview'
 import { useComposerStore } from '@renderer/stores/composer.store'
+import PlanPicker from '@renderer/components/plans/PlanPicker.vue'
 
 const { t } = useI18n()
 const { openImagePreview } = useImagePreview()
@@ -22,12 +23,16 @@ watch(
       input.value += consumed.text
     } else if (consumed.attachment) {
       attachments.value.push(consumed.attachment)
+    } else if (consumed.planRef) {
+      addPlanRef(consumed.planRef)
     }
   }
 )
 const showAddMenu = ref(false)
 const showApprovalMenu = ref(false)
+const showPlanPicker = ref(false)
 const planMode = ref(false)
+const planRefs = ref<PlanReference[]>([])
 // const pursueGoals = ref(false) // TODO: 目标模式，后续实现
 const attachments = ref<Attachment[]>([])
 const showUrlInput = ref(false)
@@ -42,7 +47,7 @@ const props = defineProps<{
 const approvalLevel = computed(() => props.approvalLevel ?? 'auto')
 
 const emit = defineEmits<{
-  submit: [text: string, attachments: Attachment[], planMode: boolean]
+  submit: [text: string, attachments: Attachment[], planMode: boolean, planRefs: PlanReference[]]
   stop: []
   cancelQueue: [index: number]
   approvalChange: [level: ApprovalLevel]
@@ -62,10 +67,42 @@ function getFileName(path: string): string {
 
 function handleSubmit(): void {
   const text = input.value.trim()
-  if (!text && attachments.value.length === 0) return
-  emit('submit', text, [...attachments.value], planMode.value)
+  if (!text && attachments.value.length === 0 && planRefs.value.length === 0) return
+  const refs = [...planRefs.value]
+  const effectivePlanMode = refs.length > 0 ? false : planMode.value
+  emit('submit', text, [...attachments.value], effectivePlanMode, refs)
   input.value = ''
   attachments.value = []
+  planRefs.value = []
+  if (refs.length > 0) {
+    planMode.value = false
+  }
+}
+
+function addPlanRef(plan: PlanReference): void {
+  if (planRefs.value.some((p) => p.id === plan.id)) return
+  planRefs.value.push(plan)
+  planMode.value = false
+}
+
+function removePlanRef(id: string): void {
+  planRefs.value = planRefs.value.filter((p) => p.id !== id)
+}
+
+function openPlanPicker(): void {
+  showAddMenu.value = false
+  showPlanPicker.value = true
+}
+
+function handlePlanPickerSelect(plan: PlanReference): void {
+  addPlanRef(plan)
+}
+
+function handleInput(): void {
+  if (input.value.endsWith('@plan')) {
+    showPlanPicker.value = true
+    input.value = input.value.slice(0, -5)
+  }
 }
 
 function handleKeydown(e: KeyboardEvent): void {
@@ -228,6 +265,15 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
       </div>
     </div>
 
+    <!-- Plan references -->
+    <div v-if="planRefs.length > 0" class="plan-refs-area">
+      <div v-for="plan in planRefs" :key="plan.id" class="plan-ref-chip">
+        <span class="plan-ref-icon">&#x1F4CB;</span>
+        <span class="plan-ref-title">{{ plan.title }}</span>
+        <button type="button" class="plan-ref-remove" @click="removePlanRef(plan.id)">&times;</button>
+      </div>
+    </div>
+
     <!-- Attachments preview -->
     <div v-if="attachments.length > 0" class="attachments-area">
       <div v-for="att in attachments" :key="att.id" class="attachment-item">
@@ -280,6 +326,7 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
       rows="1"
       @keydown="handleKeydown"
       @paste="handlePaste"
+      @input="handleInput"
     />
     <div class="composer-toolbar">
       <div class="toolbar-left">
@@ -299,6 +346,10 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
                 <span>{{ t('composer.addMenu.attachUrl') }}</span>
               </button>
               <div class="menu-divider"></div>
+              <button class="menu-item" @click="openPlanPicker">
+                <span class="menu-icon">&#x1F4CB;</span>
+                <span>{{ t('composer.addMenu.referencePlan') }}</span>
+              </button>
               <button class="menu-item menu-item--toggle" @click.stop="planMode = !planMode">
                 <span class="menu-icon">&#x2699;</span>
                 <span>{{ t('composer.addMenu.planMode') }}</span>
@@ -321,13 +372,17 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
           </Transition>
         </div>
 
-        <button
-          v-if="planMode"
-          class="plan-mode-badge"
-          @click="planMode = false"
-        >
+        <span v-if="planMode" class="plan-mode-badge">
           {{ t('composer.planModeBadge') }}
-        </button>
+          <button
+            type="button"
+            class="plan-mode-badge-close"
+            :title="t('composer.planModeClose')"
+            @click.stop="planMode = false"
+          >
+            &times;
+          </button>
+        </span>
 
         <!-- Approval Level -->
         <div class="dropdown-wrapper">
@@ -403,6 +458,12 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
         </button>
       </div>
     </div>
+
+    <PlanPicker
+      :visible="showPlanPicker"
+      @close="showPlanPicker = false"
+      @select="handlePlanPickerSelect"
+    />
   </div>
 </template>
 
@@ -723,20 +784,88 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
 .plan-mode-badge {
   display: flex;
   align-items: center;
-  padding: 4px 10px;
+  gap: 4px;
+  padding: 4px 6px 4px 10px;
   border: 1px solid var(--accent-color);
   border-radius: var(--radius-full);
   background: color-mix(in srgb, var(--accent-color) 12%, transparent);
   color: var(--accent-color);
   font-size: var(--font-size-sm);
   font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s, opacity 0.15s;
 }
 
-.plan-mode-badge:hover {
-  background: color-mix(in srgb, var(--accent-color) 20%, transparent);
-  opacity: 0.9;
+.plan-mode-badge-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--accent-color);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.plan-mode-badge-close:hover {
+  background: color-mix(in srgb, var(--accent-color) 25%, transparent);
+}
+
+.plan-mode-badge-close:hover {
+  background: color-mix(in srgb, var(--accent-color) 25%, transparent);
+}
+
+.plan-refs-area {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px 0;
+}
+
+.plan-ref-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  border: 1px solid var(--accent-color);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+  font-size: var(--font-size-sm);
+  color: var(--accent-color);
+}
+
+.plan-ref-icon {
+  font-size: 12px;
+}
+
+.plan-ref-title {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-ref-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--accent-color);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.plan-ref-remove:hover {
+  background: color-mix(in srgb, var(--accent-color) 25%, transparent);
 }
 
 .approval-icon {

@@ -14,7 +14,9 @@ import type {
   ProviderConfigPayload,
   GitDiffScope,
   TerminalDataEvent,
-  TerminalExitEvent
+  TerminalExitEvent,
+  PlansListPayload,
+  PlanDetail
 } from './types'
 import { IPC_CHANNELS } from './types'
 
@@ -143,6 +145,10 @@ const agentAPI = {
       ipcRenderer.on(IPC_CHANNELS.TERMINAL_EXIT, listener)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_EXIT, listener)
     }
+  },
+  plans: {
+    list: (payload: PlansListPayload) => ipcRenderer.invoke(IPC_CHANNELS.PLANS_LIST, payload),
+    get: (planId: string) => ipcRenderer.invoke(IPC_CHANNELS.PLANS_GET, planId) as Promise<PlanDetail | null>
   }
 }
 

@@ -49,7 +49,9 @@ export const IPC_CHANNELS = {
   TERMINAL_KILL: 'terminal:kill',
   TERMINAL_LIST: 'terminal:list',
   TERMINAL_DATA: 'terminal:data',
-  TERMINAL_EXIT: 'terminal:exit'
+  TERMINAL_EXIT: 'terminal:exit',
+  PLANS_LIST: 'plans:list',
+  PLANS_GET: 'plans:get'
 } as const
 
 export interface FileAttachmentPayload {
@@ -67,6 +69,11 @@ export interface UrlAttachmentPayload {
 
 export type AttachmentPayload = FileAttachmentPayload | UrlAttachmentPayload
 
+export interface PlanReference {
+  id: string
+  title: string
+}
+
 export interface SendMessagePayload {
   conversationId: string
   content: string
@@ -76,6 +83,7 @@ export interface SendMessagePayload {
   workspaceFolders?: string[]
   attachments?: AttachmentPayload[]
   planMode?: boolean
+  planRefs?: PlanReference[]
 }
 
 export interface CreateConversationPayload {
@@ -239,10 +247,35 @@ export interface MessageInfo {
   content: string
   createdAt: string
   planMode?: boolean
+  planRefs?: PlanReference[]
   attachments?: AttachmentPayload[]
   usage?: TokenUsage
   debugInput?: string
   debugOutput?: string
+}
+
+export type PlanOwnerType = 'conversation' | 'project' | 'workspace'
+
+export interface PlanInfo {
+  id: string
+  conversationId: string
+  ownerType: PlanOwnerType
+  ownerId: string
+  userMessageId: string
+  assistantMessageId: string
+  title: string
+  createdAt: string
+}
+
+export interface PlanDetail {
+  meta: PlanInfo
+  content: string
+}
+
+export interface PlansListPayload {
+  conversationId?: string
+  ownerType?: PlanOwnerType
+  ownerId?: string
 }
 
 export interface SettingsInfo {
@@ -379,5 +412,9 @@ export interface AgentAPI {
     list: (scopeKey: string) => Promise<TerminalInfo[]>
     onData: (callback: (event: TerminalDataEvent) => void) => () => void
     onExit: (callback: (event: TerminalExitEvent) => void) => () => void
+  }
+  plans: {
+    list: (payload: PlansListPayload) => Promise<PlanInfo[]>
+    get: (planId: string) => Promise<PlanDetail | null>
   }
 }

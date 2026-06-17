@@ -37,10 +37,13 @@ import { getDatabase, closeDatabase } from './database'
 import * as repo from './database/repositories'
 import { persistAttachments, deleteConversationAttachments } from './file/attachments'
 import {
-  buildPromptWithAttachments,
+  buildPromptWithAttachmentsAndPlans,
   collectAttachmentDirectories,
   formatMessageContentWithAttachments
 } from './file/prompt-attachments'
+import { savePlanFromAssistantMessage } from './file/plan-service'
+import { readPlanFile } from './file/plans'
+import type { PlanDetail, PlanInfo, PlansListPayload } from '../preload/types'
 import { registerLocalFileProtocol, registerLocalFileScheme } from './file/local-file-protocol'
 import { getGitStatus, getChangedFiles, getGitDiff } from './git/git-service'
 import type { GitDiffScope } from '../preload/types'
@@ -114,6 +117,19 @@ function getConversationRunContext(conversationId: string): {
   }
 }
 
+function mapPlanRow(r: repo.PlanRow): PlanInfo {
+  return {
+    id: r.id,
+    conversationId: r.conversation_id,
+    ownerType: r.owner_type as PlanInfo['ownerType'],
+    ownerId: r.owner_id,
+    userMessageId: r.user_message_id,
+    assistantMessageId: r.assistant_message_id,
+    title: r.title,
+    createdAt: r.created_at
+  }
+}
+
 function emitAgentEvent(event: AgentEvent): void {
   if (event.type === 'message.started') {
     if (!streamingMessages.has(event.messageId)) {
@@ -141,6 +157,7 @@ function emitAgentEvent(event: AgentEvent): void {
           debugInput: event.debugInput || null,
           debugOutput: event.debugOutput || null
         })
+        savePlanFromAssistantMessage(entry.conversationId, event.messageId, entry.content)
       } catch (e) {
         console.error('[emitAgentEvent] Failed to save message to db:', e)
       }
@@ -266,7 +283,11 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.CHAT_SEND_FIRST, (_e, payload: SendMessagePayload): void => {
     const assistantMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-a`
-    const prompt = buildPromptWithAttachments(payload.content, payload.attachments)
+    const prompt = buildPromptWithAttachmentsAndPlans(
+      payload.content,
+      payload.attachments,
+      payload.planRefs
+    )
     streamingMessages.set(assistantMsgId, {
       conversationId: payload.conversationId,
       content: '',
@@ -314,10 +335,15 @@ function registerIpcHandlers(): void {
       content: payload.content,
       createdAt: now,
       attachments: persistedAttachments ? JSON.stringify(persistedAttachments) : null,
-      planMode: payload.planMode ?? false
+      planMode: payload.planMode ?? false,
+      planRefs: payload.planRefs?.length ? JSON.stringify(payload.planRefs) : null
     })
 
-    const prompt = buildPromptWithAttachments(payload.content, persistedAttachments ?? payload.attachments)
+    const prompt = buildPromptWithAttachmentsAndPlans(
+      payload.content,
+      persistedAttachments ?? payload.attachments,
+      payload.planRefs
+    )
     streamingMessages.set(assistantMsgId, {
       conversationId: payload.conversationId,
       content: '',
@@ -405,6 +431,13 @@ function registerIpcHandlers(): void {
         }
         if (r.plan_mode === 1) {
           msg.planMode = true
+        }
+        if (r.plan_refs) {
+          try {
+            msg.planRefs = JSON.parse(r.plan_refs)
+          } catch {
+            /* ignore */
+          }
         }
         if (r.attachments) {
           try { msg.attachments = JSON.parse(r.attachments) } catch {}
@@ -662,6 +695,32 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.TERMINAL_LIST, (_e, scopeKey: string) =>
     listTerminals(scopeKey)
   )
+
+  // --- Plans ---
+
+  ipcMain.handle(
+    IPC_CHANNELS.PLANS_LIST,
+    (_e, payload: PlansListPayload): PlanInfo[] => {
+      if (payload.ownerType && payload.ownerId) {
+        return repo.listPlansByOwner(payload.ownerType, payload.ownerId).map(mapPlanRow)
+      }
+      if (payload.conversationId) {
+        return repo.listPlansByConversation(payload.conversationId).map(mapPlanRow)
+      }
+      return []
+    }
+  )
+
+  ipcMain.handle(IPC_CHANNELS.PLANS_GET, (_e, planId: string): PlanDetail | null => {
+    const row = repo.getPlanById(planId)
+    if (!row) return null
+    try {
+      const content = readPlanFile(row.file_path)
+      return { meta: mapPlanRow(row), content }
+    } catch {
+      return null
+    }
+  })
 }
 
 function createWindow(): void {

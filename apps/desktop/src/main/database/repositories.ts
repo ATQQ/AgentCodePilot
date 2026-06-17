@@ -31,6 +31,7 @@ export interface MessageRow {
   debug_input: string | null
   debug_output: string | null
   plan_mode: number | null
+  plan_refs: string | null
 }
 
 export interface ProjectRow {
@@ -240,11 +241,12 @@ export function addMessage(msg: {
   debugInput?: string | null
   debugOutput?: string | null
   planMode?: boolean | null
+  planRefs?: string | null
 }): void {
   const db = getDatabase()
   db.prepare(
-    `INSERT INTO messages (id, conversation_id, role, content, created_at, attachments, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, raw_input, debug_input, debug_output, plan_mode)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO messages (id, conversation_id, role, content, created_at, attachments, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, raw_input, debug_input, debug_output, plan_mode, plan_refs)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     msg.id,
     msg.conversationId,
@@ -260,7 +262,8 @@ export function addMessage(msg: {
     msg.rawInput ?? null,
     msg.debugInput ?? null,
     msg.debugOutput ?? null,
-    msg.planMode ? 1 : 0
+    msg.planMode ? 1 : 0,
+    msg.planRefs ?? null
   )
 
   db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(
@@ -362,6 +365,11 @@ export function deleteWorkspace(id: string): void {
   db.prepare('DELETE FROM workspaces WHERE id = ?').run(id)
 }
 
+export function getWorkspaceById(id: string): WorkspaceRow | undefined {
+  const db = getDatabase()
+  return db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id) as WorkspaceRow | undefined
+}
+
 // --- Provider Configs ---
 
 export interface ProviderConfigRow {
@@ -399,3 +407,92 @@ export function deleteProviderConfig(id: string): void {
   const db = getDatabase()
   db.prepare('DELETE FROM provider_configs WHERE id = ?').run(id)
 }
+
+// --- Plans ---
+
+export interface PlanRow {
+  id: string
+  conversation_id: string
+  owner_type: string
+  owner_id: string
+  user_message_id: string
+  assistant_message_id: string
+  title: string
+  file_path: string
+  created_at: string
+}
+
+export function getPlanByAssistantMessageId(assistantMessageId: string): PlanRow | undefined {
+  const db = getDatabase()
+  return db
+    .prepare('SELECT * FROM plans WHERE assistant_message_id = ?')
+    .get(assistantMessageId) as PlanRow | undefined
+}
+
+export function getPlanById(planId: string): PlanRow | undefined {
+  const db = getDatabase()
+  return db.prepare('SELECT * FROM plans WHERE id = ?').get(planId) as PlanRow | undefined
+}
+
+export function createPlan(plan: {
+  id: string
+  conversationId: string
+  ownerType: string
+  ownerId: string
+  userMessageId: string
+  assistantMessageId: string
+  title: string
+  filePath: string
+  createdAt: string
+}): void {
+  const db = getDatabase()
+  db.prepare(
+    `INSERT INTO plans (id, conversation_id, owner_type, owner_id, user_message_id, assistant_message_id, title, file_path, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    plan.id,
+    plan.conversationId,
+    plan.ownerType,
+    plan.ownerId,
+    plan.userMessageId,
+    plan.assistantMessageId,
+    plan.title,
+    plan.filePath,
+    plan.createdAt
+  )
+}
+
+export function listPlansByOwner(ownerType: string, ownerId: string): PlanRow[] {
+  const db = getDatabase()
+  return db
+    .prepare(
+      `SELECT * FROM plans
+       WHERE owner_type = ? AND owner_id = ?
+       ORDER BY created_at DESC`
+    )
+    .all(ownerType, ownerId) as PlanRow[]
+}
+
+export function listPlansByConversation(conversationId: string): PlanRow[] {
+  const db = getDatabase()
+  return db
+    .prepare('SELECT * FROM plans WHERE conversation_id = ? ORDER BY created_at DESC')
+    .all(conversationId) as PlanRow[]
+}
+
+export function getPlanByAssistantMessageIds(messageIds: string[]): Map<string, PlanRow> {
+  const result = new Map<string, PlanRow>()
+  if (messageIds.length === 0) return result
+
+  const db = getDatabase()
+  const placeholders = messageIds.map(() => '?').join(', ')
+  const rows = db
+    .prepare(`SELECT * FROM plans WHERE assistant_message_id IN (${placeholders})`)
+    .all(...messageIds) as PlanRow[]
+
+  for (const row of rows) {
+    result.set(row.assistant_message_id, row)
+  }
+  return result
+}
+

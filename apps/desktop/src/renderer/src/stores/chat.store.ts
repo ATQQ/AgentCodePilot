@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Attachment, ApprovalRequest, Conversation, Message } from '@renderer/types'
-import type { AgentEvent, AttachmentPayload } from '../../../preload/types'
+import type { AgentEvent, AttachmentPayload, PlanReference } from '../../../preload/types'
 import type { ApprovalLevel } from '@renderer/types'
 import { useWorkspaceStore } from './workspace.store'
 import { useModelStore } from './model.store'
@@ -14,7 +14,7 @@ export const useChatStore = defineStore('chat', () => {
   const streamingConversationIds = ref<Set<string>>(new Set())
   const waitingConversationIds = ref<Set<string>>(new Set())
   const pendingApprovals = ref<Map<string, ApprovalRequest>>(new Map())
-  const queuedMessages = ref<{ conversationId: string; content: string; agentId: string; modelId?: string; planMode?: boolean }[]>([])
+  const queuedMessages = ref<{ conversationId: string; content: string; agentId: string; modelId?: string; planMode?: boolean; planRefs?: PlanReference[] }[]>([])
   const toolUseIdAliases = ref<Map<string, string>>(new Map())
 
   const activeConversation = computed(
@@ -194,6 +194,7 @@ export const useChatStore = defineStore('chat', () => {
       content: m.content,
       createdAt: m.createdAt,
       planMode: m.planMode,
+      planRefs: m.planRefs,
       attachments: m.attachments?.map((att) => enrichAttachment(att as Attachment)),
       usage: m.usage,
       debugInput: m.debugInput,
@@ -260,7 +261,8 @@ export const useChatStore = defineStore('chat', () => {
     role: 'user' | 'assistant',
     content: string,
     attachments?: Attachment[],
-    planMode?: boolean
+    planMode?: boolean,
+    planRefs?: PlanReference[]
   ): void {
     const conv = conversations.value.find((c) => c.id === conversationId)
     if (!conv) return
@@ -271,6 +273,7 @@ export const useChatStore = defineStore('chat', () => {
       content,
       createdAt: now,
       ...(planMode ? { planMode: true } : {}),
+      ...(planRefs?.length ? { planRefs } : {}),
       attachments: attachments && attachments.length > 0 ? attachments : undefined
     })
     conv.updatedAt = now
@@ -289,16 +292,25 @@ export const useChatStore = defineStore('chat', () => {
     content: string,
     agentId: string,
     attachments?: Attachment[],
-    planMode?: boolean
+    planMode?: boolean,
+    planRefs?: PlanReference[]
   ): Promise<void> {
     const conv = conversations.value.find((c) => c.id === conversationId)
     const modelStore = useModelStore()
     const modelId = modelStore.getEffectiveModelId(conv?.modelId)
+    const effectivePlanMode = planRefs?.length ? false : (planMode ?? false)
     if (isConversationStreaming(conversationId)) {
-      queuedMessages.value.push({ conversationId, content, agentId, modelId, planMode: planMode ?? false })
+      queuedMessages.value.push({
+        conversationId,
+        content,
+        agentId,
+        modelId,
+        planMode: effectivePlanMode,
+        planRefs
+      })
       return
     }
-    addMessage(conversationId, 'user', content, attachments, planMode)
+    addMessage(conversationId, 'user', content, attachments, effectivePlanMode, planRefs)
     waitingConversationIds.value.add(conversationId)
     const workspaceStore = useWorkspaceStore()
     const wsFolders = workspaceStore.currentWorkspace?.folders
@@ -310,7 +322,8 @@ export const useChatStore = defineStore('chat', () => {
       cwd: conv?.cwd || workspaceStore.currentCwd,
       workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
       attachments: toAttachmentPayloads(attachments),
-      planMode: planMode ?? false
+      planMode: effectivePlanMode,
+      planRefs
     })
     if (persistedAttachments?.length && conv) {
       const lastUserMessage = [...conv.messages].reverse().find((m) => m.role === 'user')
@@ -340,7 +353,7 @@ export const useChatStore = defineStore('chat', () => {
     const idx = queuedMessages.value.findIndex((m) => m.conversationId === conversationId)
     if (idx === -1) return
     const next = queuedMessages.value.splice(idx, 1)[0]
-    addMessage(next.conversationId, 'user', next.content, undefined, next.planMode)
+    addMessage(next.conversationId, 'user', next.content, undefined, next.planMode, next.planRefs)
     waitingConversationIds.value.add(next.conversationId)
     const conv = conversations.value.find((c) => c.id === next.conversationId)
     const workspaceStore = useWorkspaceStore()
@@ -353,7 +366,8 @@ export const useChatStore = defineStore('chat', () => {
       modelId: next.modelId ?? modelStore.getEffectiveModelId(conv?.modelId),
       cwd: conv?.cwd || workspaceStore.currentCwd,
       workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
-      planMode: next.planMode ?? false
+      planMode: next.planMode ?? false,
+      planRefs: next.planRefs
     })
   }
 

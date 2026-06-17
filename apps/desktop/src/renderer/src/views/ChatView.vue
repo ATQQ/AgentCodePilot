@@ -15,7 +15,9 @@ import MessageAttachmentImage from '@renderer/components/chat/MessageAttachmentI
 import claudeIcon from '@renderer/assets/claude-icon.svg'
 import codexIcon from '@renderer/assets/codex-icon.svg'
 import cursorIcon from '@renderer/assets/cursor-icon.svg'
-import type { Attachment } from '@renderer/types'
+import type { Attachment, PlanReference } from '@renderer/types'
+import { useLayoutStore } from '@renderer/stores/layout.store'
+import { usePlanStore } from '@renderer/stores/plan.store'
 
 const agentIcons: Record<string, string> = {
   'claude-code': claudeIcon,
@@ -28,6 +30,8 @@ const router = useRouter()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const settingsStore = useSettingsStore()
+const layoutStore = useLayoutStore()
+const planStore = usePlanStore()
 const messagesContainer = ref<HTMLElement | null>(null)
 const composerRef = ref<InstanceType<typeof PromptComposer> | null>(null)
 const streamedMessageIds = ref<Set<string>>(new Set())
@@ -81,11 +85,24 @@ onMounted(() => {
   if (chatStore.activeConversation?.messages.length) {
     scheduleScrollToBottom(true)
   }
+  void loadAssistantPlanMap()
 })
 
 watch(
   () => chatStore.activeConversationId,
-  () => scheduleScrollToBottom(true)
+  () => {
+    scheduleScrollToBottom(true)
+    void loadAssistantPlanMap()
+  }
+)
+
+watch(
+  () => chatStore.isStreaming,
+  (streaming, wasStreaming) => {
+    if (wasStreaming && !streaming) {
+      void loadAssistantPlanMap()
+    }
+  }
 )
 
 watch(
@@ -141,10 +158,42 @@ function wasStreamed(msgId: string): boolean {
   return streamedMessageIds.value.has(msgId)
 }
 
-function handleSubmit(text: string, attachments: Attachment[], planMode: boolean): void {
-  if ((!text && attachments.length === 0) || !chatStore.activeConversationId) return
+const assistantPlanMap = ref<Map<string, string>>(new Map())
+
+async function loadAssistantPlanMap(): Promise<void> {
+  const conv = chatStore.activeConversation
+  if (!conv) {
+    assistantPlanMap.value = new Map()
+    return
+  }
+  const plans = await window.agentAPI.plans.list({ conversationId: conv.id })
+  const map = new Map<string, string>()
+  for (const plan of plans) {
+    map.set(plan.assistantMessageId, plan.id)
+  }
+  assistantPlanMap.value = map
+  await planStore.loadPlans(conv.id, null, null)
+}
+
+function getPlanIdForMessage(messageId: string): string | undefined {
+  return assistantPlanMap.value.get(messageId)
+}
+
+function openPlansPanel(planId?: string): void {
+  layoutStore.openPlansPanel(planId)
+}
+
+const conversationPlanCount = computed(() => planStore.plans.length)
+
+function handleSubmit(
+  text: string,
+  attachments: Attachment[],
+  planMode: boolean,
+  planRefs: PlanReference[]
+): void {
+  if ((!text && attachments.length === 0 && planRefs.length === 0) || !chatStore.activeConversationId) return
   const agentId = chatStore.activeConversation?.agentId ?? agentStore.selectedAgentId
-  chatStore.sendMessage(chatStore.activeConversationId, text, agentId, attachments, planMode)
+  chatStore.sendMessage(chatStore.activeConversationId, text, agentId, attachments, planMode, planRefs)
 }
 
 async function openAttachment(att: Attachment): Promise<void> {
@@ -222,6 +271,14 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
     <template v-if="chatStore.activeConversation">
       <div class="chat-header">
         <h3 class="chat-title">{{ chatStore.activeConversation.title }}</h3>
+        <button
+          v-if="conversationPlanCount > 0"
+          type="button"
+          class="plans-header-btn"
+          @click="openPlansPanel()"
+        >
+          {{ t('plans.headerButton', { count: conversationPlanCount }) }}
+        </button>
         <span
           v-if="chatStore.hasPendingApproval(chatStore.activeConversation.id)"
           class="approval-waiting-tag"
@@ -278,9 +335,24 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
                 :render-batch-budget-ms="4"
                 :code-block-props="{ theme: { light: 'github-light', dark: 'github-dark' } }"
               />
+              <button
+                v-if="getPlanIdForMessage(msg.id)"
+                type="button"
+                class="view-plan-link"
+                @click="openPlansPanel(getPlanIdForMessage(msg.id))"
+              >
+                {{ t('plans.viewPlan') }}
+              </button>
             </template>
             <template v-else>
               <span v-if="msg.planMode" class="plan-mode-tag">{{ t('chat.planModeTag') }}</span>
+              <span
+                v-for="ref in msg.planRefs"
+                :key="ref.id"
+                class="plan-ref-tag"
+              >
+                {{ t('chat.planRefTag', { title: ref.title }) }}
+              </span>
               <div v-if="msg.attachments?.length" class="message-attachments">
                 <div v-for="(att, idx) in msg.attachments" :key="att.id" class="msg-attachment">
                   <template v-if="att.type === 'image'">
@@ -408,6 +480,22 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
   margin: 0;
 }
 
+.plans-header-btn {
+  padding: 3px 10px;
+  border: 1px solid var(--accent-color);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+  color: var(--accent-color);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.plans-header-btn:hover {
+  background: color-mix(in srgb, var(--accent-color) 20%, transparent);
+}
+
 .messages-container {
   flex: 1;
   overflow-y: auto;
@@ -521,6 +609,36 @@ html.dark .approval-inline-tag {
   color: var(--accent-color);
   font-size: 11px;
   font-weight: 600;
+}
+
+.plan-ref-tag {
+  display: inline-block;
+  margin-right: 6px;
+  margin-bottom: 6px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+  color: var(--accent-color);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.view-plan-link {
+  display: inline-flex;
+  margin-top: 8px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--accent-color);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.view-plan-link:hover {
+  opacity: 0.85;
 }
 
 .message.assistant .message-content {
