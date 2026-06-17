@@ -7,7 +7,8 @@ export const FileTreeNode = defineComponent({
     entry: { type: Object as PropType<FileEntry>, required: true },
     depth: { type: Number, default: 0 },
     getItems: { type: Function as PropType<(dir: string) => FileEntry[]>, required: true },
-    isExpanded: { type: Function as PropType<(dir: string) => boolean>, required: true }
+    isExpanded: { type: Function as PropType<(dir: string) => boolean>, required: true },
+    activeFilePath: { type: String as PropType<string | null>, default: null }
   },
   emits: ['clickEntry', 'contextMenu'],
   setup(props, { emit }) {
@@ -20,7 +21,11 @@ export const FileTreeNode = defineComponent({
         h(
           'button',
           {
-            class: `file-row ${entry.isDirectory ? 'dir' : 'leaf'}`,
+            class: [
+              'file-row',
+              entry.isDirectory ? 'dir' : 'leaf',
+              { active: !entry.isDirectory && props.activeFilePath === entry.path }
+            ],
             style: { paddingLeft: `${8 + props.depth * 14}px` },
             onClick: () => emit('clickEntry', entry),
             onContextmenu: (e: MouseEvent) => emit('contextMenu', e, entry)
@@ -39,6 +44,7 @@ export const FileTreeNode = defineComponent({
             depth: props.depth + 1,
             getItems: props.getItems,
             isExpanded: props.isExpanded,
+            activeFilePath: props.activeFilePath,
             onClickEntry: (e: FileEntry) => emit('clickEntry', e),
             onContextMenu: (e: MouseEvent, f: FileEntry) => emit('contextMenu', e, f)
           })

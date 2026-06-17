@@ -21,6 +21,8 @@ const PlansPanel = defineAsyncComponent(
   () => import('@renderer/components/plans/PlansPanel.vue')
 )
 
+import FolderSwitcher from './FolderSwitcher.vue'
+
 const layoutStore = useLayoutStore()
 
 interface TabDef {
@@ -92,6 +94,8 @@ const isTerminalTab = computed(() => layoutStore.activeExtensionTab === 'termina
         </svg>
       </button>
     </div>
+
+    <FolderSwitcher />
 
     <div class="panel-content">
       <Suspense>

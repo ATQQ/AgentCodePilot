@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { FileEntry } from '@renderer/types'
-import { useWorkspaceStore } from './workspace.store'
+import { usePanelContextStore } from './panelContext.store'
 
 export const useFileExplorerStore = defineStore('fileExplorer', () => {
   const expandedDirs = ref<Set<string>>(new Set())
@@ -13,19 +13,21 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
   const editMode = ref(false)
   const dirtyContent = ref('')
 
-  const workspaceStore = useWorkspaceStore()
+  const panelContext = usePanelContextStore()
 
   const workspaceRoots = computed(() => {
-    const cwd = workspaceStore.currentCwd
-    if (!cwd) return []
-    if (workspaceStore.currentWorkspace) {
-      return workspaceStore.currentWorkspace.folders
+    if (panelContext.isWorkspaceContext && panelContext.availableFolders.length > 0) {
+      return panelContext.availableFolders.map((f) => f.path)
     }
+    const cwd = panelContext.effectivePanelCwd
+    if (!cwd) return []
     return [cwd]
   })
 
+  const treeRoot = computed(() => panelContext.effectivePanelCwd)
+
   const filteredTree = computed(() => {
-    const root = workspaceStore.currentCwd
+    const root = treeRoot.value
     if (!root) return []
     const q = filter.value.trim().toLowerCase()
     const entries = childrenCache.value[root] ?? []
@@ -42,7 +44,7 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
   }
 
   async function ensureRootLoaded(): Promise<void> {
-    const root = workspaceStore.currentCwd
+    const root = treeRoot.value
     if (!root) return
     if (!childrenCache.value[root]) {
       await loadDir(root)
@@ -105,7 +107,7 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     }
     const parent = path.replace(/[/\\][^/\\]+$/, '')
     delete childrenCache.value[parent]
-    await loadDir(parent || workspaceStore.currentCwd!)
+    await loadDir(parent || treeRoot.value!)
   }
 
   async function copyFile(srcPath: string, destPath: string): Promise<void> {
@@ -133,6 +135,14 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     editMode.value = false
   }
 
+  watch(
+    () => panelContext.effectivePanelCwd,
+    async () => {
+      clearCache()
+      await ensureRootLoaded()
+    }
+  )
+
   return {
     filter,
     openFilePath,
@@ -141,6 +151,7 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     fileLoading,
     editMode,
     filteredTree,
+    treeRoot,
     childrenCache,
     workspaceRoots,
     ensureRootLoaded,

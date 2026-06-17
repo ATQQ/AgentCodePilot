@@ -344,6 +344,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function stopConversation(conversationId: string): Promise<void> {
+    waitingConversationIds.value.delete(conversationId)
     await window.agentAPI.chat.stop(conversationId)
     streamingConversationIds.value.delete(conversationId)
     flushQueueForConversation(conversationId)
@@ -395,15 +396,34 @@ export const useChatStore = defineStore('chat', () => {
         break
       }
       case 'message.completed': {
+        waitingConversationIds.value.delete(event.conversationId)
         const conv = conversations.value.find((c) => c.id === event.conversationId)
         if (conv) {
           conv.updatedAt = new Date().toISOString()
-          const msg = conv.messages.find((m) => m.id === event.messageId)
+          let msg = conv.messages.find((m) => m.id === event.messageId)
+          if (event.stopped) {
+            const stoppedText = '已手动终止 AI 回复'
+            if (!msg) {
+              msg = {
+                id: event.messageId,
+                role: 'assistant',
+                content: stoppedText,
+                createdAt: new Date().toISOString(),
+                stopped: true
+              }
+              conv.messages.push(msg)
+            } else {
+              if (!msg.content.trim()) {
+                msg.content = stoppedText
+              }
+              msg.stopped = true
+            }
+          }
           if (msg) {
             if (event.usage) msg.usage = event.usage
             if (event.debugInput) msg.debugInput = event.debugInput
             if (event.debugOutput) msg.debugOutput = event.debugOutput
-            if (msg.toolCalls) {
+            if (!event.stopped && msg.toolCalls) {
               for (const tc of msg.toolCalls) {
                 if (tc.status === 'pending' || tc.status === 'running') {
                   tc.status = 'completed'

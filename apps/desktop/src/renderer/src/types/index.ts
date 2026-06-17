@@ -58,6 +58,7 @@ export interface Message {
   toolCalls?: ToolCall[]
   debugInput?: string
   debugOutput?: string
+  stopped?: boolean
 }
 
 export interface ApprovalRequest {

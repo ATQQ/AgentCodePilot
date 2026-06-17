@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Plus, Top } from '@element-plus/icons-vue'
 import type { Attachment, ApprovalLevel, FileAttachment, UrlAttachment, PlanReference } from '@renderer/types'
@@ -12,6 +12,36 @@ const { t } = useI18n()
 const { openImagePreview } = useImagePreview()
 const composerStore = useComposerStore()
 const input = ref('')
+const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const composerRootRef = ref<HTMLElement | null>(null)
+const isCompact = ref(false)
+
+const TEXTAREA_MAX_HEIGHT = 200
+
+function resizeTextarea(): void {
+  const el = textareaRef.value
+  if (!el) return
+  el.style.height = 'auto'
+  const nextHeight = Math.min(el.scrollHeight, TEXTAREA_MAX_HEIGHT)
+  el.style.height = `${nextHeight}px`
+  el.style.overflowY = el.scrollHeight > TEXTAREA_MAX_HEIGHT ? 'auto' : 'hidden'
+}
+
+let compactObserver: ResizeObserver | null = null
+
+onMounted(() => {
+  nextTick(() => resizeTextarea())
+  if (composerRootRef.value) {
+    compactObserver = new ResizeObserver(([entry]) => {
+      isCompact.value = entry.contentRect.width < 480
+    })
+    compactObserver.observe(composerRootRef.value)
+  }
+})
+
+onUnmounted(() => {
+  compactObserver?.disconnect()
+})
 
 watch(
   () => composerStore.pendingInsert,
@@ -21,6 +51,7 @@ watch(
     if (!consumed) return
     if (consumed.text) {
       input.value += consumed.text
+      nextTick(() => resizeTextarea())
     } else if (consumed.attachment) {
       attachments.value.push(consumed.attachment)
     } else if (consumed.planRef) {
@@ -74,6 +105,7 @@ function handleSubmit(): void {
   input.value = ''
   attachments.value = []
   planRefs.value = []
+  nextTick(() => resizeTextarea())
   if (refs.length > 0) {
     planMode.value = false
   }
@@ -103,6 +135,7 @@ function handleInput(): void {
     showPlanPicker.value = true
     input.value = input.value.slice(0, -5)
   }
+  resizeTextarea()
 }
 
 function handleKeydown(e: KeyboardEvent): void {
@@ -153,6 +186,7 @@ async function handlePaste(e: ClipboardEvent): Promise<void> {
       })
     }
   }
+  nextTick(() => resizeTextarea())
 }
 
 async function handleSelectFiles(): Promise<void> {
@@ -255,7 +289,7 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
 </script>
 
 <template>
-  <div class="composer" :class="{ 'composer--plan': planMode }">
+  <div ref="composerRootRef" class="composer" :class="{ 'composer--plan': planMode }">
     <!-- Queued messages -->
     <div v-if="props.queuedMessages?.length" class="queued-area">
       <div v-for="(msg, idx) in props.queuedMessages" :key="idx" class="queued-banner">
@@ -320,6 +354,7 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
     </div>
 
     <textarea
+      ref="textareaRef"
       v-model="input"
       class="composer-input"
       :placeholder="t('home.placeholder')"
@@ -328,7 +363,7 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
       @paste="handlePaste"
       @input="handleInput"
     />
-    <div class="composer-toolbar">
+    <div class="composer-toolbar" :class="{ 'composer-toolbar--compact': isCompact }">
       <div class="toolbar-left">
         <!-- + Button with popup -->
         <div class="dropdown-wrapper">
@@ -386,16 +421,18 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
 
         <!-- Approval Level -->
         <div class="dropdown-wrapper">
-          <button class="toolbar-btn toolbar-btn--label" @click="showApprovalMenu = !showApprovalMenu">
+          <button
+            class="toolbar-btn toolbar-btn--icon"
+            :title="t(approvalOptions[approvalLevel].label)"
+            @click="showApprovalMenu = !showApprovalMenu"
+          >
             <span class="approval-icon">{{ approvalOptions[approvalLevel].icon }}</span>
-            <span>{{ t(approvalOptions[approvalLevel].label) }}</span>
             <span class="chevron">&#x25BE;</span>
           </button>
           <Transition name="fade">
             <div v-if="showApprovalMenu" class="dropdown-menu dropdown-menu--wide" @mouseleave="showApprovalMenu = false">
               <div class="menu-header">
                 <span>{{ t('composer.approval.title') }}</span>
-                <a class="menu-link">{{ t('composer.approval.learnMore') }}</a>
               </div>
               <button
                 class="menu-item menu-item--desc"
@@ -439,7 +476,7 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
       </div>
 
       <div class="toolbar-right">
-        <slot name="selectors" />
+        <slot name="selectors" :compact="isCompact" />
         <button
           v-if="props.streaming && !input.trim()"
           class="stop-btn"
@@ -732,7 +769,29 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
   outline: none;
   line-height: 1.5;
   min-height: 40px;
-  max-height: 120px;
+  max-height: 200px;
+  overflow-y: hidden;
+}
+
+.composer-toolbar--compact {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.composer-toolbar--compact .toolbar-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.composer-toolbar--compact .toolbar-right {
+  width: 100%;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.toolbar-btn--icon {
+  gap: 2px;
+  padding: 5px 6px;
 }
 
 .composer-input::placeholder {
@@ -757,6 +816,8 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  flex-shrink: 0;
+  min-width: 0;
 }
 
 .toolbar-btn {
@@ -880,6 +941,7 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
 .send-btn {
   width: 28px;
   height: 28px;
+  flex-shrink: 0;
   border-radius: var(--radius-full);
   border: none;
   background: var(--btn-primary-bg);
@@ -903,6 +965,7 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
 .stop-btn {
   width: 28px;
   height: 28px;
+  flex-shrink: 0;
   border-radius: var(--radius-full);
   border: 2px solid var(--content-text);
   background: transparent;

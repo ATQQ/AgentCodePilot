@@ -4,6 +4,11 @@ import { useModelStore } from '@renderer/stores/model.store'
 import { useAgentStore } from '@renderer/stores/agent.store'
 import { useChatStore } from '@renderer/stores/chat.store'
 
+const props = withDefaults(
+  defineProps<{ compact?: boolean }>(),
+  { compact: false }
+)
+
 const modelStore = useModelStore()
 const agentStore = useAgentStore()
 const chatStore = useChatStore()
@@ -32,8 +37,8 @@ function handleSelect(modelId: string): void {
 <template>
   <div v-if="showSelector" class="model-selector">
     <el-dropdown trigger="click" @command="handleSelect">
-      <button class="model-btn">
-        <span>{{ currentModelName }}</span>
+      <button class="model-btn" :class="{ 'model-btn--compact': props.compact }" :title="currentModelName">
+        <span class="model-name">{{ props.compact ? currentModelName.slice(0, 1) : currentModelName }}</span>
         <span class="chevron">&#x25BE;</span>
       </button>
       <template #dropdown>
@@ -69,6 +74,18 @@ function handleSelect(modelId: string): void {
   cursor: pointer;
   transition: background 0.15s;
   white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 160px;
+}
+
+.model-btn--compact {
+  max-width: 72px;
+  padding: 4px 6px;
+}
+
+.model-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .model-btn:hover {

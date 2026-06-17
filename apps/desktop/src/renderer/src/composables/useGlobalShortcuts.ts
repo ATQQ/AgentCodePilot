@@ -30,6 +30,24 @@ export function useGlobalShortcuts(): void {
 
     const key = e.key.toLowerCase()
 
+    if (layoutStore.homeRouteActive) {
+      if (key === 'g' && !e.shiftKey) {
+        e.preventDefault()
+        uiStore.toggleSearch()
+      }
+      if (key === 's') {
+        e.preventDefault()
+        if (route.meta.fullscreen !== true) {
+          uiStore.toggleSidebar()
+        }
+      }
+      if (key === 'n') {
+        e.preventDefault()
+        startNewChat()
+      }
+      return
+    }
+
     // Backtick ` → toggle terminal
     if (key === '`') {
       e.preventDefault()

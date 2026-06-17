@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent } from 'vue'
+import { computed, defineAsyncComponent, ref } from 'vue'
 import { useFileExplorerStore } from '@renderer/stores/fileExplorer.store'
 import { useComposerStore } from '@renderer/stores/composer.store'
 import { toLocalFileUrl } from '@renderer/utils/localFile'
@@ -13,14 +13,34 @@ const props = defineProps<{
 const fileStore = useFileExplorerStore()
 const composerStore = useComposerStore()
 
+const imageSrc = ref('')
+const imageLoadFailed = ref(false)
+
 const fileName = computed(() => props.filePath.split('/').pop() ?? props.filePath)
 
 const fileKind = computed(() => {
   const ext = props.filePath.split('.').pop()?.toLowerCase() ?? ''
   if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) return 'image'
-  if (ext === 'md' || ext === 'markdown') return 'markdown'
   return 'text'
 })
+
+const isEditable = computed(() => fileKind.value === 'text')
+
+function initImageSrc(): void {
+  imageLoadFailed.value = false
+  imageSrc.value = toLocalFileUrl(props.filePath)
+}
+
+initImageSrc()
+
+async function onImageError(): Promise<void> {
+  if (imageLoadFailed.value) return
+  imageLoadFailed.value = true
+  const dataUrl = await window.agentAPI.file.getImageDataUrl(props.filePath)
+  if (dataUrl) {
+    imageSrc.value = dataUrl
+  }
+}
 
 function toggleEdit(): void {
   fileStore.setEditMode(!fileStore.editMode)
@@ -44,7 +64,7 @@ function addToChat(): void {
       <span class="fp-name">{{ fileName }}</span>
       <div class="fp-actions">
         <button class="action-btn" @click="addToChat">添加到对话</button>
-        <button v-if="fileKind === 'text'" class="action-btn" @click="toggleEdit">
+        <button v-if="isEditable" class="action-btn" @click="toggleEdit">
           {{ fileStore.editMode ? '只读' : '编辑' }}
         </button>
         <button
@@ -60,8 +80,9 @@ function addToChat(): void {
 
       <img
         v-else-if="fileKind === 'image'"
-        :src="toLocalFileUrl(filePath)"
+        :src="imageSrc"
         class="img-preview"
+        @error="onImageError"
       />
 
       <Suspense v-else-if="fileKind === 'text'">

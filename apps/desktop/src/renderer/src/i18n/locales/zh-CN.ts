@@ -71,6 +71,8 @@ export default {
     copy: '复制',
     resend: '重新编辑',
     thinking: '思考中',
+    stoppedManually: '已手动终止 AI 回复',
+    stoppedBadge: '已手动停止',
     planModeTag: '计划模式',
     planRefTag: '引用计划: {title}',
     previewAttachment: '预览图片',

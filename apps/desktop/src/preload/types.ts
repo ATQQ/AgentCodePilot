@@ -324,7 +324,7 @@ export interface ApprovalRespondPayload {
 export type AgentEvent =
   | { type: 'message.started'; conversationId: string; messageId: string }
   | { type: 'message.delta'; conversationId: string; messageId: string; delta: string }
-  | { type: 'message.completed'; conversationId: string; messageId: string; usage?: TokenUsage; debugInput?: string; debugOutput?: string }
+  | { type: 'message.completed'; conversationId: string; messageId: string; usage?: TokenUsage; debugInput?: string; debugOutput?: string; stopped?: boolean }
   | { type: 'message.error'; conversationId: string; error: string }
   | { type: 'tool.started'; conversationId: string; messageId: string; tool: ToolUseInfo }
   | { type: 'tool.input_updated'; conversationId: string; messageId: string; toolUseId: string; input: Record<string, unknown> }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, watch, defineAsyncComponent } from 'vue'
 import { useFileExplorerStore } from '@renderer/stores/fileExplorer.store'
-import { useWorkspaceStore } from '@renderer/stores/workspace.store'
+import { usePanelContextStore } from '@renderer/stores/panelContext.store'
 import { useComposerStore } from '@renderer/stores/composer.store'
 import type { FileEntry } from '@renderer/types'
 import { FileTreeNode } from './FileTreeNode'
@@ -11,14 +11,14 @@ const FilePreviewComp = defineAsyncComponent(
 )
 
 const fileStore = useFileExplorerStore()
-const workspaceStore = useWorkspaceStore()
+const panelContext = usePanelContextStore()
 const composerStore = useComposerStore()
 
 onMounted(async () => {
   await fileStore.ensureRootLoaded()
 })
 
-watch(() => workspaceStore.currentCwd, async () => {
+watch(() => panelContext.effectivePanelCwd, async () => {
   fileStore.clearCache()
   await fileStore.ensureRootLoaded()
 })
@@ -64,7 +64,7 @@ function getItems(dir: string): FileEntry[] {
       />
     </div>
 
-    <div v-if="!workspaceStore.currentCwd" class="empty-msg">请先选择项目</div>
+    <div v-if="!panelContext.effectivePanelCwd" class="empty-msg">请先选择项目</div>
 
     <template v-else>
       <div class="file-split">
@@ -74,6 +74,7 @@ function getItems(dir: string): FileEntry[] {
               v-for="entry in fileStore.filteredTree"
               :key="entry.path"
               class="file-row leaf"
+              :class="{ active: !entry.isDirectory && fileStore.openFilePath === entry.path }"
               @click="onEntryClick(entry)"
               @contextmenu="showContextMenu($event, entry)"
             >
@@ -83,13 +84,14 @@ function getItems(dir: string): FileEntry[] {
           </template>
 
           <FileTreeNode
-            v-for="entry in getItems(workspaceStore.currentCwd)"
+            v-for="entry in getItems(fileStore.treeRoot ?? '')"
             v-else
             :key="entry.path"
             :entry="entry"
             :depth="0"
             :get-items="getItems"
             :is-expanded="fileStore.isExpanded"
+            :active-file-path="fileStore.openFilePath"
             @click-entry="onEntryClick"
             @context-menu="showContextMenu"
           />
@@ -177,6 +179,11 @@ function getItems(dir: string): FileEntry[] {
   background: var(--sidebar-item-hover);
 }
 
+.file-row.active {
+  background: var(--sidebar-item-active);
+  color: var(--sidebar-text-active);
+}
+
 .file-icon {
   font-size: 12px;
   flex-shrink: 0;
@@ -219,6 +226,11 @@ function getItems(dir: string): FileEntry[] {
 
 :deep(.file-row:hover) {
   background: var(--sidebar-item-hover);
+}
+
+:deep(.file-row.active) {
+  background: var(--sidebar-item-active);
+  color: var(--sidebar-text-active);
 }
 
 :deep(.expand-icon) {

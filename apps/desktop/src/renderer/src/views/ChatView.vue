@@ -343,6 +343,7 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
               >
                 {{ t('plans.viewPlan') }}
               </button>
+              <span v-if="msg.stopped" class="stopped-badge">{{ t('chat.stoppedBadge') }}</span>
             </template>
             <template v-else>
               <span v-if="msg.planMode" class="plan-mode-tag">{{ t('chat.planModeTag') }}</span>
@@ -442,9 +443,9 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
             @cancel-queue="handleCancelQueue"
             @approval-change="(level) => chatStore.setConversationApprovalLevel(chatStore.activeConversation!.id, level)"
           >
-            <template #selectors>
-              <AgentSelector />
-              <ModelSelector />
+            <template #selectors="{ compact }">
+              <AgentSelector :compact="compact" />
+              <ModelSelector :compact="compact" />
             </template>
           </PromptComposer>
         </template>
@@ -639,6 +640,16 @@ html.dark .approval-inline-tag {
 
 .view-plan-link:hover {
   opacity: 0.85;
+}
+
+.stopped-badge {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--content-text-secondary) 12%, transparent);
+  color: var(--content-text-secondary);
+  font-size: 11px;
 }
 
 .message.assistant .message-content {

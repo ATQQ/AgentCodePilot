@@ -266,7 +266,7 @@ export class ClaudeAgentAdapter implements AgentAdapter {
       this.emitCompleted(input, emit, usage, rawMessages, queryOptions)
     } catch (error: unknown) {
       if (controller.signal.aborted) {
-        this.emitCompleted(input, emit, usage, rawMessages, queryOptions)
+        this.emitCompleted(input, emit, usage, rawMessages, queryOptions, true)
       } else {
         throw error
       }
@@ -280,7 +280,8 @@ export class ClaudeAgentAdapter implements AgentAdapter {
     emit: (event: AgentEvent) => void,
     usage: TokenUsage | undefined,
     rawMessages: unknown[],
-    queryOptions: Record<string, unknown>
+    queryOptions: Record<string, unknown>,
+    stopped = false
   ): void {
     let debugInputStr: string | undefined
     let debugOutputStr: string | undefined
@@ -306,7 +307,8 @@ export class ClaudeAgentAdapter implements AgentAdapter {
       messageId: input.messageId,
       usage,
       debugInput: debugInputStr,
-      debugOutput: debugOutputStr
+      debugOutput: debugOutputStr,
+      stopped: stopped || undefined
     })
   }
 

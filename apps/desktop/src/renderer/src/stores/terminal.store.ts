@@ -3,6 +3,8 @@ import { ref, computed } from 'vue'
 import type { TerminalInfo } from '@renderer/types'
 import { useWorkspaceStore } from './workspace.store'
 import { useChatStore } from './chat.store'
+import { useLayoutStore } from './layout.store'
+import { usePanelContextStore } from './panelContext.store'
 import { disposeTerminalSession } from '@renderer/utils/terminal-session-manager'
 
 export interface TerminalTab {
@@ -96,16 +98,31 @@ export const useTerminalStore = defineStore('terminal', () => {
 
   const workspaceStore = useWorkspaceStore()
   const chatStore = useChatStore()
+  const panelContext = usePanelContextStore()
+
+  function syncPanelVisibilityAfterTerminalChange(scopeKey: string | null): void {
+    if (!scopeKey || scopeKey !== currentScopeKey.value) return
+    if (currentTabs.value.length > 0) return
+
+    const layoutStore = useLayoutStore()
+    if (layoutStore.bottomPanelVisible) {
+      layoutStore.closeBottomPanel()
+    }
+    if (layoutStore.rightPanelVisible && layoutStore.activeExtensionTab === 'terminal') {
+      layoutStore.closeRightPanel()
+    }
+  }
 
   function resolveScope(): TerminalScope {
     const conv = chatStore.activeConversation
+    const panelCwd = panelContext.effectivePanelCwd
     if (conv?.projectId) {
       const project = workspaceStore.projects.find((p) => p.id === conv.projectId)
       const ws = workspaceStore.workspaces.find((w) => w.id === conv.projectId)
       if (project) {
         return {
           scopeKey: `shared:${conv.projectId}`,
-          defaultCwd: project.path,
+          defaultCwd: conv.cwd ?? project.path,
           isMultiFolderWorkspace: false,
           workspaceFolders: []
         }
@@ -113,7 +130,7 @@ export const useTerminalStore = defineStore('terminal', () => {
       if (ws) {
         return {
           scopeKey: `shared:${conv.projectId}`,
-          defaultCwd: ws.folders[0] ?? null,
+          defaultCwd: panelCwd ?? ws.folders[0] ?? null,
           isMultiFolderWorkspace: ws.folders.length > 1,
           workspaceFolders: ws.folders
         }
@@ -203,6 +220,7 @@ export const useTerminalStore = defineStore('terminal', () => {
           clearLayout(scopeKey)
         }
         persistScope(scopeKey)
+        syncPanelVisibilityAfterTerminalChange(scopeKey)
       }
     })
   }
@@ -239,6 +257,9 @@ export const useTerminalStore = defineStore('terminal', () => {
     terminalMetaByScope.value[scopeKey] = meta
     persistScope(scopeKey)
     readyScopes.value = new Set([...readyScopes.value, scopeKey])
+    if (nextTabs.length === 0) {
+      syncPanelVisibilityAfterTerminalChange(scopeKey)
+    }
   }
 
   async function spawnTerminal(scopeKey: string, cwd: string): Promise<TerminalInfo> {
@@ -253,7 +274,7 @@ export const useTerminalStore = defineStore('terminal', () => {
   function buildTabsFromLayout(
     layout: PersistedTerminalLayout,
     remote: TerminalInfo[],
-    defaultCwd: string
+    _defaultCwd: string
   ): { tabs: TerminalTab[]; meta: Record<string, TerminalInfo>; activeTabId: string } {
     const meta: Record<string, TerminalInfo> = {}
     for (const t of remote) meta[t.id] = t

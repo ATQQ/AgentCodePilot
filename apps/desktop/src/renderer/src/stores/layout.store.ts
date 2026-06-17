@@ -1,16 +1,18 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import type { PlanOwnerType } from '../../../preload/types'
 
 export type ExtensionTab = 'review' | 'terminal' | 'browser' | 'files' | 'plans'
 export type ReviewScope = 'unstaged' | 'staged'
 export type PlansScope = 'conversation' | 'owner'
+export type DiffViewMode = 'side-by-side' | 'inline'
 
 const STORAGE_KEY = 'workbench-layout'
 
 interface LayoutPersist {
   rightPanelWidth: number
   bottomPanelHeight: number
+  diffViewMode?: DiffViewMode
 }
 
 function loadPersist(): LayoutPersist {
@@ -20,7 +22,7 @@ function loadPersist(): LayoutPersist {
   } catch {
     /* ignore */
   }
-  return { rightPanelWidth: 380, bottomPanelHeight: 260 }
+  return { rightPanelWidth: 380, bottomPanelHeight: 260, diffViewMode: 'side-by-side' }
 }
 
 export const useLayoutStore = defineStore('layout', () => {
@@ -36,14 +38,30 @@ export const useLayoutStore = defineStore('layout', () => {
   const plansOwnerId = ref<string | null>(null)
   const rightPanelWidth = ref(persisted.rightPanelWidth)
   const bottomPanelHeight = ref(persisted.bottomPanelHeight)
+  const diffViewMode = ref<DiffViewMode>(persisted.diffViewMode ?? 'side-by-side')
   const envInfoVisible = ref(false)
+  const homeRouteActive = ref(false)
 
-  watch([rightPanelWidth, bottomPanelHeight], () => {
+  const showBottomTerminal = computed(
+    () =>
+      bottomPanelVisible.value &&
+      !homeRouteActive.value &&
+      !(rightPanelVisible.value && activeExtensionTab.value === 'terminal')
+  )
+
+  const showExtensionPanel = computed(
+    () => rightPanelVisible.value && !homeRouteActive.value
+  )
+
+  const showWorkbenchControls = computed(() => !homeRouteActive.value)
+
+  watch([rightPanelWidth, bottomPanelHeight, diffViewMode], () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
         rightPanelWidth: rightPanelWidth.value,
-        bottomPanelHeight: bottomPanelHeight.value
+        bottomPanelHeight: bottomPanelHeight.value,
+        diffViewMode: diffViewMode.value
       })
     )
   })
@@ -61,9 +79,6 @@ export const useLayoutStore = defineStore('layout', () => {
     rightPanelVisible.value = true
     if (options?.reviewScope) {
       reviewScope.value = options.reviewScope
-    }
-    if (tab === 'terminal') {
-      bottomPanelVisible.value = true
     }
   }
 
@@ -106,9 +121,24 @@ export const useLayoutStore = defineStore('layout', () => {
     openExtensionTab('review', { reviewScope: 'unstaged' })
   }
 
+  function setHomeRouteActive(active: boolean): void {
+    homeRouteActive.value = active
+    if (active) {
+      envInfoVisible.value = false
+    }
+  }
+
+  function setDiffViewMode(mode: DiffViewMode): void {
+    diffViewMode.value = mode
+  }
+
   return {
     rightPanelVisible,
     bottomPanelVisible,
+    showBottomTerminal,
+    showExtensionPanel,
+    showWorkbenchControls,
+    homeRouteActive,
     activeExtensionTab,
     reviewScope,
     activePlanId,
@@ -117,6 +147,7 @@ export const useLayoutStore = defineStore('layout', () => {
     plansOwnerId,
     rightPanelWidth,
     bottomPanelHeight,
+    diffViewMode,
     envInfoVisible,
     toggleRightPanel,
     toggleBottomPanel,
@@ -125,6 +156,8 @@ export const useLayoutStore = defineStore('layout', () => {
     closeBottomPanel,
     toggleEnvInfo,
     openReviewFromChanges,
-    openPlansPanel
+    openPlansPanel,
+    setDiffViewMode,
+    setHomeRouteActive
   }
 })

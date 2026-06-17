@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import type { GitStatusResult, GitChangedFile, GitDiffScope } from '@renderer/types'
-import { useWorkspaceStore } from './workspace.store'
+import { usePanelContextStore } from './panelContext.store'
 
 export const useGitStore = defineStore('git', () => {
   const status = ref<GitStatusResult | null>(null)
@@ -13,9 +13,10 @@ export const useGitStore = defineStore('git', () => {
   const diffLoading = ref(false)
   let pollTimer: ReturnType<typeof setInterval> | null = null
 
+  const panelContext = usePanelContextStore()
+
   async function refreshStatus(): Promise<void> {
-    const workspace = useWorkspaceStore()
-    const cwd = workspace.currentCwd
+    const cwd = panelContext.effectivePanelCwd
     if (!cwd) {
       status.value = null
       return
@@ -30,10 +31,18 @@ export const useGitStore = defineStore('git', () => {
   }
 
   async function loadChangedFiles(scope: GitDiffScope): Promise<void> {
-    const workspace = useWorkspaceStore()
-    const cwd = workspace.currentCwd
+    const cwd = panelContext.effectivePanelCwd
     if (!cwd) {
       changedFiles.value = []
+      return
+    }
+
+    if (!status.value?.isRepo) {
+      await refreshStatus()
+    }
+    if (!status.value?.isRepo) {
+      changedFiles.value = []
+      selectedFile.value = null
       return
     }
 
@@ -44,9 +53,8 @@ export const useGitStore = defineStore('git', () => {
   }
 
   async function loadDiff(file: string, staged: boolean): Promise<void> {
-    const workspace = useWorkspaceStore()
-    const cwd = workspace.currentCwd
-    if (!cwd) return
+    const cwd = panelContext.effectivePanelCwd
+    if (!cwd || !status.value?.isRepo) return
 
     diffLoading.value = true
     try {
@@ -75,11 +83,13 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
-  const workspaceStore = useWorkspaceStore()
   watch(
-    () => workspaceStore.currentCwd,
+    () => panelContext.effectivePanelCwd,
     () => {
       selectedFile.value = null
+      changedFiles.value = []
+      diffOriginal.value = ''
+      diffModified.value = ''
       void refreshStatus()
     }
   )

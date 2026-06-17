@@ -2,17 +2,18 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useGitStore } from '@renderer/stores/git.store'
 import { useLayoutStore } from '@renderer/stores/layout.store'
-import { useWorkspaceStore } from '@renderer/stores/workspace.store'
+import { usePanelContextStore } from '@renderer/stores/panelContext.store'
 import { useAgentStore } from '@renderer/stores/agent.store'
 
 const gitStore = useGitStore()
 const layoutStore = useLayoutStore()
-const workspaceStore = useWorkspaceStore()
+const panelContext = usePanelContextStore()
 const agentStore = useAgentStore()
 
 const popoverRef = ref<HTMLElement | null>(null)
 
 function handleChangesClick(): void {
+  if (!gitStore.status?.isRepo) return
   layoutStore.openReviewFromChanges()
   layoutStore.envInfoVisible = false
 }
@@ -50,31 +51,39 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <div v-if="!workspaceStore.currentCwd" class="env-empty">请先选择项目</div>
+      <div v-if="!panelContext.effectivePanelCwd" class="env-empty">请先选择项目</div>
 
       <template v-else-if="gitStore.status">
-        <button class="env-row env-row-clickable" @click="handleChangesClick">
+        <button
+          v-if="gitStore.status.isRepo"
+          class="env-row env-row-clickable"
+          @click="handleChangesClick"
+        >
           <span class="env-label">变更</span>
           <span class="env-value">
-            <span v-if="gitStore.status.isRepo" class="diff-stat">
+            <span class="diff-stat">
               <span class="add">+{{ gitStore.status.additions.toLocaleString() }}</span>
               <span class="del">-{{ gitStore.status.deletions.toLocaleString() }}</span>
             </span>
-            <span v-else class="muted">{{ gitStore.status.error || '无 Git 信息' }}</span>
           </span>
         </button>
 
-        <div class="env-row">
-          <span class="env-label">本地</span>
-          <span class="env-value muted">{{ workspaceStore.currentProject?.name || workspaceStore.currentWorkspace?.name || '本地' }}</span>
+        <div v-else class="env-row">
+          <span class="env-label">Git</span>
+          <span class="env-value muted">不是 Git 仓库</span>
         </div>
 
         <div class="env-row">
+          <span class="env-label">本地</span>
+          <span class="env-value muted">{{ panelContext.effectivePanelCwd.split('/').pop() || '本地' }}</span>
+        </div>
+
+        <div v-if="gitStore.status.isRepo" class="env-row">
           <span class="env-label">分支</span>
           <span class="env-value">{{ gitStore.status.branch || '—' }}</span>
         </div>
 
-        <div class="env-row">
+        <div v-if="gitStore.status.isRepo" class="env-row">
           <button class="action-btn" disabled title="即将支持">提交或推送</button>
         </div>
 
@@ -128,12 +137,16 @@ onUnmounted(() => {
 }
 
 .icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
   border: none;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--content-text-secondary);
   cursor: pointer;
-  padding: 4px;
-  border-radius: var(--radius-sm);
 }
 
 .env-row {
@@ -150,8 +163,8 @@ onUnmounted(() => {
   background: transparent;
   cursor: pointer;
   border-radius: var(--radius-sm);
-  padding: 6px 8px;
-  margin: 0 -8px;
+  padding: 6px 4px;
+  text-align: left;
 }
 
 .env-row-clickable:hover {
@@ -162,17 +175,37 @@ onUnmounted(() => {
   color: var(--content-text-secondary);
 }
 
-.add {
-  color: #16a34a;
-  margin-right: 4px;
-}
-
-.del {
-  color: #dc2626;
+.env-value {
+  color: var(--content-text);
 }
 
 .muted {
   color: var(--content-text-tertiary);
+}
+
+.diff-stat .add {
+  color: #16a34a;
+}
+
+.diff-stat .del {
+  color: #dc2626;
+  margin-left: 4px;
+}
+
+.action-btn {
+  width: 100%;
+  padding: 6px 12px;
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--content-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: not-allowed;
+}
+
+.env-hint {
+  font-size: var(--font-size-xs);
+  margin-top: var(--spacing-xs);
 }
 
 .env-divider {
@@ -183,14 +216,15 @@ onUnmounted(() => {
 
 .env-section-title {
   font-size: var(--font-size-xs);
-  color: var(--sidebar-section-title);
+  font-weight: 500;
+  color: var(--content-text-secondary);
   margin-bottom: var(--spacing-xs);
 }
 
 .agent-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .agent-item {
@@ -198,42 +232,23 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   font-size: var(--font-size-sm);
+  color: var(--content-text);
 }
 
 .agent-dot {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  background: #6366f1;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--content-text-tertiary);
 }
 
-.agent-dot.claude-code { background: #d97706; }
-.agent-dot.codex { background: #2563eb; }
-.agent-dot.cursor { background: #7c3aed; }
-
 .env-empty {
-  font-size: var(--font-size-sm);
+  padding: var(--spacing-sm) 0;
   color: var(--content-text-tertiary);
-  padding: 8px 0;
+  font-size: var(--font-size-sm);
 }
 
 .env-empty.small {
-  padding: 4px 0;
-}
-
-.action-btn {
-  width: 100%;
-  padding: 6px 12px;
-  border: 1px solid var(--sidebar-border);
-  border-radius: var(--radius-md);
-  background: var(--btn-secondary-bg);
-  color: var(--content-text-secondary);
-  font-size: var(--font-size-sm);
-  cursor: not-allowed;
-}
-
-.env-hint {
   font-size: var(--font-size-xs);
-  margin-top: 4px;
 }
 </style>

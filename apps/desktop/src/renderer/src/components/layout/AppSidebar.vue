@@ -727,7 +727,7 @@ onUnmounted(() => {
 .sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
-  height: 100vh;
+  height: 100%;
   background: var(--sidebar-bg-translucent, rgba(249, 250, 251, 0.82));
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -744,6 +744,7 @@ onUnmounted(() => {
 
 .sidebar-content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 0 var(--spacing-sm);
   scrollbar-width: thin;
@@ -827,6 +828,7 @@ onUnmounted(() => {
 }
 
 .sidebar-footer {
+  flex-shrink: 0;
   padding: var(--spacing-sm);
   border-top: 1px solid var(--sidebar-border);
 }

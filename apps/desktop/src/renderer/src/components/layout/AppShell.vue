@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { provide, defineAsyncComponent } from 'vue'
-import { useRouter } from 'vue-router'
+import { provide, defineAsyncComponent, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import AppSidebar from './AppSidebar.vue'
 import SearchDialog from './SearchDialog.vue'
 import TopBarControls from './TopBarControls.vue'
@@ -14,8 +14,17 @@ const ExtensionPanel = defineAsyncComponent(() => import('./ExtensionPanel.vue')
 const BottomPanel = defineAsyncComponent(() => import('./BottomPanel.vue'))
 
 const router = useRouter()
+const route = useRoute()
 const uiStore = useUiStore()
 const layoutStore = useLayoutStore()
+
+watch(
+  () => route.name,
+  (name) => {
+    layoutStore.setHomeRouteActive(name === 'home')
+  },
+  { immediate: true }
+)
 
 // Start git polling for environment info
 const gitStore = useGitStore()
@@ -73,14 +82,14 @@ provide('openSearch', () => uiStore.openSearch())
 
         <!-- Bottom panel (terminal) -->
         <Transition name="panel-slide-v">
-          <Suspense v-if="layoutStore.bottomPanelVisible">
+          <Suspense v-if="layoutStore.showBottomTerminal">
             <BottomPanel />
           </Suspense>
         </Transition>
       </div>
 
       <!-- Right panel resizer + extension panel -->
-      <template v-if="layoutStore.rightPanelVisible">
+      <template v-if="layoutStore.showExtensionPanel">
         <ResizableSplit
           direction="horizontal"
           invert

@@ -2,6 +2,7 @@
 import { onMounted, watch } from 'vue'
 import { useGitStore } from '@renderer/stores/git.store'
 import { useLayoutStore } from '@renderer/stores/layout.store'
+import { usePanelContextStore } from '@renderer/stores/panelContext.store'
 import type { GitDiffScope } from '@renderer/types'
 import { defineAsyncComponent } from 'vue'
 
@@ -11,6 +12,7 @@ const MonacoDiff = defineAsyncComponent(
 
 const gitStore = useGitStore()
 const layoutStore = useLayoutStore()
+const panelContext = usePanelContextStore()
 
 const scopeOptions: { value: GitDiffScope; label: string }[] = [
   { value: 'unstaged', label: '未暂存' },
@@ -30,7 +32,9 @@ function onFileSelect(path: string): void {
 }
 
 onMounted(() => {
-  void gitStore.loadChangedFiles(layoutStore.reviewScope)
+  void gitStore.refreshStatus().then(() => {
+    void gitStore.loadChangedFiles(layoutStore.reviewScope)
+  })
 })
 
 watch(
@@ -48,61 +52,100 @@ watch(
     }
   }
 )
+
+watch(
+  () => panelContext.effectivePanelCwd,
+  () => {
+    gitStore.selectedFile = null
+    void gitStore.refreshStatus().then(() => {
+      void gitStore.loadChangedFiles(layoutStore.reviewScope)
+    })
+  }
+)
 </script>
 
 <template>
   <div class="diff-viewer">
-    <div class="dv-toolbar">
-      <div class="scope-tabs">
-        <button
-          v-for="opt in scopeOptions"
-          :key="opt.value"
-          class="scope-btn"
-          :class="{ active: layoutStore.reviewScope === opt.value }"
-          @click="onScopeChange(opt.value)"
-        >
-          {{ opt.label }}
-        </button>
-      </div>
+    <div v-if="!panelContext.effectivePanelCwd" class="empty-msg full">请先选择项目</div>
 
-      <span v-if="gitStore.changedFiles.length > 1" class="hint-text">每次显示一个文件</span>
-    </div>
+    <template v-else-if="gitStore.status && !gitStore.status.isRepo">
+      <div class="empty-msg full">不是 Git 仓库，无法查看变更</div>
+    </template>
 
-    <div class="dv-body">
-      <div class="file-list">
-        <div v-if="gitStore.changedFiles.length === 0 && !gitStore.loading" class="empty-msg">
-          暂无变更
+    <template v-else>
+      <div class="dv-toolbar">
+        <div class="scope-tabs">
+          <button
+            v-for="opt in scopeOptions"
+            :key="opt.value"
+            class="scope-btn"
+            :class="{ active: layoutStore.reviewScope === opt.value }"
+            @click="onScopeChange(opt.value)"
+          >
+            {{ opt.label }}
+          </button>
         </div>
-        <button
-          v-for="f in gitStore.changedFiles"
-          :key="f.path"
-          class="file-item"
-          :class="{ active: gitStore.selectedFile === f.path }"
-          @click="onFileSelect(f.path)"
-        >
-          <span class="file-name">{{ f.path.split('/').pop() }}</span>
-          <span class="file-stat">
-            <span class="add">+{{ f.additions }}</span>
-            <span class="del">-{{ f.deletions }}</span>
-          </span>
-        </button>
+
+        <div class="toolbar-right">
+          <div class="view-mode-tabs">
+            <button
+              class="scope-btn"
+              :class="{ active: layoutStore.diffViewMode === 'side-by-side' }"
+              title="并排"
+              @click="layoutStore.setDiffViewMode('side-by-side')"
+            >
+              并排
+            </button>
+            <button
+              class="scope-btn"
+              :class="{ active: layoutStore.diffViewMode === 'inline' }"
+              title="内联"
+              @click="layoutStore.setDiffViewMode('inline')"
+            >
+              内联
+            </button>
+          </div>
+          <span v-if="gitStore.changedFiles.length > 1" class="hint-text">每次显示一个文件</span>
+        </div>
       </div>
 
-      <div class="diff-area">
-        <div v-if="gitStore.diffLoading" class="empty-msg">加载中…</div>
-        <div v-else-if="!gitStore.selectedFile" class="empty-msg">选择文件查看差异</div>
-        <Suspense v-else>
-          <MonacoDiff
-            :original="gitStore.diffOriginal"
-            :modified="gitStore.diffModified"
-            :language="gitStore.selectedFile?.split('.').pop() ?? ''"
-          />
-          <template #fallback>
-            <div class="empty-msg">加载编辑器…</div>
-          </template>
-        </Suspense>
+      <div class="dv-body">
+        <div class="file-list">
+          <div v-if="gitStore.changedFiles.length === 0 && !gitStore.loading" class="empty-msg">
+            暂无变更
+          </div>
+          <button
+            v-for="f in gitStore.changedFiles"
+            :key="f.path"
+            class="file-item"
+            :class="{ active: gitStore.selectedFile === f.path }"
+            @click="onFileSelect(f.path)"
+          >
+            <span class="file-name">{{ f.path.split('/').pop() }}</span>
+            <span class="file-stat">
+              <span class="add">+{{ f.additions }}</span>
+              <span class="del">-{{ f.deletions }}</span>
+            </span>
+          </button>
+        </div>
+
+        <div class="diff-area">
+          <div v-if="gitStore.diffLoading" class="empty-msg">加载中…</div>
+          <div v-else-if="!gitStore.selectedFile" class="empty-msg">选择文件查看差异</div>
+          <Suspense v-else>
+            <MonacoDiff
+              :original="gitStore.diffOriginal"
+              :modified="gitStore.diffModified"
+              :language="gitStore.selectedFile?.split('.').pop() ?? ''"
+              :side-by-side="layoutStore.diffViewMode === 'side-by-side'"
+            />
+            <template #fallback>
+              <div class="empty-msg">加载编辑器…</div>
+            </template>
+          </Suspense>
+        </div>
       </div>
-    </div>
+    </template>
   </div>
 </template>
 
@@ -121,6 +164,20 @@ watch(
   height: 36px;
   padding: 0 8px;
   border-bottom: 1px solid var(--sidebar-border);
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.view-mode-tabs {
+  display: flex;
+  gap: 2px;
   flex-shrink: 0;
 }
 
@@ -148,6 +205,9 @@ watch(
 .hint-text {
   font-size: var(--font-size-xs);
   color: var(--content-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dv-body {
@@ -218,5 +278,9 @@ watch(
   justify-content: center;
   color: var(--content-text-tertiary);
   font-size: var(--font-size-sm);
+}
+
+.empty-msg.full {
+  height: 100%;
 }
 </style>
