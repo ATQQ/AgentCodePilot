@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import type { TerminalInfo } from '@renderer/types'
 import { useWorkspaceStore } from './workspace.store'
 import { useChatStore } from './chat.store'
+import { disposeTerminalSession } from '@renderer/utils/terminal-session-manager'
 
 export interface TerminalTab {
   id: string
@@ -70,11 +71,25 @@ function newTabId(): string {
   return `tab-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
 }
 
+function reconcileTabs(
+  tabs: TerminalTab[],
+  validIds: Set<string>,
+  activeTabId: string
+): { tabs: TerminalTab[]; activeTabId: string } {
+  const next = tabs
+    .map((tab) => ({ ...tab, panes: tab.panes.filter((id) => validIds.has(id)) }))
+    .filter((tab) => tab.panes.length > 0)
+  const active =
+    next.find((t) => t.id === activeTabId)?.id ?? next[0]?.id ?? ''
+  return { tabs: next, activeTabId: active }
+}
+
 export const useTerminalStore = defineStore('terminal', () => {
   const terminalTabsByScope = ref<Record<string, TerminalTab[]>>({})
   const activeTabIdByScope = ref<Record<string, string>>({})
   const terminalMetaByScope = ref<Record<string, Record<string, TerminalInfo>>>({})
   const initializingScopes = ref<Set<string>>(new Set())
+  const readyScopes = ref<Set<string>>(new Set())
   const splitPaneWidth = ref(0.5)
   const ensureInflight = new Map<string, Promise<void>>()
   let listenersBound = false
@@ -132,27 +147,30 @@ export const useTerminalStore = defineStore('terminal', () => {
 
   const currentScope = computed(() => resolveScope())
 
+  const currentScopeKey = computed(() => currentScope.value.scopeKey)
+
   const currentTabs = computed(() => {
-    const key = currentScope.value.scopeKey
-    if (!key) return []
+    const key = currentScopeKey.value
+    if (!key || !readyScopes.value.has(key)) return []
     return terminalTabsByScope.value[key] ?? []
   })
 
   const activeTab = computed(() => {
-    const key = currentScope.value.scopeKey
-    if (!key) return null
+    const key = currentScopeKey.value
+    if (!key || !readyScopes.value.has(key)) return null
     const tabs = terminalTabsByScope.value[key] ?? []
     const activeId = activeTabIdByScope.value[key]
     return tabs.find((t) => t.id === activeId) ?? tabs[0] ?? null
   })
 
   const isInitializing = computed(() => {
-    const key = currentScope.value.scopeKey
-    return key ? initializingScopes.value.has(key) : false
+    const key = currentScopeKey.value
+    if (!key) return false
+    return initializingScopes.value.has(key) || !readyScopes.value.has(key)
   })
 
   const terminalMeta = computed(() => {
-    const key = currentScope.value.scopeKey
+    const key = currentScopeKey.value
     if (!key) return {}
     return terminalMetaByScope.value[key] ?? {}
   })
@@ -164,22 +182,16 @@ export const useTerminalStore = defineStore('terminal', () => {
       /* handled in TerminalView */
     })
     window.agentAPI.terminal.onExit(({ terminalId }) => {
+      disposeTerminalSession(terminalId)
       for (const [scopeKey, meta] of Object.entries(terminalMetaByScope.value)) {
         if (!meta[terminalId]) continue
         delete meta[terminalId]
         const tabs = terminalTabsByScope.value[scopeKey] ?? []
-        const nextTabs: TerminalTab[] = []
-        for (const tab of tabs) {
-          const panes = tab.panes.filter((id) => id !== terminalId)
-          if (panes.length > 0) {
-            nextTabs.push({ ...tab, panes })
-          }
-        }
+        const activeId = activeTabIdByScope.value[scopeKey] ?? ''
+        const validIds = new Set(Object.keys(meta))
+        const { tabs: nextTabs, activeTabId: nextActive } = reconcileTabs(tabs, validIds, activeId)
         terminalTabsByScope.value[scopeKey] = nextTabs
-        const activeId = activeTabIdByScope.value[scopeKey]
-        if (!nextTabs.find((t) => t.id === activeId)) {
-          activeTabIdByScope.value[scopeKey] = nextTabs[0]?.id ?? ''
-        }
+        activeTabIdByScope.value[scopeKey] = nextActive
         persistScope(scopeKey)
       }
     })
@@ -198,10 +210,13 @@ export const useTerminalStore = defineStore('terminal', () => {
     activeTabId: string,
     meta: Record<string, TerminalInfo>
   ): void {
-    terminalTabsByScope.value[scopeKey] = tabs
-    activeTabIdByScope.value[scopeKey] = activeTabId
+    const validIds = new Set(Object.keys(meta))
+    const { tabs: nextTabs, activeTabId: nextActive } = reconcileTabs(tabs, validIds, activeTabId)
+    terminalTabsByScope.value[scopeKey] = nextTabs
+    activeTabIdByScope.value[scopeKey] = nextActive
     terminalMetaByScope.value[scopeKey] = meta
     persistScope(scopeKey)
+    readyScopes.value = new Set([...readyScopes.value, scopeKey])
   }
 
   async function spawnTerminal(scopeKey: string, cwd: string): Promise<TerminalInfo> {
@@ -213,91 +228,130 @@ export const useTerminalStore = defineStore('terminal', () => {
     return created
   }
 
-  async function restoreFromLayout(scopeKey: string, defaultCwd: string): Promise<void> {
-    const layout = loadLayout(scopeKey)
-    if (!layout || layout.tabs.length === 0) {
-      const created = await spawnTerminal(scopeKey, defaultCwd)
-      const tab: TerminalTab = { id: newTabId(), title: created.title, panes: [created.id] }
-      setScopeState(scopeKey, [tab], tab.id, { [created.id]: created })
-      return
-    }
-
+  function buildTabsFromLayout(
+    layout: PersistedTerminalLayout,
+    remote: TerminalInfo[],
+    defaultCwd: string
+  ): { tabs: TerminalTab[]; meta: Record<string, TerminalInfo>; activeTabId: string } {
     const meta: Record<string, TerminalInfo> = {}
+    for (const t of remote) meta[t.id] = t
+
+    const unused = [...remote]
     const tabs: TerminalTab[] = []
+
     for (const savedTab of layout.tabs) {
       const paneIds: string[] = []
       for (const pane of savedTab.panes) {
-        const cwd = pane.cwd || defaultCwd
-        const created = await spawnTerminal(scopeKey, cwd)
-        paneIds.push(created.id)
-        meta[created.id] = created
+        let matchIdx = unused.findIndex((t) => t.id === pane.terminalId)
+        if (matchIdx < 0) matchIdx = unused.length > 0 ? 0 : -1
+        if (matchIdx >= 0) {
+          const [match] = unused.splice(matchIdx, 1)
+          paneIds.push(match.id)
+        }
       }
       if (paneIds.length > 0) {
         tabs.push({ id: savedTab.id, title: savedTab.title, panes: paneIds })
       }
     }
 
+    for (const leftover of unused) {
+      tabs.push({ id: newTabId(), title: leftover.title, panes: [leftover.id] })
+    }
+
     if (tabs.length === 0) {
+      return { tabs: [], meta, activeTabId: '' }
+    }
+
+    const activeTabId = tabs.find((t) => t.id === layout.activeTabId)?.id ?? tabs[0].id
+    return { tabs, meta, activeTabId }
+  }
+
+  async function ensureTabPanes(tabId: string): Promise<void> {
+    const { scopeKey, defaultCwd } = resolveScope()
+    if (!scopeKey || !defaultCwd) return
+
+    const tabs = terminalTabsByScope.value[scopeKey] ?? []
+    const tab = tabs.find((t) => t.id === tabId)
+    if (!tab || tab.panes.length > 0) return
+
+    const layout = loadLayout(scopeKey)
+    const savedTab = layout?.tabs.find((t) => t.id === tabId)
+    const savedPane = savedTab?.panes[0]
+    const cwd = savedPane?.cwd || defaultCwd
+
+    const created = await spawnTerminal(scopeKey, cwd)
+    const nextTabs = tabs.map((t) =>
+      t.id === tabId ? { ...t, panes: [created.id] } : t
+    )
+    const meta = { ...(terminalMetaByScope.value[scopeKey] ?? {}), [created.id]: created }
+    setScopeState(scopeKey, nextTabs, tabId, meta)
+  }
+
+  async function restoreFromLayout(scopeKey: string, defaultCwd: string): Promise<void> {
+    const layout = loadLayout(scopeKey)
+    if (!layout || layout.tabs.length === 0) {
       const created = await spawnTerminal(scopeKey, defaultCwd)
+      if (resolveScope().scopeKey !== scopeKey) return
       const tab: TerminalTab = { id: newTabId(), title: created.title, panes: [created.id] }
       setScopeState(scopeKey, [tab], tab.id, { [created.id]: created })
       return
     }
 
-    const activeId = tabs.find((t) => t.id === layout.activeTabId)?.id ?? tabs[0].id
+    const activeSaved =
+      layout.tabs.find((t) => t.id === layout.activeTabId) ?? layout.tabs[0]
+    const meta: Record<string, TerminalInfo> = {}
+    const tabs: TerminalTab[] = []
+
+    for (const savedTab of layout.tabs) {
+      if (savedTab.id === activeSaved.id) {
+        const paneIds: string[] = []
+        for (const pane of savedTab.panes) {
+          const cwd = pane.cwd || defaultCwd
+          const created = await spawnTerminal(scopeKey, cwd)
+          if (resolveScope().scopeKey !== scopeKey) return
+          paneIds.push(created.id)
+          meta[created.id] = created
+        }
+        if (paneIds.length > 0) {
+          tabs.push({ id: savedTab.id, title: savedTab.title, panes: paneIds })
+        }
+      } else {
+        tabs.push({ id: savedTab.id, title: savedTab.title, panes: [] })
+      }
+    }
+
+    if (tabs.length === 0) {
+      const created = await spawnTerminal(scopeKey, defaultCwd)
+      if (resolveScope().scopeKey !== scopeKey) return
+      const tab: TerminalTab = { id: newTabId(), title: created.title, panes: [created.id] }
+      setScopeState(scopeKey, [tab], tab.id, { [created.id]: created })
+      return
+    }
+
+    const activeId = tabs.find((t) => t.id === activeSaved.id)?.id ?? tabs[0].id
     setScopeState(scopeKey, tabs, activeId, meta)
   }
 
   async function syncFromRemote(scopeKey: string, remote: TerminalInfo[]): Promise<void> {
     const meta: Record<string, TerminalInfo> = {}
-    for (const t of remote) {
-      meta[t.id] = t
-    }
+    for (const t of remote) meta[t.id] = t
+    const validIds = new Set(remote.map((t) => t.id))
 
     const existingTabs = terminalTabsByScope.value[scopeKey]
     if (existingTabs && existingTabs.length > 0) {
-      const validIds = new Set(remote.map((t) => t.id))
-      const tabs = existingTabs
-        .map((tab) => ({ ...tab, panes: tab.panes.filter((id) => validIds.has(id)) }))
-        .filter((tab) => tab.panes.length > 0)
+      const activeId = activeTabIdByScope.value[scopeKey] ?? ''
+      const { tabs, activeTabId } = reconcileTabs(existingTabs, validIds, activeId)
       if (tabs.length > 0) {
-        const activeId = activeTabIdByScope.value[scopeKey]
-        setScopeState(
-          scopeKey,
-          tabs,
-          tabs.find((t) => t.id === activeId)?.id ?? tabs[0].id,
-          meta
-        )
+        setScopeState(scopeKey, tabs, activeTabId, meta)
         return
       }
     }
 
     const layout = loadLayout(scopeKey)
     if (layout) {
-      const tabs: TerminalTab[] = []
-      const remoteByCwd = [...remote]
-      for (const savedTab of layout.tabs) {
-        const paneIds: string[] = []
-        for (const pane of savedTab.panes) {
-          const match =
-            remote.find((t) => t.id === pane.terminalId) ??
-            remoteByCwd.find((t) => t.cwd === pane.cwd)
-          if (match) {
-            paneIds.push(match.id)
-            const idx = remoteByCwd.indexOf(match)
-            if (idx >= 0) remoteByCwd.splice(idx, 1)
-          }
-        }
-        if (paneIds.length > 0) {
-          tabs.push({ id: savedTab.id, title: savedTab.title, panes: paneIds })
-        }
-      }
-      for (const leftover of remoteByCwd) {
-        tabs.push({ id: newTabId(), title: leftover.title, panes: [leftover.id] })
-      }
-      if (tabs.length > 0) {
-        const activeId = tabs.find((t) => t.id === layout.activeTabId)?.id ?? tabs[0].id
-        setScopeState(scopeKey, tabs, activeId, meta)
+      const built = buildTabsFromLayout(layout, remote, resolveScope().defaultCwd ?? '')
+      if (built.tabs.length > 0) {
+        setScopeState(scopeKey, built.tabs, built.activeTabId, built.meta)
         return
       }
     }
@@ -311,23 +365,38 @@ export const useTerminalStore = defineStore('terminal', () => {
   }
 
   async function doEnsureTerminals(scopeKey: string, defaultCwd: string): Promise<void> {
-    const existing = terminalTabsByScope.value[scopeKey]
-    if (existing && existing.length > 0) return
+    if (readyScopes.value.has(scopeKey) && (terminalTabsByScope.value[scopeKey]?.length ?? 0) > 0) {
+      return
+    }
 
     initializingScopes.value = new Set([...initializingScopes.value, scopeKey])
     try {
       const remote = await window.agentAPI.terminal.list(scopeKey)
-      if (terminalTabsByScope.value[scopeKey]?.length) return
+
+      if (readyScopes.value.has(scopeKey) && (terminalTabsByScope.value[scopeKey]?.length ?? 0) > 0) {
+        return
+      }
 
       if (remote.length === 0) {
         await restoreFromLayout(scopeKey, defaultCwd)
       } else {
         await syncFromRemote(scopeKey, remote)
       }
+
+      if ((terminalTabsByScope.value[scopeKey]?.length ?? 0) === 0) {
+        const created = await spawnTerminal(scopeKey, defaultCwd)
+        if (resolveScope().scopeKey !== scopeKey) return
+        const tab: TerminalTab = { id: newTabId(), title: created.title, panes: [created.id] }
+        setScopeState(scopeKey, [tab], tab.id, { [created.id]: created })
+      }
     } finally {
-      const next = new Set(initializingScopes.value)
-      next.delete(scopeKey)
-      initializingScopes.value = next
+      const nextInit = new Set(initializingScopes.value)
+      nextInit.delete(scopeKey)
+      initializingScopes.value = nextInit
+
+      if ((terminalTabsByScope.value[scopeKey]?.length ?? 0) > 0) {
+        readyScopes.value = new Set([...readyScopes.value, scopeKey])
+      }
     }
   }
 
@@ -337,7 +406,9 @@ export const useTerminalStore = defineStore('terminal', () => {
 
     bindListeners()
 
-    if (terminalTabsByScope.value[scopeKey]?.length) return
+    if (readyScopes.value.has(scopeKey) && (terminalTabsByScope.value[scopeKey]?.length ?? 0) > 0) {
+      return
+    }
 
     const inflight = ensureInflight.get(scopeKey)
     if (inflight) {
@@ -396,6 +467,7 @@ export const useTerminalStore = defineStore('terminal', () => {
 
     for (const terminalId of tab.panes) {
       await window.agentAPI.terminal.kill(terminalId)
+      disposeTerminalSession(terminalId)
       delete terminalMetaByScope.value[scopeKey]?.[terminalId]
     }
 
@@ -409,6 +481,7 @@ export const useTerminalStore = defineStore('terminal', () => {
     const { scopeKey } = resolveScope()
     if (!scopeKey) return
     await window.agentAPI.terminal.kill(terminalId)
+    disposeTerminalSession(terminalId)
     delete terminalMetaByScope.value[scopeKey]?.[terminalId]
 
     const tabs = (terminalTabsByScope.value[scopeKey] ?? [])
@@ -424,9 +497,10 @@ export const useTerminalStore = defineStore('terminal', () => {
     setScopeState(scopeKey, tabs, nextActive, terminalMetaByScope.value[scopeKey] ?? {})
   }
 
-  function setActiveTab(tabId: string): void {
+  async function setActiveTab(tabId: string): Promise<void> {
     const { scopeKey } = resolveScope()
     if (!scopeKey) return
+    await ensureTabPanes(tabId)
     activeTabIdByScope.value[scopeKey] = tabId
     persistScope(scopeKey)
   }
@@ -438,13 +512,12 @@ export const useTerminalStore = defineStore('terminal', () => {
 
   return {
     currentScope,
+    currentScopeKey,
     currentTabs,
     activeTab,
     terminalMeta,
     isInitializing,
     splitPaneWidth,
-    terminalTabsByScope,
-    activeTabIdByScope,
     ensureTerminals,
     createTerminal,
     splitActiveTab,

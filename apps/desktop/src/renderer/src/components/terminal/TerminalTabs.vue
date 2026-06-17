@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, nextTick } from 'vue'
 import { useTerminalStore } from '@renderer/stores/terminal.store'
 import { useChatStore } from '@renderer/stores/chat.store'
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
@@ -16,10 +16,31 @@ const splitWidth = ref(400)
 let initTimer: ReturnType<typeof setTimeout> | null = null
 let initGeneration = 0
 
+const terminalViewRefs = ref<Map<string, InstanceType<typeof TerminalView>>>(new Map())
+
+function setTerminalRef(el: unknown, terminalId: string): void {
+  if (el) {
+    terminalViewRefs.value.set(terminalId, el as InstanceType<typeof TerminalView>)
+  } else {
+    terminalViewRefs.value.delete(terminalId)
+  }
+}
+
+function refitActivePanes(): void {
+  const tab = terminalStore.activeTab
+  if (!tab) return
+  for (const paneId of tab.panes) {
+    terminalViewRefs.value.get(paneId)?.refit?.()
+  }
+}
+
 async function init(): Promise<void> {
   const gen = ++initGeneration
+  const scopeKey = terminalStore.currentScopeKey
   await terminalStore.ensureTerminals()
   if (gen !== initGeneration) return
+  if (scopeKey && terminalStore.currentScopeKey !== scopeKey) return
+  nextTick(() => refitActivePanes())
 }
 
 function scheduleInit(): void {
@@ -27,7 +48,7 @@ function scheduleInit(): void {
   initTimer = setTimeout(() => {
     initTimer = null
     void init()
-  }, 50)
+  }, 80)
 }
 
 onMounted(() => {
@@ -43,17 +64,26 @@ watch(
   scheduleInit
 )
 
+watch(
+  () => terminalStore.activeTab?.id,
+  () => {
+    nextTick(() => refitActivePanes())
+  }
+)
+
 async function onNewTab(): Promise<void> {
   if (terminalStore.needsFolderPicker()) {
     showFolderPicker.value = true
     return
   }
   await terminalStore.createTerminal()
+  nextTick(() => refitActivePanes())
 }
 
 async function onFolderSelect(path: string): Promise<void> {
   showFolderPicker.value = false
   await terminalStore.createTerminal(path)
+  nextTick(() => refitActivePanes())
 }
 
 function onFolderCancel(): void {
@@ -63,7 +93,10 @@ function onFolderCancel(): void {
 
 <template>
   <div class="terminal-tabs">
-    <div v-if="!terminalStore.currentScope.scopeKey || !terminalStore.currentScope.defaultCwd" class="empty-state">
+    <div
+      v-if="!terminalStore.currentScope.scopeKey || !terminalStore.currentScope.defaultCwd"
+      class="empty-state"
+    >
       <span>打开对话或选择工作空间以使用终端</span>
     </div>
 
@@ -74,27 +107,39 @@ function onFolderCancel(): void {
           :key="tab.id"
           class="tab-item"
           :class="{ active: terminalStore.activeTab?.id === tab.id }"
-          @click="terminalStore.setActiveTab(tab.id)"
+          @click="void terminalStore.setActiveTab(tab.id)"
         >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" class="tab-icon">
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            class="tab-icon"
+          >
             <rect x="2" y="2" width="12" height="12" rx="1.5" />
             <polyline points="5,6 7.5,8 5,10" />
             <line x1="8" y1="10" x2="11" y2="10" />
           </svg>
           {{ tab.title }}
-          <span
-            class="close-tab"
-            @click.stop="terminalStore.closeTab(tab.id)"
-          >×</span>
+          <span class="close-tab" @click.stop="terminalStore.closeTab(tab.id)">×</span>
         </button>
         <button class="icon-btn" title="新建终端" @click="onNewTab">+</button>
         <button
           v-if="terminalStore.activeTab && terminalStore.activeTab.panes.length === 1"
           class="icon-btn"
           title="左右分屏"
-          @click="terminalStore.splitActiveTab()"
+          @click="terminalStore.splitActiveTab().then(() => nextTick(refitActivePanes))"
         >
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
             <rect x="2" y="2" width="12" height="12" rx="1.5" />
             <line x1="8" y1="2" x2="8" y2="14" />
           </svg>
@@ -102,11 +147,10 @@ function onFolderCancel(): void {
       </div>
 
       <div class="terminal-wrapper">
-        <!-- v-show keeps all tab terminals mounted (preserves xterm buffer on tab switch) -->
         <div
           v-for="tab in terminalStore.currentTabs"
+          v-show="terminalStore.activeTab?.id === tab.id && tab.panes.length > 0"
           :key="tab.id"
-          v-show="terminalStore.activeTab?.id === tab.id"
           class="tab-content"
         >
           <div class="split-container">
@@ -115,7 +159,13 @@ function onFolderCancel(): void {
               :class="{ 'is-full': tab.panes.length === 1 }"
               :style="tab.panes.length === 2 ? { width: `${splitWidth}px` } : undefined"
             >
-              <TerminalView v-if="tab.panes[0]" :terminal-id="tab.panes[0]" />
+              <TerminalView
+                v-if="tab.panes[0]"
+                :key="tab.panes[0]"
+                :ref="(el) => setTerminalRef(el, tab.panes[0])"
+                :terminal-id="tab.panes[0]"
+                :active="terminalStore.activeTab?.id === tab.id"
+              />
             </div>
             <ResizableSplit
               v-if="tab.panes.length === 2"
@@ -126,13 +176,21 @@ function onFolderCancel(): void {
               @update:size="splitWidth = $event"
             />
             <div v-if="tab.panes[1]" class="split-pane-right">
-              <TerminalView :terminal-id="tab.panes[1]" />
+              <TerminalView
+                :key="tab.panes[1]"
+                :ref="(el) => setTerminalRef(el, tab.panes[1])"
+                :terminal-id="tab.panes[1]"
+                :active="terminalStore.activeTab?.id === tab.id"
+              />
             </div>
           </div>
         </div>
 
         <div
-          v-if="terminalStore.isInitializing || (!terminalStore.activeTab && terminalStore.currentTabs.length === 0)"
+          v-if="
+            terminalStore.isInitializing ||
+            (!terminalStore.activeTab && terminalStore.currentTabs.length === 0)
+          "
           class="empty-state overlay"
         >
           正在启动终端…
@@ -280,6 +338,6 @@ function onFolderCancel(): void {
   position: absolute;
   inset: 0;
   background: var(--content-bg);
-  z-index: 1;
+  z-index: 2;
 }
 </style>
