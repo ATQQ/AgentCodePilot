@@ -10,7 +10,10 @@ export type {
   TerminalExitEvent,
   PlanReference,
   PlanInfo,
-  PlanOwnerType
+  PlanOwnerType,
+  FilePreviewSettings,
+  AiPromptsSettings,
+  AgentUtilityPayload
 } from '../../../preload/types'
 
 export interface AgentConfig {

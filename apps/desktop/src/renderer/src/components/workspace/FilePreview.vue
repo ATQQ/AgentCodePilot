@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, ref } from 'vue'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useFileExplorerStore } from '@renderer/stores/fileExplorer.store'
 import { useComposerStore } from '@renderer/stores/composer.store'
+import { useSettingsStore } from '@renderer/stores/settings.store'
 import { toLocalFileUrl } from '@renderer/utils/localFile'
+import { resolveFileKind, getFileExtension } from '@renderer/utils/fileKind'
 
 const MonacoEditorComp = defineAsyncComponent(() => import('./MonacoEditor.vue'))
 
@@ -12,19 +14,21 @@ const props = defineProps<{
 
 const fileStore = useFileExplorerStore()
 const composerStore = useComposerStore()
+const settingsStore = useSettingsStore()
 
 const imageSrc = ref('')
 const imageLoadFailed = ref(false)
+const showAddExtensionPrompt = ref(false)
 
 const fileName = computed(() => props.filePath.split('/').pop() ?? props.filePath)
 
-const fileKind = computed(() => {
-  const ext = props.filePath.split('.').pop()?.toLowerCase() ?? ''
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext)) return 'image'
-  return 'text'
-})
+const fileKind = computed(() =>
+  resolveFileKind(props.filePath, settingsStore.filePreview, fileStore.forceTextRead)
+)
 
-const isEditable = computed(() => fileKind.value === 'text')
+const isEditable = computed(() => fileKind.value === 'text' && !fileStore.fileReadError)
+
+const fileExtension = computed(() => getFileExtension(props.filePath))
 
 function initImageSrc(): void {
   imageLoadFailed.value = false
@@ -32,6 +36,14 @@ function initImageSrc(): void {
 }
 
 initImageSrc()
+
+watch(
+  () => props.filePath,
+  () => {
+    initImageSrc()
+    showAddExtensionPrompt.value = false
+  }
+)
 
 async function onImageError(): Promise<void> {
   if (imageLoadFailed.value) return
@@ -56,6 +68,20 @@ async function saveFile(): Promise<void> {
 function addToChat(): void {
   composerStore.addFileReference(props.filePath)
 }
+
+async function readAsText(): Promise<void> {
+  await fileStore.readFileAsText(props.filePath)
+  if (!fileStore.fileReadError) {
+    showAddExtensionPrompt.value = true
+  }
+}
+
+async function confirmAddExtension(): Promise<void> {
+  if (fileExtension.value) {
+    await settingsStore.addTextExtension(fileExtension.value)
+  }
+  showAddExtensionPrompt.value = false
+}
 </script>
 
 <template>
@@ -78,6 +104,11 @@ function addToChat(): void {
     <div class="fp-content">
       <div v-if="fileStore.fileLoading" class="center-msg">加载中…</div>
 
+      <div v-else-if="fileStore.fileReadError" class="center-msg column">
+        <span>{{ fileStore.fileReadError }}</span>
+        <button class="action-btn" @click="readAsText">按文本格式读取</button>
+      </div>
+
       <img
         v-else-if="fileKind === 'image'"
         :src="imageSrc"
@@ -97,8 +128,17 @@ function addToChat(): void {
         </template>
       </Suspense>
 
-      <div v-else class="center-msg">
+      <div v-else class="center-msg column">
         <span>无法预览此文件类型</span>
+        <button class="action-btn" @click="readAsText">按文本格式读取</button>
+      </div>
+    </div>
+
+    <div v-if="showAddExtensionPrompt && fileExtension" class="extension-prompt">
+      <span>预览正常？可将 <code>.{{ fileExtension }}</code> 加入文本预览列表</span>
+      <div class="prompt-actions">
+        <button class="action-btn" @click="showAddExtensionPrompt = false">取消</button>
+        <button class="action-btn primary" @click="confirmAddExtension">确认添加</button>
       </div>
     </div>
   </div>
@@ -178,5 +218,28 @@ function addToChat(): void {
   justify-content: center;
   color: var(--content-text-tertiary);
   font-size: var(--font-size-sm);
+}
+
+.center-msg.column {
+  flex-direction: column;
+  gap: 12px;
+}
+
+.extension-prompt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  border-top: 1px solid var(--sidebar-border);
+  font-size: var(--font-size-xs);
+  color: var(--content-text-secondary);
+  flex-shrink: 0;
+}
+
+.prompt-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
 }
 </style>

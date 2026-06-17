@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import type { FileEntry } from '@renderer/types'
 import { usePanelContextStore } from './panelContext.store'
+import { useSettingsStore } from './settings.store'
+import { resolveFileKind } from '@renderer/utils/fileKind'
 
 export const useFileExplorerStore = defineStore('fileExplorer', () => {
   const expandedDirs = ref<Set<string>>(new Set())
@@ -12,6 +14,8 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
   const fileLoading = ref(false)
   const editMode = ref(false)
   const dirtyContent = ref('')
+  const fileReadError = ref<string | null>(null)
+  const forceTextRead = ref(false)
 
   const panelContext = usePanelContextStore()
 
@@ -67,23 +71,49 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     return expandedDirs.value.has(dirPath)
   }
 
-  async function openFile(path: string): Promise<void> {
+  async function openFile(path: string, options?: { asText?: boolean }): Promise<void> {
     const roots = workspaceRoots.value
     if (roots.length === 0) return
 
+    const settingsStore = useSettingsStore()
+    const asText = options?.asText ?? false
+    const kind = resolveFileKind(path, settingsStore.filePreview, asText)
+
     openFilePath.value = path
-    fileLoading.value = true
+    fileReadError.value = null
+    forceTextRead.value = asText
     editMode.value = false
+
+    if (kind === 'unsupported') {
+      fileContent.value = ''
+      dirtyContent.value = ''
+      fileLoading.value = false
+      return
+    }
+
+    if (kind === 'image') {
+      fileContent.value = ''
+      dirtyContent.value = ''
+      fileLoading.value = false
+      return
+    }
+
+    fileLoading.value = true
     try {
       const content = await window.agentAPI.file.read(path, roots)
       fileContent.value = content
       dirtyContent.value = content
-    } catch {
+    } catch (err) {
       fileContent.value = ''
       dirtyContent.value = ''
+      fileReadError.value = err instanceof Error ? err.message : '无法读取文件'
     } finally {
       fileLoading.value = false
     }
+  }
+
+  async function readFileAsText(path: string): Promise<void> {
+    await openFile(path, { asText: true })
   }
 
   async function saveFile(): Promise<boolean> {
@@ -104,6 +134,8 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
       openFilePath.value = null
       fileContent.value = ''
       dirtyContent.value = ''
+      fileReadError.value = null
+      forceTextRead.value = false
     }
     const parent = path.replace(/[/\\][^/\\]+$/, '')
     delete childrenCache.value[parent]
@@ -133,6 +165,8 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     fileContent.value = ''
     dirtyContent.value = ''
     editMode.value = false
+    fileReadError.value = null
+    forceTextRead.value = false
   }
 
   watch(
@@ -150,6 +184,8 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     dirtyContent,
     fileLoading,
     editMode,
+    fileReadError,
+    forceTextRead,
     filteredTree,
     treeRoot,
     childrenCache,
@@ -159,6 +195,7 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     toggleDir,
     isExpanded,
     openFile,
+    readFileAsText,
     saveFile,
     deleteFile,
     copyFile,

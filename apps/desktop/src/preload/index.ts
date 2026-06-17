@@ -122,7 +122,21 @@ const agentAPI = {
     changedFiles: (cwd: string, scope: GitDiffScope) =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_CHANGED_FILES, cwd, scope),
     diff: (cwd: string, file: string, staged?: boolean) =>
-      ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF, cwd, file, staged)
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF, cwd, file, staged),
+    stage: (cwd: string, paths: string[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_STAGE, cwd, paths),
+    unstage: (cwd: string, paths: string[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_UNSTAGE, cwd, paths),
+    commit: (cwd: string, message: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT, cwd, message),
+    push: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT_PUSH, cwd),
+    stagedDiff: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STAGED_DIFF, cwd),
+    recentLog: (cwd: string, limit?: number) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_RECENT_LOG, cwd, limit)
+  },
+  agent: {
+    runUtility: (payload: import('./types').AgentUtilityPayload) =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENT_RUN_UTILITY, payload)
   },
   terminal: {
     create: (scopeKey: string, cwd: string, title?: string) =>

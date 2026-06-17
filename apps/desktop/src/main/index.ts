@@ -45,7 +45,22 @@ import { savePlanFromAssistantMessage } from './file/plan-service'
 import { readPlanFile } from './file/plans'
 import type { PlanDetail, PlanInfo, PlansListPayload } from '../preload/types'
 import { registerLocalFileProtocol, registerLocalFileScheme } from './file/local-file-protocol'
-import { getGitStatus, getChangedFiles, getGitDiff } from './git/git-service'
+import {
+  getGitStatus,
+  getChangedFiles,
+  getGitDiff,
+  stageFiles,
+  unstageFiles,
+  commitChanges,
+  pushChanges,
+  getStagedDiff,
+  getRecentLog
+} from './git/git-service'
+import { runUtilityAgent } from './runtime/utility-agent'
+import {
+  parseFilePreviewSetting,
+  parseAiPromptsSetting
+} from './settings/defaults'
 import type { GitDiffScope } from '../preload/types'
 import {
   listDirectory,
@@ -185,7 +200,9 @@ function getSettingsFromDb(): SettingsInfo {
     theme: (all['theme'] as SettingsInfo['theme']) || 'light',
     approvalLevel: (all['approvalLevel'] as SettingsInfo['approvalLevel']) || 'auto',
     language: all['language'] || 'zh-CN',
-    permissionNotificationsEnabled: all['permissionNotificationsEnabled'] !== 'false'
+    permissionNotificationsEnabled: all['permissionNotificationsEnabled'] !== 'false',
+    filePreview: parseFilePreviewSetting(all['filePreview']),
+    aiPrompts: parseAiPromptsSetting(all['aiPrompts'])
   }
 }
 
@@ -561,6 +578,12 @@ function registerIpcHandlers(): void {
     if (payload.permissionNotificationsEnabled !== undefined) {
       repo.setSetting('permissionNotificationsEnabled', payload.permissionNotificationsEnabled ? 'true' : 'false')
     }
+    if (payload.filePreview) {
+      repo.setSetting('filePreview', JSON.stringify(payload.filePreview))
+    }
+    if (payload.aiPrompts) {
+      repo.setSetting('aiPrompts', JSON.stringify(payload.aiPrompts))
+    }
   })
 
   // --- Gateway ---
@@ -644,6 +667,28 @@ function registerIpcHandlers(): void {
     (_e, cwd: string, file: string, staged?: boolean) =>
       getGitDiff(cwd, { file, staged: staged ?? false })
   )
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STAGE, (_e, cwd: string, paths: string[]) =>
+    stageFiles(cwd, paths)
+  )
+
+  ipcMain.handle(IPC_CHANNELS.GIT_UNSTAGE, (_e, cwd: string, paths: string[]) =>
+    unstageFiles(cwd, paths)
+  )
+
+  ipcMain.handle(IPC_CHANNELS.GIT_COMMIT, (_e, cwd: string, message: string) =>
+    commitChanges(cwd, message)
+  )
+
+  ipcMain.handle(IPC_CHANNELS.GIT_PUSH, (_e, cwd: string) => pushChanges(cwd))
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STAGED_DIFF, (_e, cwd: string) => getStagedDiff(cwd))
+
+  ipcMain.handle(IPC_CHANNELS.GIT_RECENT_LOG, (_e, cwd: string, limit?: number) =>
+    getRecentLog(cwd, limit ?? 10)
+  )
+
+  ipcMain.handle(IPC_CHANNELS.AGENT_RUN_UTILITY, (_e, payload) => runUtilityAgent(payload))
 
   // --- Workspace files ---
 

@@ -38,6 +38,13 @@ export const IPC_CHANNELS = {
   GIT_STATUS: 'git:status',
   GIT_CHANGED_FILES: 'git:changedFiles',
   GIT_DIFF: 'git:diff',
+  GIT_STAGE: 'git:stage',
+  GIT_UNSTAGE: 'git:unstage',
+  GIT_COMMIT: 'git:commit',
+  GIT_PUSH: 'git:push',
+  GIT_STAGED_DIFF: 'git:stagedDiff',
+  GIT_RECENT_LOG: 'git:recentLog',
+  AGENT_RUN_UTILITY: 'agent:runUtility',
   FILE_LIST: 'file:list',
   FILE_READ: 'file:read',
   FILE_WRITE: 'file:write',
@@ -100,6 +107,26 @@ export interface SettingsPayload {
   approvalLevel?: 'request' | 'auto' | 'full'
   language?: string
   permissionNotificationsEnabled?: boolean
+  filePreview?: FilePreviewSettings
+  aiPrompts?: AiPromptsSettings
+}
+
+export interface FilePreviewSettings {
+  textExtensions: string[]
+  imageExtensions: string[]
+}
+
+export interface AiPromptsSettings {
+  commitMessage?: string
+  autoCommit?: string
+}
+
+export interface AgentUtilityPayload {
+  systemPrompt: string
+  userPrompt: string
+  cwd?: string
+  agentId?: string
+  modelId?: string
 }
 
 export interface ConversationUpdatePayload {
@@ -283,6 +310,8 @@ export interface SettingsInfo {
   approvalLevel: 'request' | 'auto' | 'full'
   language: string
   permissionNotificationsEnabled: boolean
+  filePreview: FilePreviewSettings
+  aiPrompts: AiPromptsSettings
 }
 
 export interface TokenUsage {
@@ -403,6 +432,15 @@ export interface AgentAPI {
     status: (cwd: string) => Promise<GitStatusResult>
     changedFiles: (cwd: string, scope: GitDiffScope) => Promise<GitChangedFile[]>
     diff: (cwd: string, file: string, staged?: boolean) => Promise<GitDiffResult>
+    stage: (cwd: string, paths: string[]) => Promise<void>
+    unstage: (cwd: string, paths: string[]) => Promise<void>
+    commit: (cwd: string, message: string) => Promise<void>
+    push: (cwd: string) => Promise<void>
+    stagedDiff: (cwd: string) => Promise<string>
+    recentLog: (cwd: string, limit?: number) => Promise<string[]>
+  }
+  agent: {
+    runUtility: (payload: AgentUtilityPayload) => Promise<string>
   }
   terminal: {
     create: (scopeKey: string, cwd: string, title?: string) => Promise<TerminalInfo>

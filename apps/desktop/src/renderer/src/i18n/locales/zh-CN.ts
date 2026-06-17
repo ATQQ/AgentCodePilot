@@ -173,6 +173,23 @@ export default {
       addModel: '添加模型',
       reset: '恢复自动检测'
     },
+    aiFeatures: {
+      title: 'AI 功能',
+      desc: '维护独立 AI 功能的提示词，以及文件预览所支持的后缀列表。',
+      commitMessage: 'Commit Message 生成',
+      commitMessageDesc: '审查面板中 AI 生成提交消息时使用的 system prompt',
+      autoCommit: '自动提交',
+      autoCommitDesc: '一键自动提交时使用的提示词（预留）',
+      filePreview: '文件预览',
+      textExtensions: '文本预览后缀',
+      textExtensionsDesc: '逗号或换行分隔，不含点号，例如 ts、vue、md',
+      imageExtensions: '图片预览后缀',
+      imageExtensionsDesc: '逗号或换行分隔，例如 png、jpg、webp',
+      resetPrompts: '恢复默认提示词',
+      resetExtensions: '恢复默认后缀',
+      save: '保存',
+      saving: '保存中…'
+    },
     language: '语言',
     zhCN: '简体中文'
   },

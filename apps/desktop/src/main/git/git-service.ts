@@ -203,3 +203,49 @@ export async function getGitDiff(
 
   return { original, modified, unified }
 }
+
+export async function stageFiles(cwd: string, paths: string[]): Promise<void> {
+  if (!isGitRepo(cwd)) throw new Error('不是 Git 仓库')
+  if (paths.length === 0) return
+  const git = simpleGit(cwd)
+  await git.add(paths)
+}
+
+export async function unstageFiles(cwd: string, paths: string[]): Promise<void> {
+  if (!isGitRepo(cwd)) throw new Error('不是 Git 仓库')
+  if (paths.length === 0) return
+  const git = simpleGit(cwd)
+  await git.reset(['HEAD', '--', ...paths])
+}
+
+export async function commitChanges(cwd: string, message: string): Promise<void> {
+  if (!isGitRepo(cwd)) throw new Error('不是 Git 仓库')
+  const trimmed = message.trim()
+  if (!trimmed) throw new Error('提交消息不能为空')
+  const git = simpleGit(cwd)
+  await git.commit(trimmed)
+}
+
+export async function pushChanges(cwd: string): Promise<void> {
+  if (!isGitRepo(cwd)) throw new Error('不是 Git 仓库')
+  const git = simpleGit(cwd)
+  try {
+    await git.push()
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '推送失败'
+    throw new Error(msg)
+  }
+}
+
+export async function getStagedDiff(cwd: string): Promise<string> {
+  if (!isGitRepo(cwd)) return ''
+  const git = simpleGit(cwd)
+  return git.diff(['--cached'])
+}
+
+export async function getRecentLog(cwd: string, limit = 10): Promise<string[]> {
+  if (!isGitRepo(cwd)) return []
+  const git = simpleGit(cwd)
+  const log = await git.log({ maxCount: limit })
+  return log.all.map((entry) => `${entry.hash.slice(0, 7)} ${entry.message}`)
+}

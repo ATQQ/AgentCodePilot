@@ -422,11 +422,13 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
         <!-- Approval Level -->
         <div class="dropdown-wrapper">
           <button
-            class="toolbar-btn toolbar-btn--icon"
-            :title="t(approvalOptions[approvalLevel].label)"
+            class="toolbar-btn"
+            :class="{ 'toolbar-btn--icon': isCompact }"
+            :title="isCompact ? t(approvalOptions[approvalLevel].label) : undefined"
             @click="showApprovalMenu = !showApprovalMenu"
           >
             <span class="approval-icon">{{ approvalOptions[approvalLevel].icon }}</span>
+            <span v-if="!isCompact" class="approval-label">{{ t(approvalOptions[approvalLevel].label) }}</span>
             <span class="chevron">&#x25BE;</span>
           </button>
           <Transition name="fade">
@@ -931,6 +933,13 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
 
 .approval-icon {
   font-size: 13px;
+}
+
+.approval-label {
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chevron {

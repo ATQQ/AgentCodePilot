@@ -4,9 +4,10 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import type { ThemeMode } from '@renderer/types'
-import { ArrowLeft, Bell, Brush, Document, Cpu } from '@element-plus/icons-vue'
+import { ArrowLeft, Bell, Brush, Document, Cpu, MagicStick } from '@element-plus/icons-vue'
 import ArchivedConversationsSection from '@renderer/components/settings/ArchivedConversationsSection.vue'
 import AgentSettingsSection from '@renderer/components/settings/AgentSettingsSection.vue'
+import AiPromptsSettingsSection from '@renderer/components/settings/AiPromptsSettingsSection.vue'
 // TODO: 恢复未实现设置项时取消注释
 // import {
 //   Setting,
@@ -32,7 +33,7 @@ const activeSection = ref('appearance')
 watch(
   () => route.query.section,
   (section) => {
-    if (typeof section === 'string' && (section === 'appearance' || section === 'notifications' || section === 'archived' || section === 'agents')) {
+    if (typeof section === 'string' && (section === 'appearance' || section === 'notifications' || section === 'archived' || section === 'agents' || section === 'aiFeatures')) {
       activeSection.value = section
     }
   },
@@ -65,7 +66,10 @@ const navGroups: NavGroup[] = [
   },
   {
     titleKey: 'settings.integration',
-    items: [{ key: 'agents', labelKey: 'settings.agentConfig.title', icon: Cpu }]
+    items: [
+      { key: 'agents', labelKey: 'settings.agentConfig.title', icon: Cpu },
+      { key: 'aiFeatures', labelKey: 'settings.aiFeatures.title', icon: MagicStick }
+    ]
   },
   {
     titleKey: 'settings.archived',
@@ -247,6 +251,8 @@ function goBack(): void {
         <div v-else-if="activeSection === 'agents'" class="content-section">
           <AgentSettingsSection />
         </div>
+
+        <AiPromptsSettingsSection v-else-if="activeSection === 'aiFeatures'" />
 
         <ArchivedConversationsSection v-else-if="activeSection === 'archived'" />
 

@@ -3,18 +3,21 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useGitStore } from '@renderer/stores/git.store'
 import { useLayoutStore } from '@renderer/stores/layout.store'
 import { usePanelContextStore } from '@renderer/stores/panelContext.store'
-import { useAgentStore } from '@renderer/stores/agent.store'
-
 const gitStore = useGitStore()
 const layoutStore = useLayoutStore()
 const panelContext = usePanelContextStore()
-const agentStore = useAgentStore()
 
 const popoverRef = ref<HTMLElement | null>(null)
 
 function handleChangesClick(): void {
   if (!gitStore.status?.isRepo) return
   layoutStore.openReviewFromChanges()
+  layoutStore.envInfoVisible = false
+}
+
+function handleCommitClick(): void {
+  if (!gitStore.status?.isRepo) return
+  layoutStore.openReviewForCommit()
   layoutStore.envInfoVisible = false
 }
 
@@ -84,26 +87,23 @@ onUnmounted(() => {
         </div>
 
         <div v-if="gitStore.status.isRepo" class="env-row">
-          <button class="action-btn" disabled title="即将支持">提交或推送</button>
+          <button class="action-btn action-btn--enabled" @click="handleCommitClick">提交或推送</button>
         </div>
 
         <div v-if="!gitStore.status.gitAvailable" class="env-hint muted">Git 不可用</div>
       </template>
 
+      <!-- TODO: 子智能体、来源 — 待实现后恢复
       <div class="env-divider" />
 
       <div class="env-section-title">子智能体</div>
-      <div class="agent-list">
-        <div v-for="agent in agentStore.agents.slice(0, 3)" :key="agent.id" class="agent-item">
-          <span class="agent-dot" :class="agent.id" />
-          <span>{{ agent.name }}</span>
-        </div>
-      </div>
+      <div class="agent-list">...</div>
 
       <div class="env-divider" />
 
       <div class="env-section-title">来源</div>
       <div class="env-empty small">暂无来源</div>
+      -->
     </div>
   </Teleport>
 </template>
@@ -201,6 +201,15 @@ onUnmounted(() => {
   color: var(--content-text-secondary);
   font-size: var(--font-size-sm);
   cursor: not-allowed;
+}
+
+.action-btn--enabled {
+  cursor: pointer;
+  color: var(--content-text);
+}
+
+.action-btn--enabled:hover {
+  background: var(--sidebar-item-hover);
 }
 
 .env-hint {

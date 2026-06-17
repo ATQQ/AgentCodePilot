@@ -121,6 +121,10 @@ export const useLayoutStore = defineStore('layout', () => {
     openExtensionTab('review', { reviewScope: 'unstaged' })
   }
 
+  function openReviewForCommit(): void {
+    openExtensionTab('review', { reviewScope: 'staged' })
+  }
+
   function setHomeRouteActive(active: boolean): void {
     homeRouteActive.value = active
     if (active) {
@@ -156,6 +160,7 @@ export const useLayoutStore = defineStore('layout', () => {
     closeBottomPanel,
     toggleEnvInfo,
     openReviewFromChanges,
+    openReviewForCommit,
     openPlansPanel,
     setDiffViewMode,
     setHomeRouteActive

@@ -1,13 +1,18 @@
 <script setup lang="ts">
-import { onMounted, watch } from 'vue'
+import { onMounted, watch, defineAsyncComponent } from 'vue'
 import { useGitStore } from '@renderer/stores/git.store'
 import { useLayoutStore } from '@renderer/stores/layout.store'
 import { usePanelContextStore } from '@renderer/stores/panelContext.store'
 import type { GitDiffScope } from '@renderer/types'
-import { defineAsyncComponent } from 'vue'
 
 const MonacoDiff = defineAsyncComponent(
   () => import('@renderer/components/workspace/MonacoDiffEditor.vue')
+)
+const GitChangedFileTree = defineAsyncComponent(
+  () => import('@renderer/components/workspace/GitChangedFileTree.vue')
+)
+const GitCommitBar = defineAsyncComponent(
+  () => import('@renderer/components/workspace/GitCommitBar.vue')
 )
 
 const gitStore = useGitStore()
@@ -29,6 +34,14 @@ function onScopeChange(scope: GitDiffScope): void {
 function onFileSelect(path: string): void {
   gitStore.selectFile(path)
   void gitStore.loadDiff(path, layoutStore.reviewScope === 'staged')
+}
+
+function onStage(path: string): void {
+  void gitStore.stageFiles([path])
+}
+
+function onUnstage(path: string): void {
+  void gitStore.unstageFiles([path])
 }
 
 onMounted(() => {
@@ -109,24 +122,18 @@ watch(
         </div>
       </div>
 
+      <GitCommitBar v-if="layoutStore.reviewScope === 'staged'" />
+
       <div class="dv-body">
         <div class="file-list">
-          <div v-if="gitStore.changedFiles.length === 0 && !gitStore.loading" class="empty-msg">
-            暂无变更
-          </div>
-          <button
-            v-for="f in gitStore.changedFiles"
-            :key="f.path"
-            class="file-item"
-            :class="{ active: gitStore.selectedFile === f.path }"
-            @click="onFileSelect(f.path)"
-          >
-            <span class="file-name">{{ f.path.split('/').pop() }}</span>
-            <span class="file-stat">
-              <span class="add">+{{ f.additions }}</span>
-              <span class="del">-{{ f.deletions }}</span>
-            </span>
-          </button>
+          <GitChangedFileTree
+            :files="gitStore.changedFiles"
+            :selected-file="gitStore.selectedFile"
+            :scope="layoutStore.reviewScope"
+            @select="onFileSelect"
+            @stage="onStage"
+            @unstage="onUnstage"
+          />
         </div>
 
         <div class="diff-area">
@@ -217,52 +224,12 @@ watch(
 }
 
 .file-list {
-  width: 200px;
+  width: 220px;
   flex-shrink: 0;
   border-right: 1px solid var(--sidebar-border);
   overflow-y: auto;
   padding: 4px;
 }
-
-.file-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 6px 8px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--content-text);
-  font-size: var(--font-size-xs);
-  cursor: pointer;
-  text-align: left;
-}
-
-.file-item:hover {
-  background: var(--sidebar-item-hover);
-}
-
-.file-item.active {
-  background: var(--sidebar-item-active);
-}
-
-.file-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-}
-
-.file-stat {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
-  font-size: var(--font-size-xs);
-}
-
-.add { color: #16a34a; }
-.del { color: #dc2626; }
 
 .diff-area {
   flex: 1;
