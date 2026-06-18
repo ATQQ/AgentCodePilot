@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, watch, defineAsyncComponent } from 'vue'
+import { computed, watch, defineAsyncComponent } from 'vue'
 import { useGitStore } from '@renderer/stores/git.store'
 import { useLayoutStore } from '@renderer/stores/layout.store'
 import { usePanelContextStore } from '@renderer/stores/panelContext.store'
@@ -24,11 +24,19 @@ const scopeOptions: { value: GitDiffScope; label: string }[] = [
   { value: 'staged', label: '已暂存' }
 ]
 
+const filesLoading = computed(() => gitStore.isFilesLoading(layoutStore.reviewScope))
+const showFilesEmptyLoading = computed(
+  () => filesLoading.value && gitStore.changedFiles.length === 0
+)
+const showFilesRefreshHint = computed(
+  () => filesLoading.value && gitStore.changedFiles.length > 0
+)
+const showDiffEmptyLoading = computed(
+  () => gitStore.diffLoading && !gitStore.diffOriginal && !gitStore.diffModified
+)
+
 function onScopeChange(scope: GitDiffScope): void {
   layoutStore.reviewScope = scope as import('@renderer/stores/layout.store').ReviewScope
-  gitStore.changedFiles = []
-  gitStore.selectedFile = null
-  void gitStore.loadChangedFiles(scope)
 }
 
 function onFileSelect(path: string): void {
@@ -44,17 +52,17 @@ function onUnstage(path: string): void {
   void gitStore.unstageFiles([path])
 }
 
-onMounted(() => {
-  void gitStore.refreshStatus().then(() => {
-    void gitStore.loadChangedFiles(layoutStore.reviewScope)
-  })
-})
-
 watch(
   () => layoutStore.reviewScope,
   (scope) => {
+    gitStore.applyScope(scope)
     void gitStore.loadChangedFiles(scope)
-  }
+    const file = gitStore.selectedFile
+    if (file) {
+      void gitStore.loadDiff(file, scope === 'staged')
+    }
+  },
+  { immediate: true }
 )
 
 watch(
@@ -66,15 +74,6 @@ watch(
   }
 )
 
-watch(
-  () => panelContext.effectivePanelCwd,
-  () => {
-    gitStore.selectedFile = null
-    void gitStore.refreshStatus().then(() => {
-      void gitStore.loadChangedFiles(layoutStore.reviewScope)
-    })
-  }
-)
 </script>
 
 <template>
@@ -126,30 +125,37 @@ watch(
 
       <div class="dv-body">
         <div class="file-list">
-          <GitChangedFileTree
-            :files="gitStore.changedFiles"
-            :selected-file="gitStore.selectedFile"
-            :scope="layoutStore.reviewScope"
-            @select="onFileSelect"
-            @stage="onStage"
-            @unstage="onUnstage"
-          />
+          <div v-if="showFilesEmptyLoading" class="empty-msg">加载中…</div>
+          <template v-else>
+            <GitChangedFileTree
+              :files="gitStore.changedFiles"
+              :selected-file="gitStore.selectedFile"
+              :scope="layoutStore.reviewScope"
+              @select="onFileSelect"
+              @stage="onStage"
+              @unstage="onUnstage"
+            />
+            <div v-if="showFilesRefreshHint" class="list-refresh-hint">刷新中…</div>
+          </template>
         </div>
 
         <div class="diff-area">
-          <div v-if="gitStore.diffLoading" class="empty-msg">加载中…</div>
-          <div v-else-if="!gitStore.selectedFile" class="empty-msg">选择文件查看差异</div>
-          <Suspense v-else>
-            <MonacoDiff
-              :original="gitStore.diffOriginal"
-              :modified="gitStore.diffModified"
-              :language="gitStore.selectedFile?.split('.').pop() ?? ''"
-              :side-by-side="layoutStore.diffViewMode === 'side-by-side'"
-            />
-            <template #fallback>
-              <div class="empty-msg">加载编辑器…</div>
-            </template>
-          </Suspense>
+          <div v-if="!gitStore.selectedFile" class="empty-msg">选择文件查看差异</div>
+          <div v-else-if="showDiffEmptyLoading" class="empty-msg">加载中…</div>
+          <template v-else>
+            <Suspense :key="`${gitStore.selectedFile}-${layoutStore.reviewScope}-${layoutStore.diffViewMode}`">
+              <MonacoDiff
+                :original="gitStore.diffOriginal"
+                :modified="gitStore.diffModified"
+                :language="gitStore.selectedFile?.split('.').pop() ?? ''"
+                :side-by-side="layoutStore.diffViewMode === 'side-by-side'"
+              />
+              <template #fallback>
+                <div class="empty-msg">加载编辑器…</div>
+              </template>
+            </Suspense>
+            <div v-if="gitStore.diffRefreshing" class="diff-refresh-hint">更新中…</div>
+          </template>
         </div>
       </div>
     </template>
@@ -224,6 +230,7 @@ watch(
 }
 
 .file-list {
+  position: relative;
   width: 220px;
   flex-shrink: 0;
   border-right: 1px solid var(--sidebar-border);
@@ -231,11 +238,37 @@ watch(
   padding: 4px;
 }
 
+.list-refresh-hint {
+  position: sticky;
+  bottom: 0;
+  padding: 4px 8px;
+  text-align: center;
+  font-size: var(--font-size-xs);
+  color: var(--content-text-tertiary);
+  background: color-mix(in srgb, var(--sidebar-bg) 92%, transparent);
+  border-top: 1px solid var(--sidebar-border);
+}
+
 .diff-area {
+  position: relative;
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.diff-refresh-hint {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  color: var(--content-text-tertiary);
+  background: color-mix(in srgb, var(--sidebar-bg) 90%, transparent);
+  border: 1px solid var(--sidebar-border);
+  pointer-events: none;
 }
 
 .empty-msg {

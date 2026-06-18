@@ -340,7 +340,7 @@ onUnmounted(() => {
 <template>
   <aside class="sidebar">
     <div class="sidebar-drag-area"></div>
-    <div class="sidebar-content">
+    <div class="sidebar-content elegant-scroll">
       <nav class="sidebar-nav">
         <button
           v-for="item in topNavItems"
@@ -747,29 +747,7 @@ onUnmounted(() => {
   min-height: 0;
   overflow-y: auto;
   padding: 0 var(--spacing-sm);
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-
-.sidebar-content:hover {
-  scrollbar-color: color-mix(in srgb, var(--sidebar-section-title) 30%, transparent) transparent;
-}
-
-.sidebar-content::-webkit-scrollbar {
-  width: 4px;
-}
-
-.sidebar-content::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.sidebar-content::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 4px;
-}
-
-.sidebar-content:hover::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--sidebar-section-title) 30%, transparent);
+  --scroll-thumb: var(--sidebar-section-title);
 }
 
 .sidebar-nav {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
-import { loadMonaco, getLanguageFromPath } from '@renderer/utils/monaco'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { loadMonaco, getLanguageFromPath, applyMonacoTheme } from '@renderer/utils/monaco'
+import { useSettingsStore } from '@renderer/stores/settings.store'
 
 const props = withDefaults(
   defineProps<{
@@ -12,6 +13,7 @@ const props = withDefaults(
   { sideBySide: true }
 )
 
+const settingsStore = useSettingsStore()
 const containerRef = ref<HTMLElement | null>(null)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let editorInstance: any = null
@@ -19,11 +21,36 @@ let editorInstance: any = null
 let monacoRef: any = null
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let currentModels: { original: any; modified: any } | null = null
+let themeObserver: MutationObserver | null = null
+
+const isDark = computed(() => {
+  if (settingsStore.theme === 'system') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  }
+  return settingsStore.theme === 'dark'
+})
 
 function disposeModels(): void {
   currentModels?.original.dispose()
   currentModels?.modified.dispose()
   currentModels = null
+}
+
+function getDiffOptions(): Record<string, unknown> {
+  return {
+    readOnly: true,
+    renderSideBySide: props.sideBySide,
+    useInlineViewWhenSpaceIsLimited: false,
+    renderIndicators: true,
+    ignoreTrimWhitespace: false,
+    diffWordWrap: 'on',
+    fontSize: 12,
+    minimap: { enabled: false },
+    scrollBeyondLastLine: false,
+    automaticLayout: true,
+    originalEditable: false,
+    diffAlgorithm: 'advanced'
+  }
 }
 
 function setEditorModels(): void {
@@ -35,26 +62,38 @@ function setEditorModels(): void {
     modified: monacoRef.editor.createModel(props.modified, lang)
   }
   editorInstance.setModel(currentModels)
+  requestAnimationFrame(() => editorInstance?.layout())
+}
+
+function applyViewMode(): void {
+  if (!editorInstance) return
+  editorInstance.updateOptions({
+    renderSideBySide: props.sideBySide,
+    useInlineViewWhenSpaceIsLimited: false
+  })
+  requestAnimationFrame(() => editorInstance?.layout())
 }
 
 onMounted(async () => {
   if (!containerRef.value) return
   const monaco = await loadMonaco()
   monacoRef = monaco
+  applyMonacoTheme(monaco)
 
-  editorInstance = monaco.editor.createDiffEditor(containerRef.value, {
-    readOnly: true,
-    renderSideBySide: props.sideBySide,
-    fontSize: 12,
-    minimap: { enabled: false },
-    scrollBeyondLastLine: false,
-    automaticLayout: true
-  })
-
+  editorInstance = monaco.editor.createDiffEditor(containerRef.value, getDiffOptions())
   setEditorModels()
+
+  themeObserver = new MutationObserver(() => {
+    if (monacoRef) applyMonacoTheme(monacoRef)
+  })
+  themeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['class']
+  })
 })
 
 onUnmounted(() => {
+  themeObserver?.disconnect()
   disposeModels()
   editorInstance?.dispose()
 })
@@ -68,10 +107,14 @@ watch(
 
 watch(
   () => props.sideBySide,
-  (sideBySide) => {
-    editorInstance?.updateOptions({ renderSideBySide: sideBySide })
+  () => {
+    applyViewMode()
   }
 )
+
+watch(isDark, () => {
+  if (monacoRef) applyMonacoTheme(monacoRef)
+})
 </script>
 
 <template>
@@ -82,5 +125,15 @@ watch(
 .monaco-diff {
   width: 100%;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.monaco-diff :deep(.editor.original) {
+  border-right: 1px solid var(--sidebar-border);
+}
+
+.monaco-diff :deep(.gutter.monaco-editor) {
+  background: var(--sidebar-bg);
 }
 </style>

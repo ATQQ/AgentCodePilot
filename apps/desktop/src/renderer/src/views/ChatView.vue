@@ -14,6 +14,7 @@ import ApprovalRequestCard from '@renderer/components/chat/ApprovalRequestCard.v
 import MessageAttachmentImage from '@renderer/components/chat/MessageAttachmentImage.vue'
 import claudeIcon from '@renderer/assets/claude-icon.svg'
 import codexIcon from '@renderer/assets/codex-icon.svg'
+import { CODE_BLOCK_PROPS } from '@renderer/constants/codeBlockTheme'
 import cursorIcon from '@renderer/assets/cursor-icon.svg'
 import type { Attachment, PlanReference } from '@renderer/types'
 import { useLayoutStore } from '@renderer/stores/layout.store'
@@ -287,7 +288,7 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
         </span>
       </div>
 
-      <div ref="messagesContainer" class="messages-container">
+      <div ref="messagesContainer" class="messages-container elegant-scroll">
         <div
           v-for="msg in chatStore.activeConversation.messages"
           :key="msg.id"
@@ -333,7 +334,7 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
                 :render-batch-size="16"
                 :render-batch-delay="8"
                 :render-batch-budget-ms="4"
-                :code-block-props="{ theme: { light: 'github-light', dark: 'github-dark' } }"
+                :code-block-props="CODE_BLOCK_PROPS"
               />
               <button
                 v-if="getPlanIdForMessage(msg.id)"
@@ -463,6 +464,8 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .chat-header {
@@ -499,13 +502,16 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
 
 .messages-container {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: var(--spacing-lg);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-lg);
   -webkit-user-select: text;
   user-select: text;
+  --scroll-thumb: var(--content-text-tertiary);
 }
 
 .message {

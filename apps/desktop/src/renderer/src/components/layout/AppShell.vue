@@ -186,7 +186,7 @@ provide('openSearch', () => uiStore.openSearch())
 
 .page-content {
   flex: 1;
-  overflow: auto;
+  overflow: hidden;
   min-height: 0;
 }
 

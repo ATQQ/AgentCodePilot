@@ -1,5 +1,6 @@
 import { defineComponent, h, type PropType } from 'vue'
 import type { FileEntry } from '@renderer/types'
+import { getFileLanguageIconHtml } from '@renderer/utils/fileLanguageIcon'
 
 export const FileTreeNode = defineComponent({
   name: 'FileTreeNode',
@@ -33,7 +34,10 @@ export const FileTreeNode = defineComponent({
           [
             entry.isDirectory
               ? h('span', { class: 'expand-icon' }, expanded ? '▾' : '▸')
-              : h('span', { class: 'file-icon-spacer' }),
+              : h('span', {
+                  class: 'file-lang-icon',
+                  innerHTML: getFileLanguageIconHtml(entry.path)
+                }),
             h('span', { class: 'file-name', title: entry.relativePath }, entry.name)
           ]
         ),

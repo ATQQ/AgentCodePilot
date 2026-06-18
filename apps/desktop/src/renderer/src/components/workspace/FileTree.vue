@@ -4,6 +4,7 @@ import { useFileExplorerStore } from '@renderer/stores/fileExplorer.store'
 import { usePanelContextStore } from '@renderer/stores/panelContext.store'
 import { useComposerStore } from '@renderer/stores/composer.store'
 import type { FileEntry } from '@renderer/types'
+import { getFileLanguageIconHtml } from '@renderer/utils/fileLanguageIcon'
 import { FileTreeNode } from './FileTreeNode'
 
 const FilePreviewComp = defineAsyncComponent(
@@ -78,7 +79,15 @@ function getItems(dir: string): FileEntry[] {
               @click="onEntryClick(entry)"
               @contextmenu="showContextMenu($event, entry)"
             >
-              <span class="file-icon">{{ entry.isDirectory ? '📁' : '📄' }}</span>
+              <span
+                v-if="entry.isDirectory"
+                class="expand-icon"
+              >▸</span>
+              <span
+                v-else
+                class="file-lang-icon"
+                v-html="getFileLanguageIconHtml(entry.path)"
+              />
               <span class="file-name" :title="entry.relativePath">{{ entry.name }}</span>
             </button>
           </template>
@@ -184,9 +193,25 @@ function getItems(dir: string): FileEntry[] {
   color: var(--sidebar-text-active);
 }
 
-.file-icon {
-  font-size: 12px;
+.expand-icon {
+  width: 12px;
+  color: var(--content-text-secondary);
+  font-size: 10px;
   flex-shrink: 0;
+}
+
+.file-lang-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-lang-icon :deep(svg) {
+  width: 16px;
+  height: 16px;
 }
 
 .file-name {
@@ -240,8 +265,17 @@ function getItems(dir: string): FileEntry[] {
   flex-shrink: 0;
 }
 
-:deep(.file-icon-spacer) {
-  width: 12px;
+:deep(.file-lang-icon) {
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:deep(.file-lang-icon svg) {
+  width: 16px;
+  height: 16px;
 }
 </style>

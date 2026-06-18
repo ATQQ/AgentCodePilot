@@ -6,7 +6,9 @@ import { useSettingsStore } from '@renderer/stores/settings.store'
 import { toLocalFileUrl } from '@renderer/utils/localFile'
 import { resolveFileKind, getFileExtension } from '@renderer/utils/fileKind'
 
-const MonacoEditorComp = defineAsyncComponent(() => import('./MonacoEditor.vue'))
+const FileCodeBlockPreview = defineAsyncComponent(
+  () => import('./FileCodeBlockPreview.vue')
+)
 
 const props = defineProps<{
   filePath: string
@@ -29,6 +31,12 @@ const fileKind = computed(() =>
 const isEditable = computed(() => fileKind.value === 'text' && !fileStore.fileReadError)
 
 const fileExtension = computed(() => getFileExtension(props.filePath))
+
+const isDark = computed(() => {
+  if (settingsStore.theme === 'dark') return true
+  if (settingsStore.theme === 'light') return false
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
+})
 
 function initImageSrc(): void {
   imageLoadFailed.value = false
@@ -117,10 +125,11 @@ async function confirmAddExtension(): Promise<void> {
       />
 
       <Suspense v-else-if="fileKind === 'text'">
-        <MonacoEditorComp
+        <FileCodeBlockPreview
           :value="fileStore.editMode ? fileStore.dirtyContent : fileStore.fileContent"
           :file-path="filePath"
           :read-only="!fileStore.editMode"
+          :is-dark="isDark"
           @update:value="(v) => fileStore.dirtyContent = v"
         />
         <template #fallback>
@@ -199,9 +208,15 @@ async function confirmAddExtension(): Promise<void> {
 
 .fp-content {
   flex: 1;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.fp-content :deep(.file-code-block-preview) {
+  flex: 1;
+  min-height: 0;
 }
 
 .img-preview {

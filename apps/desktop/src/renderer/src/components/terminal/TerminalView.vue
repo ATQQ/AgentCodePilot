@@ -79,4 +79,8 @@ defineExpose({ refit })
 .terminal-view :deep(.xterm-screen) {
   background-color: var(--content-bg) !important;
 }
+
+.terminal-view :deep(.xterm-rows) {
+  color: var(--content-text);
+}
 </style>

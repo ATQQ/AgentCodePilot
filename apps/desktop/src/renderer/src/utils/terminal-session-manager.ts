@@ -31,13 +31,59 @@ function cssVar(name: string): string {
 
 function getXtermTheme(): ITheme {
   const isDark = document.documentElement.classList.contains('dark')
+  const background = cssVar('--content-bg') || (isDark ? '#09090b' : '#ffffff')
+  const foreground = cssVar('--content-text') || (isDark ? '#e4e4e7' : '#111827')
+
+  if (isDark) {
+    return {
+      background,
+      foreground,
+      cursor: '#f4f4f5',
+      cursorAccent: background,
+      selectionBackground: 'rgba(96, 165, 250, 0.35)',
+      selectionForeground: '#ffffff',
+      black: '#52525b',
+      red: '#f87171',
+      green: '#4ade80',
+      yellow: '#facc15',
+      blue: '#60a5fa',
+      magenta: '#e879f9',
+      cyan: '#22d3ee',
+      white: '#e4e4e7',
+      brightBlack: '#a1a1aa',
+      brightRed: '#fca5a5',
+      brightGreen: '#86efac',
+      brightYellow: '#fde047',
+      brightBlue: '#93c5fd',
+      brightMagenta: '#f0abfc',
+      brightCyan: '#67e8f9',
+      brightWhite: '#fafafa'
+    }
+  }
+
   return {
-    background: cssVar('--content-bg') || (isDark ? '#09090b' : '#ffffff'),
-    foreground: cssVar('--content-text') || (isDark ? '#f4f4f5' : '#111827'),
-    cursor: cssVar('--content-text-secondary') || (isDark ? '#a1a1aa' : '#6b7280'),
-    cursorAccent: cssVar('--content-bg') || (isDark ? '#09090b' : '#ffffff'),
-    selectionBackground: isDark ? 'rgba(99, 102, 241, 0.35)' : 'rgba(59, 130, 246, 0.25)',
-    selectionForeground: cssVar('--content-text') || (isDark ? '#f4f4f5' : '#111827')
+    background,
+    foreground,
+    cursor: '#374151',
+    cursorAccent: background,
+    selectionBackground: 'rgba(59, 130, 246, 0.25)',
+    selectionForeground: '#111827',
+    black: '#374151',
+    red: '#dc2626',
+    green: '#16a34a',
+    yellow: '#ca8a04',
+    blue: '#2563eb',
+    magenta: '#9333ea',
+    cyan: '#0891b2',
+    white: '#f3f4f6',
+    brightBlack: '#6b7280',
+    brightRed: '#ef4444',
+    brightGreen: '#22c55e',
+    brightYellow: '#eab308',
+    brightBlue: '#3b82f6',
+    brightMagenta: '#a855f7',
+    brightCyan: '#06b6d4',
+    brightWhite: '#111827'
   }
 }
 

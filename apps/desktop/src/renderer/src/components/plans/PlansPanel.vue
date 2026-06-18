@@ -7,7 +7,9 @@ import { useLayoutStore } from '@renderer/stores/layout.store'
 import { useChatStore } from '@renderer/stores/chat.store'
 import { useComposerStore } from '@renderer/stores/composer.store'
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
+import { useSettingsStore } from '@renderer/stores/settings.store'
 import { ownerScopeLabelKey, resolvePlanOwnerFromProjectId } from '@renderer/utils/planOwner'
+import { CODE_BLOCK_PROPS } from '@renderer/constants/codeBlockTheme'
 
 const { t } = useI18n()
 const planStore = usePlanStore()
@@ -15,6 +17,7 @@ const layoutStore = useLayoutStore()
 const chatStore = useChatStore()
 const composerStore = useComposerStore()
 const workspaceStore = useWorkspaceStore()
+const settingsStore = useSettingsStore()
 
 const ownerContext = computed(() => {
   const rawId = layoutStore.plansOwnerId ?? chatStore.activeConversation?.projectId
@@ -35,7 +38,8 @@ const ownerScopeLabel = computed(() => {
 })
 
 const isDark = computed(() => {
-  if (typeof window === 'undefined') return false
+  if (settingsStore.theme === 'dark') return true
+  if (settingsStore.theme === 'light') return false
   return window.matchMedia('(prefers-color-scheme: dark)').matches
 })
 
@@ -168,7 +172,7 @@ async function handleCopyPlan(): Promise<void> {
             :batch-rendering="true"
             :render-batch-size="16"
             :render-batch-delay="8"
-            :code-block-props="{ theme: { light: 'github-light', dark: 'github-dark' } }"
+            :code-block-props="CODE_BLOCK_PROPS"
           />
         </div>
       </div>

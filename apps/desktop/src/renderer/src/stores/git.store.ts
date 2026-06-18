@@ -4,6 +4,16 @@ import type { GitStatusResult, GitChangedFile, GitDiffScope } from '@renderer/ty
 import { usePanelContextStore } from './panelContext.store'
 import { useLayoutStore } from './layout.store'
 
+type DiffContent = { original: string; modified: string }
+
+function emptyScopeRecord<T>(value: T): Record<GitDiffScope, T> {
+  return { unstaged: value, staged: value }
+}
+
+function diffCacheKey(scope: GitDiffScope, file: string): string {
+  return `${scope}:${file}`
+}
+
 export const useGitStore = defineStore('git', () => {
   const status = ref<GitStatusResult | null>(null)
   const changedFiles = ref<GitChangedFile[]>([])
@@ -12,12 +22,81 @@ export const useGitStore = defineStore('git', () => {
   const diffOriginal = ref('')
   const diffModified = ref('')
   const diffLoading = ref(false)
+  const diffRefreshing = ref(false)
   const commitMessage = ref('')
   const operationError = ref<string | null>(null)
+
+  const changedFilesByScope = ref(emptyScopeRecord<GitChangedFile[]>([]))
+  const selectedFileByScope = ref(emptyScopeRecord<string | null>(null))
+  const filesLoadingByScope = ref(emptyScopeRecord(false))
+  const scopeLoaded = ref(emptyScopeRecord(false))
+
+  const diffCache = new Map<string, DiffContent>()
+  const loadFilesRequestId = emptyScopeRecord(0)
+  let loadDiffRequestId = 0
   let pollTimer: ReturnType<typeof setInterval> | null = null
 
   const panelContext = usePanelContextStore()
   const layoutStore = useLayoutStore()
+
+  function isFilesLoading(scope: GitDiffScope): boolean {
+    return filesLoadingByScope.value[scope]
+  }
+
+  function resetScopeCaches(): void {
+    changedFilesByScope.value = emptyScopeRecord<GitChangedFile[]>([])
+    selectedFileByScope.value = emptyScopeRecord<string | null>(null)
+    filesLoadingByScope.value = emptyScopeRecord(false)
+    scopeLoaded.value = emptyScopeRecord(false)
+    diffCache.clear()
+    changedFiles.value = []
+    selectedFile.value = null
+    diffOriginal.value = ''
+    diffModified.value = ''
+    diffLoading.value = false
+    diffRefreshing.value = false
+    commitMessage.value = ''
+    operationError.value = null
+  }
+
+  function invalidateDiffCache(paths?: string[]): void {
+    if (!paths?.length) {
+      diffCache.clear()
+      return
+    }
+    for (const path of paths) {
+      diffCache.delete(diffCacheKey('unstaged', path))
+      diffCache.delete(diffCacheKey('staged', path))
+    }
+  }
+
+  function markScopesStale(): void {
+    scopeLoaded.value = emptyScopeRecord(false)
+  }
+
+  function applyScope(scope: GitDiffScope): void {
+    changedFiles.value = [...changedFilesByScope.value[scope]]
+    selectedFile.value = selectedFileByScope.value[scope]
+
+    const file = selectedFile.value
+    if (!file) {
+      diffOriginal.value = ''
+      diffModified.value = ''
+      diffLoading.value = false
+      diffRefreshing.value = false
+      return
+    }
+
+    const cached = diffCache.get(diffCacheKey(scope, file))
+    if (cached) {
+      diffOriginal.value = cached.original
+      diffModified.value = cached.modified
+      diffLoading.value = false
+    } else {
+      diffOriginal.value = ''
+      diffModified.value = ''
+    }
+  }
 
   async function refreshStatus(): Promise<void> {
     const cwd = panelContext.effectivePanelCwd
@@ -37,7 +116,7 @@ export const useGitStore = defineStore('git', () => {
   async function loadChangedFiles(scope: GitDiffScope): Promise<void> {
     const cwd = panelContext.effectivePanelCwd
     if (!cwd) {
-      changedFiles.value = []
+      resetScopeCaches()
       return
     }
 
@@ -45,34 +124,94 @@ export const useGitStore = defineStore('git', () => {
       await refreshStatus()
     }
     if (!status.value?.isRepo) {
-      changedFiles.value = []
-      selectedFile.value = null
+      changedFilesByScope.value[scope] = []
+      scopeLoaded.value[scope] = true
+      if (layoutStore.reviewScope === scope) {
+        changedFiles.value = []
+        selectedFile.value = null
+        selectedFileByScope.value[scope] = null
+      }
       return
     }
 
-    changedFiles.value = await window.agentAPI.git.changedFiles(cwd, scope)
-    const stillSelected = changedFiles.value.some((f) => f.path === selectedFile.value)
-    if (!stillSelected) {
-      selectedFile.value = changedFiles.value[0]?.path ?? null
+    const requestId = ++loadFilesRequestId[scope]
+    filesLoadingByScope.value[scope] = true
+
+    try {
+      const files = await window.agentAPI.git.changedFiles(cwd, scope)
+      if (requestId !== loadFilesRequestId[scope]) return
+
+      changedFilesByScope.value[scope] = files
+      scopeLoaded.value[scope] = true
+
+      const prevSelected = selectedFileByScope.value[scope]
+      const nextSelected = files.some((f) => f.path === prevSelected)
+        ? prevSelected
+        : (files[0]?.path ?? null)
+      selectedFileByScope.value[scope] = nextSelected
+
+      if (layoutStore.reviewScope === scope) {
+        changedFiles.value = files
+        if (selectedFile.value !== nextSelected) {
+          selectedFile.value = nextSelected
+        }
+      }
+    } finally {
+      if (requestId === loadFilesRequestId[scope]) {
+        filesLoadingByScope.value[scope] = false
+      }
     }
+  }
+
+  async function refreshAllScopes(): Promise<void> {
+    markScopesStale()
+    await Promise.all([
+      loadChangedFiles('unstaged'),
+      loadChangedFiles('staged')
+    ])
+    applyScope(layoutStore.reviewScope)
   }
 
   async function loadDiff(file: string, staged: boolean): Promise<void> {
     const cwd = panelContext.effectivePanelCwd
     if (!cwd || !status.value?.isRepo) return
 
-    diffLoading.value = true
+    const scope: GitDiffScope = staged ? 'staged' : 'unstaged'
+    const key = diffCacheKey(scope, file)
+    const cached = diffCache.get(key)
+    const requestId = ++loadDiffRequestId
+
+    if (cached) {
+      diffOriginal.value = cached.original
+      diffModified.value = cached.modified
+      diffLoading.value = false
+      diffRefreshing.value = true
+    } else {
+      diffLoading.value = true
+      diffRefreshing.value = false
+    }
+
     try {
       const result = await window.agentAPI.git.diff(cwd, file, staged)
-      diffOriginal.value = result.original
-      diffModified.value = result.modified
+      if (requestId !== loadDiffRequestId) return
+
+      diffCache.set(key, result)
+
+      if (selectedFile.value === file && layoutStore.reviewScope === scope) {
+        diffOriginal.value = result.original
+        diffModified.value = result.modified
+      }
     } finally {
-      diffLoading.value = false
+      if (requestId === loadDiffRequestId) {
+        diffLoading.value = false
+        diffRefreshing.value = false
+      }
     }
   }
 
   function selectFile(path: string): void {
     selectedFile.value = path
+    selectedFileByScope.value[layoutStore.reviewScope] = path
   }
 
   async function stageFiles(paths: string[]): Promise<void> {
@@ -81,11 +220,9 @@ export const useGitStore = defineStore('git', () => {
     operationError.value = null
     try {
       await window.agentAPI.git.stage(cwd, paths)
+      invalidateDiffCache(paths)
       await refreshStatus()
-      await loadChangedFiles(layoutStore.reviewScope)
-      if (layoutStore.reviewScope === 'unstaged' && paths.includes(selectedFile.value ?? '')) {
-        selectedFile.value = changedFiles.value[0]?.path ?? null
-      }
+      await refreshAllScopes()
     } catch (err) {
       operationError.value = err instanceof Error ? err.message : '暂存失败'
     }
@@ -97,11 +234,9 @@ export const useGitStore = defineStore('git', () => {
     operationError.value = null
     try {
       await window.agentAPI.git.unstage(cwd, paths)
+      invalidateDiffCache(paths)
       await refreshStatus()
-      await loadChangedFiles(layoutStore.reviewScope)
-      if (layoutStore.reviewScope === 'staged' && paths.includes(selectedFile.value ?? '')) {
-        selectedFile.value = changedFiles.value[0]?.path ?? null
-      }
+      await refreshAllScopes()
     } catch (err) {
       operationError.value = err instanceof Error ? err.message : '取消暂存失败'
     }
@@ -114,9 +249,9 @@ export const useGitStore = defineStore('git', () => {
     try {
       await window.agentAPI.git.commit(cwd, commitMessage.value)
       commitMessage.value = ''
+      invalidateDiffCache()
       await refreshStatus()
-      await loadChangedFiles('staged')
-      selectedFile.value = changedFiles.value[0]?.path ?? null
+      await refreshAllScopes()
       return true
     } catch (err) {
       operationError.value = err instanceof Error ? err.message : '提交失败'
@@ -154,13 +289,12 @@ export const useGitStore = defineStore('git', () => {
   watch(
     () => panelContext.effectivePanelCwd,
     () => {
-      selectedFile.value = null
-      changedFiles.value = []
-      diffOriginal.value = ''
-      diffModified.value = ''
-      commitMessage.value = ''
-      operationError.value = null
-      void refreshStatus()
+      resetScopeCaches()
+      void refreshStatus().then(() => {
+        if (!panelContext.effectivePanelCwd) return
+        applyScope(layoutStore.reviewScope)
+        void loadChangedFiles(layoutStore.reviewScope)
+      })
     }
   )
 
@@ -172,8 +306,13 @@ export const useGitStore = defineStore('git', () => {
     diffOriginal,
     diffModified,
     diffLoading,
+    diffRefreshing,
     commitMessage,
     operationError,
+    filesLoadingByScope,
+    scopeLoaded,
+    isFilesLoading,
+    applyScope,
     refreshStatus,
     loadChangedFiles,
     loadDiff,

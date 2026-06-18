@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
-import { loadMonaco, getLanguageFromPath } from '@renderer/utils/monaco'
+import { loadMonaco, getLanguageFromPath, applyMonacoTheme } from '@renderer/utils/monaco'
 
 const props = defineProps<{
   value: string
@@ -19,6 +19,7 @@ let editorInstance: any = null
 onMounted(async () => {
   if (!containerRef.value) return
   const monaco = await loadMonaco()
+  applyMonacoTheme(monaco)
   const lang = props.filePath ? getLanguageFromPath(props.filePath) : 'plaintext'
 
   editorInstance = monaco.editor.create(containerRef.value, {
@@ -29,7 +30,7 @@ onMounted(async () => {
     minimap: { enabled: false },
     scrollBeyondLastLine: false,
     automaticLayout: true,
-    theme: document.documentElement.classList.contains('dark') ? 'vs-dark' : 'vs'
+    theme: document.documentElement.classList.contains('dark') ? 'app-dark' : 'app-light'
   })
 
   editorInstance.onDidChangeModelContent(() => {
