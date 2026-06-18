@@ -8,6 +8,7 @@ const props = defineProps<{
   files: GitChangedFile[]
   selectedFile: string | null
   scope: 'unstaged' | 'staged'
+  filter?: string
 }>()
 
 const emit = defineEmits<{
@@ -16,9 +17,17 @@ const emit = defineEmits<{
   unstage: [path: string]
 }>()
 
+const filter = computed(() => props.filter ?? '')
 const expandedDirs = ref<Set<string>>(new Set())
 
 const tree = computed(() => buildPathTree(props.files))
+
+const filteredTree = computed(() => {
+  const q = filter.value.trim().toLowerCase()
+  if (!q) return tree.value
+  const matched = props.files.filter((f) => f.path.toLowerCase().includes(q))
+  return buildPathTree(matched)
+})
 
 watch(
   () => props.files,
@@ -41,25 +50,51 @@ function isExpanded(path: string): boolean {
 </script>
 
 <template>
-  <div v-if="files.length === 0" class="empty-msg">暂无变更</div>
-  <div v-else class="git-tree">
-    <GitTreeNode
-      v-for="node in tree"
-      :key="node.path"
-      :node="node"
-      :depth="0"
-      :selected-file="selectedFile"
-      :scope="scope"
-      :is-expanded="isExpanded"
-      @toggle-dir="toggleDir"
-      @select="(path) => emit('select', path)"
-      @stage="(path) => emit('stage', path)"
-      @unstage="(path) => emit('unstage', path)"
-    />
+  <div class="git-changed-tree">
+    <div v-if="files.length === 0" class="empty-msg">暂无变更</div>
+    <div v-else-if="filteredTree.length === 0" class="empty-msg">无匹配文件</div>
+    <div v-else class="git-tree">
+      <GitTreeNode
+        v-for="node in filteredTree"
+        :key="node.path"
+        :node="node"
+        :depth="0"
+        :selected-file="selectedFile"
+        :scope="scope"
+        :is-expanded="isExpanded"
+        @toggle-dir="toggleDir"
+        @select="(path) => emit('select', path)"
+        @stage="(path) => emit('stage', path)"
+        @unstage="(path) => emit('unstage', path)"
+      />
+    </div>
   </div>
 </template>
 
 <style scoped>
+.git-changed-tree {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.filter-input {
+  width: 100%;
+  padding: 4px 8px;
+  margin-bottom: 4px;
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-sm);
+  background: var(--content-bg);
+  color: var(--content-text);
+  font-size: var(--font-size-xs);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.filter-input:focus {
+  border-color: var(--composer-border-focus);
+}
+
 .git-tree {
   display: flex;
   flex-direction: column;
@@ -76,12 +111,12 @@ function isExpanded(path: string): boolean {
   display: contents;
 }
 
-:deep(.tree-row) {
+:deep(.file-row) {
   display: flex;
   align-items: center;
   gap: 4px;
   width: 100%;
-  padding: 6px 8px;
+  padding: 4px 8px;
   border: none;
   background: transparent;
   color: var(--content-text);
@@ -91,23 +126,37 @@ function isExpanded(path: string): boolean {
   box-sizing: border-box;
 }
 
-:deep(.tree-row:hover) {
+:deep(.file-row:hover) {
   background: var(--sidebar-item-hover);
 }
 
-:deep(.tree-row.active) {
+:deep(.file-row.active) {
   background: var(--sidebar-item-active);
+  color: var(--sidebar-text-active);
 }
 
-:deep(.expand-icon),
-:deep(.expand-spacer) {
+:deep(.expand-icon) {
   width: 12px;
   flex-shrink: 0;
   font-size: 10px;
   color: var(--content-text-secondary);
 }
 
-:deep(.node-name) {
+:deep(.file-lang-icon) {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:deep(.file-lang-icon svg) {
+  width: 16px;
+  height: 16px;
+}
+
+:deep(.file-name) {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -141,7 +190,7 @@ function isExpanded(path: string): boolean {
   color: var(--content-text-secondary);
 }
 
-:deep(.tree-row:hover .stage-btn) {
+:deep(.file-row:hover .stage-btn) {
   display: inline-flex;
 }
 </style>

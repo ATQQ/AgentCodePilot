@@ -1,5 +1,6 @@
 import { defineComponent, h, type PropType } from 'vue'
 import type { PathTreeNode } from '@renderer/utils/pathTree'
+import { getFileLanguageIconHtml } from '@renderer/utils/fileLanguageIcon'
 
 export const GitTreeNode = defineComponent({
   name: 'GitTreeNode',
@@ -22,7 +23,7 @@ export const GitTreeNode = defineComponent({
         h(
           'button',
           {
-            class: ['tree-row', node.isDirectory ? 'dir' : 'leaf', { active: isActive }],
+            class: ['file-row', node.isDirectory ? 'dir' : 'leaf', { active: isActive }],
             style: { paddingLeft: `${8 + props.depth * 14}px` },
             onClick: () => {
               if (node.isDirectory) emit('toggleDir', node.path)
@@ -32,8 +33,11 @@ export const GitTreeNode = defineComponent({
           [
             node.isDirectory
               ? h('span', { class: 'expand-icon' }, expanded ? '▾' : '▸')
-              : h('span', { class: 'expand-spacer' }),
-            h('span', { class: 'node-name', title: node.path }, node.name),
+              : h('span', {
+                  class: 'file-lang-icon',
+                  innerHTML: getFileLanguageIconHtml(node.path)
+                }),
+            h('span', { class: 'file-name', title: node.path }, node.name),
             !node.isDirectory && node.fileMeta
               ? h('span', { class: 'file-stat' }, [
                   h('span', { class: 'add' }, `+${node.fileMeta.additions}`),

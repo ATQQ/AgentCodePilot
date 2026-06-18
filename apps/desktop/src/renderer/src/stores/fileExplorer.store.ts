@@ -10,6 +10,7 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
   const childrenCache = ref<Record<string, FileEntry[]>>({})
   const filter = ref('')
   const openFilePath = ref<string | null>(null)
+  const openTabs = ref<string[]>([])
   const fileContent = ref('')
   const fileLoading = ref(false)
   const editMode = ref(false)
@@ -80,6 +81,9 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     const kind = resolveFileKind(path, settingsStore.filePreview, asText)
 
     openFilePath.value = path
+    if (!openTabs.value.includes(path)) {
+      openTabs.value = [...openTabs.value, path]
+    }
     fileReadError.value = null
     forceTextRead.value = asText
     editMode.value = false
@@ -116,6 +120,27 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     await openFile(path, { asText: true })
   }
 
+  function closeTab(path: string): void {
+    openTabs.value = openTabs.value.filter((p) => p !== path)
+    if (openFilePath.value === path) {
+      openFilePath.value = openTabs.value[openTabs.value.length - 1] ?? null
+      if (openFilePath.value) {
+        void openFile(openFilePath.value)
+      } else {
+        fileContent.value = ''
+        dirtyContent.value = ''
+        fileReadError.value = null
+        editMode.value = false
+      }
+    }
+  }
+
+  function selectTab(path: string): void {
+    if (openFilePath.value !== path) {
+      void openFile(path)
+    }
+  }
+
   async function saveFile(): Promise<boolean> {
     const path = openFilePath.value
     const roots = workspaceRoots.value
@@ -132,6 +157,7 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     await window.agentAPI.file.delete(path, roots)
     if (openFilePath.value === path) {
       openFilePath.value = null
+      openTabs.value = openTabs.value.filter((p) => p !== path)
       fileContent.value = ''
       dirtyContent.value = ''
       fileReadError.value = null
@@ -161,7 +187,7 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
   function clearCache(): void {
     childrenCache.value = {}
     expandedDirs.value.clear()
-    openFilePath.value = null
+    openTabs.value = []
     fileContent.value = ''
     dirtyContent.value = ''
     editMode.value = false
@@ -180,6 +206,7 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
   return {
     filter,
     openFilePath,
+    openTabs,
     fileContent,
     dirtyContent,
     fileLoading,
@@ -195,6 +222,8 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     toggleDir,
     isExpanded,
     openFile,
+    closeTab,
+    selectTab,
     readFileAsText,
     saveFile,
     deleteFile,

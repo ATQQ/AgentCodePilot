@@ -15,6 +15,7 @@ const props = withDefaults(
 
 const settingsStore = useSettingsStore()
 const containerRef = ref<HTMLElement | null>(null)
+let resizeObserver: ResizeObserver | null = null
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let editorInstance: any = null
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -62,7 +63,7 @@ function setEditorModels(): void {
     modified: monacoRef.editor.createModel(props.modified, lang)
   }
   editorInstance.setModel(currentModels)
-  requestAnimationFrame(() => editorInstance?.layout())
+  layoutEditor()
 }
 
 function applyViewMode(): void {
@@ -71,7 +72,21 @@ function applyViewMode(): void {
     renderSideBySide: props.sideBySide,
     useInlineViewWhenSpaceIsLimited: false
   })
+  layoutEditor()
+}
+
+function layoutEditor(): void {
   requestAnimationFrame(() => editorInstance?.layout())
+}
+
+function syncContainerHeight(): void {
+  const host = containerRef.value?.parentElement
+  if (!host || !containerRef.value) return
+  const height = host.clientHeight
+  if (height > 0) {
+    containerRef.value.style.height = `${height}px`
+    layoutEditor()
+  }
 }
 
 onMounted(async () => {
@@ -82,6 +97,12 @@ onMounted(async () => {
 
   editorInstance = monaco.editor.createDiffEditor(containerRef.value, getDiffOptions())
   setEditorModels()
+  syncContainerHeight()
+
+  if (containerRef.value.parentElement) {
+    resizeObserver = new ResizeObserver(() => syncContainerHeight())
+    resizeObserver.observe(containerRef.value.parentElement)
+  }
 
   themeObserver = new MutationObserver(() => {
     if (monacoRef) applyMonacoTheme(monacoRef)
@@ -93,6 +114,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  resizeObserver?.disconnect()
   themeObserver?.disconnect()
   disposeModels()
   editorInstance?.dispose()
@@ -126,7 +148,8 @@ watch(isDark, () => {
   width: 100%;
   height: 100%;
   min-width: 0;
-  min-height: 0;
+  min-height: 200px;
+  flex: 1;
 }
 
 .monaco-diff :deep(.editor.original) {

@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { onMounted, watch, defineAsyncComponent } from 'vue'
+import { onMounted, ref, watch, defineAsyncComponent } from 'vue'
 import { useFileExplorerStore } from '@renderer/stores/fileExplorer.store'
 import { usePanelContextStore } from '@renderer/stores/panelContext.store'
 import { useComposerStore } from '@renderer/stores/composer.store'
 import type { FileEntry } from '@renderer/types'
 import { getFileLanguageIconHtml } from '@renderer/utils/fileLanguageIcon'
 import { FileTreeNode } from './FileTreeNode'
+import EditorFileTabs from './EditorFileTabs.vue'
+import SideTreePanel from './SideTreePanel.vue'
+import SideTreeExpandBtn from './SideTreeExpandBtn.vue'
 
 const FilePreviewComp = defineAsyncComponent(
   () => import('./FilePreview.vue')
@@ -14,6 +17,8 @@ const FilePreviewComp = defineAsyncComponent(
 const fileStore = useFileExplorerStore()
 const panelContext = usePanelContextStore()
 const composerStore = useComposerStore()
+
+const treeCollapsed = ref(false)
 
 onMounted(async () => {
   await fileStore.ensureRootLoaded()
@@ -53,23 +58,52 @@ function showContextMenu(e: MouseEvent, entry: FileEntry): void {
 function getItems(dir: string): FileEntry[] {
   return fileStore.childrenCache[dir] ?? []
 }
+
+function onTabSelect(path: string): void {
+  fileStore.selectTab(path)
+}
+
+function onTabClose(path: string): void {
+  fileStore.closeTab(path)
+}
 </script>
 
 <template>
   <div class="file-tree-panel">
-    <div class="ft-toolbar">
-      <input
-        v-model="fileStore.filter"
-        class="filter-input"
-        placeholder="筛选文件…"
-      />
-    </div>
-
     <div v-if="!panelContext.effectivePanelCwd" class="empty-msg">请先选择项目</div>
 
     <template v-else>
       <div class="file-split">
-        <div class="file-list">
+        <div class="main-pane">
+          <SideTreeExpandBtn v-if="treeCollapsed" @expand="treeCollapsed = false" />
+
+          <EditorFileTabs
+            :tabs="fileStore.openTabs"
+            :active="fileStore.openFilePath"
+            @select="onTabSelect"
+            @close="onTabClose"
+          />
+
+          <div class="ft-preview">
+            <Suspense v-if="fileStore.openFilePath">
+              <FilePreviewComp :file-path="fileStore.openFilePath" />
+              <template #fallback>
+                <div class="empty-msg">加载中…</div>
+              </template>
+            </Suspense>
+            <div v-else class="empty-msg">点击文件预览</div>
+          </div>
+        </div>
+
+        <SideTreePanel v-if="!treeCollapsed" @collapse="treeCollapsed = true">
+          <template #header>
+            <input
+              v-model="fileStore.filter"
+              class="filter-input"
+              placeholder="筛选文件…"
+            />
+          </template>
+
           <template v-if="fileStore.filter">
             <button
               v-for="entry in fileStore.filteredTree"
@@ -104,17 +138,7 @@ function getItems(dir: string): FileEntry[] {
             @click-entry="onEntryClick"
             @context-menu="showContextMenu"
           />
-        </div>
-
-        <div class="ft-preview">
-          <Suspense v-if="fileStore.openFilePath">
-            <FilePreviewComp :file-path="fileStore.openFilePath" />
-            <template #fallback>
-              <div class="empty-msg">加载中…</div>
-            </template>
-          </Suspense>
-          <div v-else class="empty-msg">点击文件预览</div>
-        </div>
+        </SideTreePanel>
       </div>
     </template>
   </div>
@@ -128,10 +152,21 @@ function getItems(dir: string): FileEntry[] {
   overflow: hidden;
 }
 
-.ft-toolbar {
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--sidebar-border);
-  flex-shrink: 0;
+.file-split {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.main-pane {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .filter-input {
@@ -139,7 +174,7 @@ function getItems(dir: string): FileEntry[] {
   padding: 4px 8px;
   border: 1px solid var(--sidebar-border);
   border-radius: var(--radius-sm);
-  background: var(--sidebar-bg);
+  background: var(--content-bg);
   color: var(--content-text);
   font-size: var(--font-size-xs);
   outline: none;
@@ -150,21 +185,9 @@ function getItems(dir: string): FileEntry[] {
   border-color: var(--composer-border-focus);
 }
 
-.file-split {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-}
-
-.file-list {
-  width: 220px;
-  flex-shrink: 0;
-  overflow-y: auto;
-  border-right: 1px solid var(--sidebar-border);
-}
-
 .ft-preview {
   flex: 1;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -182,6 +205,7 @@ function getItems(dir: string): FileEntry[] {
   font-size: var(--font-size-xs);
   cursor: pointer;
   text-align: left;
+  box-sizing: border-box;
 }
 
 .file-row:hover {
@@ -229,7 +253,6 @@ function getItems(dir: string): FileEntry[] {
   font-size: var(--font-size-sm);
 }
 
-/* Styles for FileTreeNode rendered rows (not scoped inside component) */
 :deep(.file-tree-node) {
   display: contents;
 }

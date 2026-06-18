@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { computed, watch, defineAsyncComponent } from 'vue'
+import { computed, ref, watch, defineAsyncComponent } from 'vue'
 import { useGitStore } from '@renderer/stores/git.store'
 import { useLayoutStore } from '@renderer/stores/layout.store'
 import { usePanelContextStore } from '@renderer/stores/panelContext.store'
 import type { GitDiffScope } from '@renderer/types'
+import EditorFileTabs from './EditorFileTabs.vue'
+import SideTreePanel from './SideTreePanel.vue'
+import SideTreeExpandBtn from './SideTreeExpandBtn.vue'
 
 const MonacoDiff = defineAsyncComponent(
   () => import('@renderer/components/workspace/MonacoDiffEditor.vue')
@@ -19,20 +22,30 @@ const gitStore = useGitStore()
 const layoutStore = useLayoutStore()
 const panelContext = usePanelContextStore()
 
-const scopeOptions: { value: GitDiffScope; label: string }[] = [
-  { value: 'unstaged', label: '未暂存' },
-  { value: 'staged', label: '已暂存' }
-]
+const treeCollapsed = ref(false)
+const treeFilter = ref('')
+
+const scopeOptions = computed(() => {
+  const unstagedCount = gitStore.changedFilesByScope.unstaged.length
+  const stagedCount = gitStore.changedFilesByScope.staged.length
+  return [
+    { value: 'unstaged' as GitDiffScope, label: `未暂存${unstagedCount ? ` ${unstagedCount}` : ''}` },
+    { value: 'staged' as GitDiffScope, label: `已暂存${stagedCount ? ` ${stagedCount}` : ''}` }
+  ]
+})
+
+const openTabs = computed(() => gitStore.getOpenTabs(layoutStore.reviewScope))
 
 const filesLoading = computed(() => gitStore.isFilesLoading(layoutStore.reviewScope))
 const showFilesEmptyLoading = computed(
   () => filesLoading.value && gitStore.changedFiles.length === 0
 )
-const showFilesRefreshHint = computed(
-  () => filesLoading.value && gitStore.changedFiles.length > 0
-)
 const showDiffEmptyLoading = computed(
   () => gitStore.diffLoading && !gitStore.diffOriginal && !gitStore.diffModified
+)
+
+const activeFileMeta = computed(() =>
+  gitStore.changedFiles.find((f) => f.path === gitStore.selectedFile)
 )
 
 function onScopeChange(scope: GitDiffScope): void {
@@ -40,8 +53,19 @@ function onScopeChange(scope: GitDiffScope): void {
 }
 
 function onFileSelect(path: string): void {
+  gitStore.openFileTab(path)
+  void gitStore.loadDiff(path, layoutStore.reviewScope === 'staged')
+}
+
+function onTabSelect(path: string): void {
   gitStore.selectFile(path)
   void gitStore.loadDiff(path, layoutStore.reviewScope === 'staged')
+}
+
+function onTabClose(path: string): void {
+  gitStore.closeFileTab(path)
+  const file = gitStore.selectedFile
+  if (file) void gitStore.loadDiff(file, layoutStore.reviewScope === 'staged')
 }
 
 function onStage(path: string): void {
@@ -58,9 +82,7 @@ watch(
     gitStore.applyScope(scope)
     void gitStore.loadChangedFiles(scope)
     const file = gitStore.selectedFile
-    if (file) {
-      void gitStore.loadDiff(file, scope === 'staged')
-    }
+    if (file) void gitStore.loadDiff(file, scope === 'staged')
   },
   { immediate: true }
 )
@@ -73,7 +95,6 @@ watch(
     }
   }
 )
-
 </script>
 
 <template>
@@ -85,7 +106,7 @@ watch(
     </template>
 
     <template v-else>
-      <div class="dv-toolbar">
+      <div class="dv-toolbar elegant-scroll">
         <div class="scope-tabs">
           <button
             v-for="opt in scopeOptions"
@@ -117,46 +138,74 @@ watch(
               内联
             </button>
           </div>
-          <span v-if="gitStore.changedFiles.length > 1" class="hint-text">每次显示一个文件</span>
         </div>
       </div>
 
-      <GitCommitBar v-if="layoutStore.reviewScope === 'staged'" />
-
       <div class="dv-body">
-        <div class="file-list">
-          <div v-if="showFilesEmptyLoading" class="empty-msg">加载中…</div>
-          <template v-else>
-            <GitChangedFileTree
-              :files="gitStore.changedFiles"
-              :selected-file="gitStore.selectedFile"
-              :scope="layoutStore.reviewScope"
-              @select="onFileSelect"
-              @stage="onStage"
-              @unstage="onUnstage"
-            />
-            <div v-if="showFilesRefreshHint" class="list-refresh-hint">刷新中…</div>
-          </template>
+        <div class="main-pane">
+          <SideTreeExpandBtn v-if="treeCollapsed" @expand="treeCollapsed = false" />
+
+          <GitCommitBar v-if="layoutStore.reviewScope === 'staged'" />
+
+          <EditorFileTabs
+            :tabs="openTabs"
+            :active="gitStore.selectedFile"
+            @select="onTabSelect"
+            @close="onTabClose"
+          />
+
+          <div v-if="gitStore.selectedFile && activeFileMeta" class="file-meta-bar">
+            <span class="file-path" :title="gitStore.selectedFile">{{ gitStore.selectedFile }}</span>
+            <span class="file-stat">
+              <span class="add">+{{ activeFileMeta.additions }}</span>
+              <span class="del">-{{ activeFileMeta.deletions }}</span>
+            </span>
+          </div>
+
+          <div class="diff-area">
+            <div v-if="!gitStore.selectedFile" class="empty-msg">选择文件查看差异</div>
+            <div v-else-if="showDiffEmptyLoading" class="empty-msg">加载中…</div>
+            <template v-else>
+              <Suspense :key="`${gitStore.selectedFile}-${layoutStore.reviewScope}-${layoutStore.diffViewMode}`">
+                <MonacoDiff
+                  :original="gitStore.diffOriginal"
+                  :modified="gitStore.diffModified"
+                  :language="gitStore.selectedFile?.split('.').pop() ?? ''"
+                  :side-by-side="layoutStore.diffViewMode === 'side-by-side'"
+                />
+                <template #fallback>
+                  <div class="empty-msg">加载编辑器…</div>
+                </template>
+              </Suspense>
+              <div v-if="gitStore.diffRefreshing" class="diff-refresh-hint">更新中…</div>
+            </template>
+          </div>
         </div>
 
-        <div class="diff-area">
-          <div v-if="!gitStore.selectedFile" class="empty-msg">选择文件查看差异</div>
-          <div v-else-if="showDiffEmptyLoading" class="empty-msg">加载中…</div>
-          <template v-else>
-            <Suspense :key="`${gitStore.selectedFile}-${layoutStore.reviewScope}-${layoutStore.diffViewMode}`">
-              <MonacoDiff
-                :original="gitStore.diffOriginal"
-                :modified="gitStore.diffModified"
-                :language="gitStore.selectedFile?.split('.').pop() ?? ''"
-                :side-by-side="layoutStore.diffViewMode === 'side-by-side'"
-              />
-              <template #fallback>
-                <div class="empty-msg">加载编辑器…</div>
-              </template>
-            </Suspense>
-            <div v-if="gitStore.diffRefreshing" class="diff-refresh-hint">更新中…</div>
+        <SideTreePanel v-if="!treeCollapsed" @collapse="treeCollapsed = true">
+          <template #header>
+            <input
+              v-model="treeFilter"
+              class="filter-input"
+              placeholder="筛选文件…"
+            />
           </template>
-        </div>
+
+          <div v-if="showFilesEmptyLoading" class="empty-msg">加载中…</div>
+          <GitChangedFileTree
+            v-else
+            :filter="treeFilter"
+            :files="gitStore.changedFiles"
+            :selected-file="gitStore.selectedFile"
+            :scope="layoutStore.reviewScope"
+            @select="onFileSelect"
+            @stage="onStage"
+            @unstage="onUnstage"
+          />
+          <div v-if="filesLoading && gitStore.changedFiles.length > 0" class="list-refresh-hint">
+            刷新中…
+          </div>
+        </SideTreePanel>
       </div>
     </template>
   </div>
@@ -179,24 +228,22 @@ watch(
   border-bottom: 1px solid var(--sidebar-border);
   flex-shrink: 0;
   gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .toolbar-right {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 0;
-}
-
-.view-mode-tabs {
-  display: flex;
-  gap: 2px;
   flex-shrink: 0;
 }
 
+.view-mode-tabs,
 .scope-tabs {
   display: flex;
   gap: 2px;
+  flex-shrink: 0;
 }
 
 .scope-btn {
@@ -208,6 +255,7 @@ watch(
   color: var(--sidebar-text);
   font-size: var(--font-size-xs);
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .scope-btn.active {
@@ -215,44 +263,72 @@ watch(
   color: var(--sidebar-text-active);
 }
 
-.hint-text {
-  font-size: var(--font-size-xs);
-  color: var(--content-text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .dv-body {
+  position: relative;
   display: flex;
   flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
-.file-list {
+.main-pane {
   position: relative;
-  width: 220px;
-  flex-shrink: 0;
-  border-right: 1px solid var(--sidebar-border);
-  overflow-y: auto;
-  padding: 4px;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-.list-refresh-hint {
-  position: sticky;
-  bottom: 0;
+.filter-input {
+  width: 100%;
   padding: 4px 8px;
-  text-align: center;
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-sm);
+  background: var(--content-bg);
+  color: var(--content-text);
   font-size: var(--font-size-xs);
-  color: var(--content-text-tertiary);
-  background: color-mix(in srgb, var(--sidebar-bg) 92%, transparent);
-  border-top: 1px solid var(--sidebar-border);
+  outline: none;
+  box-sizing: border-box;
 }
+
+.filter-input:focus {
+  border-color: var(--composer-border-focus);
+}
+
+.file-meta-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--sidebar-border);
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.file-path {
+  font-size: var(--font-size-xs);
+  color: var(--content-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-stat {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+}
+
+.file-stat .add { color: #16a34a; }
+.file-stat .del { color: #dc2626; }
 
 .diff-area {
   position: relative;
   flex: 1;
-  min-width: 0;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -269,6 +345,15 @@ watch(
   background: color-mix(in srgb, var(--sidebar-bg) 90%, transparent);
   border: 1px solid var(--sidebar-border);
   pointer-events: none;
+  z-index: 2;
+}
+
+.list-refresh-hint {
+  padding: 4px 8px;
+  text-align: center;
+  font-size: var(--font-size-xs);
+  color: var(--content-text-tertiary);
+  border-top: 1px solid var(--sidebar-border);
 }
 
 .empty-msg {
@@ -278,6 +363,7 @@ watch(
   justify-content: center;
   color: var(--content-text-tertiary);
   font-size: var(--font-size-sm);
+  padding: 16px 8px;
 }
 
 .empty-msg.full {

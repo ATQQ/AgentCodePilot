@@ -28,6 +28,7 @@ export const useGitStore = defineStore('git', () => {
 
   const changedFilesByScope = ref(emptyScopeRecord<GitChangedFile[]>([]))
   const selectedFileByScope = ref(emptyScopeRecord<string | null>(null))
+  const openTabsByScope = ref(emptyScopeRecord<string[]>([]))
   const filesLoadingByScope = ref(emptyScopeRecord(false))
   const scopeLoaded = ref(emptyScopeRecord(false))
 
@@ -46,6 +47,7 @@ export const useGitStore = defineStore('git', () => {
   function resetScopeCaches(): void {
     changedFilesByScope.value = emptyScopeRecord<GitChangedFile[]>([])
     selectedFileByScope.value = emptyScopeRecord<string | null>(null)
+    openTabsByScope.value = emptyScopeRecord<string[]>([])
     filesLoadingByScope.value = emptyScopeRecord(false)
     scopeLoaded.value = emptyScopeRecord(false)
     diffCache.clear()
@@ -77,6 +79,7 @@ export const useGitStore = defineStore('git', () => {
   function applyScope(scope: GitDiffScope): void {
     changedFiles.value = [...changedFilesByScope.value[scope]]
     selectedFile.value = selectedFileByScope.value[scope]
+    pruneTabs(scope)
 
     const file = selectedFile.value
     if (!file) {
@@ -148,10 +151,14 @@ export const useGitStore = defineStore('git', () => {
       const nextSelected = files.some((f) => f.path === prevSelected)
         ? prevSelected
         : (files[0]?.path ?? null)
+      if (nextSelected && !openTabsByScope.value[scope].includes(nextSelected)) {
+        openTabsByScope.value[scope] = [...openTabsByScope.value[scope], nextSelected]
+      }
       selectedFileByScope.value[scope] = nextSelected
 
       if (layoutStore.reviewScope === scope) {
         changedFiles.value = files
+        pruneTabs(scope)
         if (selectedFile.value !== nextSelected) {
           selectedFile.value = nextSelected
         }
@@ -206,6 +213,41 @@ export const useGitStore = defineStore('git', () => {
         diffLoading.value = false
         diffRefreshing.value = false
       }
+    }
+  }
+
+  function pruneTabs(scope: GitDiffScope): void {
+    const valid = new Set(changedFilesByScope.value[scope].map((f) => f.path))
+    const tabs = openTabsByScope.value[scope].filter((p) => valid.has(p))
+    openTabsByScope.value[scope] = tabs
+    if (selectedFileByScope.value[scope] && !valid.has(selectedFileByScope.value[scope]!)) {
+      const next = tabs[tabs.length - 1] ?? changedFilesByScope.value[scope][0]?.path ?? null
+      selectedFileByScope.value[scope] = next
+      if (layoutStore.reviewScope === scope) selectedFile.value = next
+    }
+  }
+
+  function getOpenTabs(scope?: GitDiffScope): string[] {
+    const s = scope ?? layoutStore.reviewScope
+    return openTabsByScope.value[s]
+  }
+
+  function openFileTab(path: string): void {
+    const scope = layoutStore.reviewScope
+    if (!openTabsByScope.value[scope].includes(path)) {
+      openTabsByScope.value[scope] = [...openTabsByScope.value[scope], path]
+    }
+    selectFile(path)
+  }
+
+  function closeFileTab(path: string): void {
+    const scope = layoutStore.reviewScope
+    const tabs = openTabsByScope.value[scope].filter((p) => p !== path)
+    openTabsByScope.value[scope] = tabs
+    if (selectedFile.value === path) {
+      const next = tabs[tabs.length - 1] ?? null
+      selectedFile.value = next
+      selectedFileByScope.value[scope] = next
     }
   }
 
@@ -316,6 +358,11 @@ export const useGitStore = defineStore('git', () => {
     refreshStatus,
     loadChangedFiles,
     loadDiff,
+    changedFilesByScope,
+    openTabsByScope,
+    getOpenTabs,
+    openFileTab,
+    closeFileTab,
     selectFile,
     stageFiles,
     unstageFiles,
