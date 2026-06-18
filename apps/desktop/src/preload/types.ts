@@ -107,6 +107,7 @@ export interface CreateConversationPayload {
   projectId?: string | null
   attachments?: AttachmentPayload[]
   planMode?: boolean
+  planRefs?: PlanReference[]
 }
 
 export interface SettingsPayload {

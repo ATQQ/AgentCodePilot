@@ -273,8 +273,12 @@ function registerIpcHandlers(): void {
     IPC_CHANNELS.CHAT_CREATE,
     (_e, payload: CreateConversationPayload): ConversationInfo => {
       const id = `conv-${Date.now()}`
+      const titleSource =
+        payload.firstMessage.trim() ||
+        payload.planRefs?.[0]?.title ||
+        '新对话'
       const title =
-        payload.firstMessage.slice(0, 30) + (payload.firstMessage.length > 30 ? '...' : '')
+        titleSource.slice(0, 30) + (titleSource.length > 30 ? '...' : '')
       const now = new Date().toISOString()
 
       let cwd: string | null = null
@@ -308,7 +312,8 @@ function registerIpcHandlers(): void {
         content: payload.firstMessage,
         createdAt: now,
         attachments: persistedAttachments ? JSON.stringify(persistedAttachments) : null,
-        planMode: payload.planMode ?? false
+        planMode: payload.planMode ?? false,
+        planRefs: payload.planRefs?.length ? JSON.stringify(payload.planRefs) : null
       })
 
       return { id, title, cwd, attachments: persistedAttachments }

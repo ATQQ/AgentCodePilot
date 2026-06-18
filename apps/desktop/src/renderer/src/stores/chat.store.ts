@@ -371,17 +371,21 @@ export const useChatStore = defineStore('chat', () => {
     projectId?: string | null,
     attachments?: Attachment[],
     planMode?: boolean,
-    modelId?: string
+    modelId?: string,
+    planRefs?: PlanReference[]
   ): Promise<string> {
     const modelStore = useModelStore()
     const resolvedModelId = modelId ?? modelStore.getEffectiveModelId()
+    const plainPlanRefs = toPlainPlanRefs(planRefs)
+    const effectivePlanMode = plainPlanRefs?.length ? false : (planMode ?? false)
     const result = await window.agentAPI.chat.createConversation({
       agentId,
       modelId: resolvedModelId,
       firstMessage,
       projectId,
       attachments: toAttachmentPayloads(attachments),
-      planMode: planMode ?? false
+      planMode: effectivePlanMode,
+      planRefs: plainPlanRefs
     })
 
     const persistedAttachments =
@@ -394,7 +398,8 @@ export const useChatStore = defineStore('chat', () => {
       role: 'user',
       content: firstMessage,
       createdAt: now,
-      ...(planMode ? { planMode: true } : {}),
+      ...(effectivePlanMode ? { planMode: true } : {}),
+      ...(plainPlanRefs?.length ? { planRefs: plainPlanRefs } : {}),
       attachments: persistedAttachments
     }
     conversations.value.unshift({

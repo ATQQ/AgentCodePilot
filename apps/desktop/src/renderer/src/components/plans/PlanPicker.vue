@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { PlanInfo, PlanReference } from '@renderer/types'
 import { useChatStore } from '@renderer/stores/chat.store'
@@ -20,10 +20,15 @@ const chatStore = useChatStore()
 const workspaceStore = useWorkspaceStore()
 const plans = ref<PlanInfo[]>([])
 const loading = ref(false)
-const scope = ref<'conversation' | 'owner'>('conversation')
+const scope = ref<'conversation' | 'owner'>('owner')
+
+/** Prefer composer project selector, then active conversation's project. */
+const resolvedProjectId = computed(
+  () => chatStore.activeConversation?.projectId ?? workspaceStore.selectedProjectId
+)
 
 const ownerContext = computed(() => {
-  const projectId = chatStore.activeConversation?.projectId
+  const projectId = resolvedProjectId.value
   if (!projectId) return null
   return resolvePlanOwnerFromProjectId(projectId, workspaceStore)
 })
@@ -32,18 +37,18 @@ const hasOwnerScope = computed(
   () => ownerContext.value != null && ownerContext.value.ownerType !== 'conversation'
 )
 
+const hasConversationScope = computed(() => chatStore.activeConversationId != null)
+
 const ownerScopeLabel = computed(() => {
   if (!ownerContext.value) return ''
   return t(ownerScopeLabelKey(ownerContext.value.ownerType))
 })
 
-async function loadPlans(): Promise<void> {
-  const conv = chatStore.activeConversation
-  if (!conv) {
-    plans.value = []
-    return
-  }
+function defaultScope(): 'conversation' | 'owner' {
+  return hasOwnerScope.value ? 'owner' : 'conversation'
+}
 
+async function loadPlans(): Promise<void> {
   loading.value = true
   try {
     if (scope.value === 'owner' && ownerContext.value && ownerContext.value.ownerType !== 'conversation') {
@@ -51,28 +56,36 @@ async function loadPlans(): Promise<void> {
         ownerType: ownerContext.value.ownerType,
         ownerId: ownerContext.value.ownerId
       })
-    } else {
-      plans.value = await window.agentAPI.plans.list({
-        conversationId: conv.id
-      })
+      return
     }
+
+    const convId = chatStore.activeConversationId
+    if (!convId) {
+      plans.value = []
+      return
+    }
+
+    plans.value = await window.agentAPI.plans.list({ conversationId: convId })
   } finally {
     loading.value = false
   }
 }
 
-onMounted(() => {
-  if (props.visible) void loadPlans()
-})
-
 watch(
   () => props.visible,
   (visible) => {
-    if (visible) void loadPlans()
+    if (!visible) return
+    scope.value = defaultScope()
+    void loadPlans()
   }
 )
 
 watch(scope, () => {
+  if (props.visible) void loadPlans()
+})
+
+watch(resolvedProjectId, () => {
+  if (!props.visible || scope.value !== 'owner') return
   void loadPlans()
 })
 
@@ -101,8 +114,8 @@ function formatTime(dateStr: string): string {
 
       <div class="plan-picker-toolbar">
         <select v-model="scope" class="scope-select">
-          <option value="conversation">{{ t('plans.scopeConversation') }}</option>
           <option v-if="hasOwnerScope" value="owner">{{ ownerScopeLabel }}</option>
+          <option v-if="hasConversationScope" value="conversation">{{ t('plans.scopeConversation') }}</option>
         </select>
       </div>
 
