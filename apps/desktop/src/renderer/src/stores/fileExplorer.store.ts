@@ -19,6 +19,8 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
   const forceTextRead = ref(false)
   const previewLanguageOverride = ref<string | null>(null)
   const textReadOverrides = ref<Record<string, { language: string }>>({})
+  const fileTreeOpenBeforeEdit = ref(false)
+  const fileSaveToken = ref(0)
 
   const panelContext = usePanelContextStore()
 
@@ -177,6 +179,7 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
 
     await window.agentAPI.file.write(path, dirtyContent.value, roots)
     fileContent.value = dirtyContent.value
+    fileSaveToken.value += 1
     return true
   }
 
@@ -215,6 +218,16 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     }
   }
 
+  function rememberFileTreeOpenBeforeEdit(wasOpen: boolean): void {
+    fileTreeOpenBeforeEdit.value = wasOpen
+  }
+
+  function consumeFileTreeRestore(): boolean {
+    const shouldRestore = fileTreeOpenBeforeEdit.value
+    fileTreeOpenBeforeEdit.value = false
+    return shouldRestore
+  }
+
   function clearCache(): void {
     childrenCache.value = {}
     expandedDirs.value.clear()
@@ -226,6 +239,7 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     forceTextRead.value = false
     previewLanguageOverride.value = null
     textReadOverrides.value = {}
+    fileTreeOpenBeforeEdit.value = false
   }
 
   watch(
@@ -248,6 +262,7 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     forceTextRead,
     previewLanguageOverride,
     textReadOverrides,
+    fileSaveToken,
     filteredTree,
     treeRoot,
     childrenCache,
@@ -266,6 +281,8 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     deleteFile,
     copyFile,
     setEditMode,
+    rememberFileTreeOpenBeforeEdit,
+    consumeFileTreeRestore,
     clearCache
   }
 })

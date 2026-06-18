@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch, defineAsyncComponent } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useFileExplorerStore } from '@renderer/stores/fileExplorer.store'
 import { usePanelContextStore } from '@renderer/stores/panelContext.store'
 import { useComposerStore } from '@renderer/stores/composer.store'
@@ -9,10 +9,7 @@ import { FileTreeNode } from './FileTreeNode'
 import EditorFileTabs from './EditorFileTabs.vue'
 import SideTreePanel from './SideTreePanel.vue'
 import SideTreeFolderBtn from './SideTreeFolderBtn.vue'
-
-const FilePreviewComp = defineAsyncComponent(
-  () => import('./FilePreview.vue')
-)
+import FilePreview from './FilePreview.vue'
 
 const fileStore = useFileExplorerStore()
 const panelContext = usePanelContextStore()
@@ -23,6 +20,25 @@ const treeCollapsed = ref(false)
 onMounted(async () => {
   await fileStore.ensureRootLoaded()
 })
+
+watch(
+  () => fileStore.editMode,
+  (enabled, wasEnabled) => {
+    if (enabled && !wasEnabled) {
+      fileStore.rememberFileTreeOpenBeforeEdit(!treeCollapsed.value)
+      treeCollapsed.value = true
+    }
+  }
+)
+
+watch(
+  () => fileStore.fileSaveToken,
+  () => {
+    if (fileStore.consumeFileTreeRestore()) {
+      treeCollapsed.value = false
+    }
+  }
+)
 
 watch(() => panelContext.effectivePanelCwd, async () => {
   fileStore.clearCache()
@@ -100,7 +116,7 @@ function onCloseAll(): void {
 
           <div class="ft-preview">
             <Suspense v-if="fileStore.openFilePath">
-              <FilePreviewComp :file-path="fileStore.openFilePath" />
+              <FilePreview :file-path="fileStore.openFilePath" />
               <template #fallback>
                 <div class="empty-msg">加载中…</div>
               </template>
