@@ -7,6 +7,25 @@ import {
   writePlanFile
 } from './plans'
 import { resolvePlanOwnerForConversation } from './plan-owner'
+import { getLatestPlanForConversation, userRequestsNewPlan } from './plan-prompt'
+
+function writePlanToAllScopes(
+  filePath: string,
+  content: string,
+  ownerType: string,
+  ownerId: string,
+  planId: string
+): void {
+  writePlanFile(filePath, content)
+  if (ownerType !== 'conversation') {
+    const scopePath = getScopedPlanFilePath(
+      ownerType as 'project' | 'workspace',
+      ownerId,
+      planId
+    )
+    writePlanFile(scopePath, content)
+  }
+}
 
 export function savePlanFromAssistantMessage(
   conversationId: string,
@@ -25,9 +44,27 @@ export function savePlanFromAssistantMessage(
 
   const conv = repo.getConversationById(conversationId)
   const owner = resolvePlanOwnerForConversation(conv)
+  const title = extractPlanTitle(content)
+  const latestPlan = getLatestPlanForConversation(conversationId)
+
+  if (latestPlan && !userRequestsNewPlan(prev.content)) {
+    writePlanToAllScopes(
+      latestPlan.file_path,
+      content,
+      latestPlan.owner_type,
+      latestPlan.owner_id,
+      latestPlan.id
+    )
+    repo.updatePlan(latestPlan.id, {
+      assistantMessageId,
+      userMessageId: prev.id,
+      title
+    })
+    return repo.getPlanById(latestPlan.id) ?? null
+  }
+
   const planId = generatePlanId()
   const createdAt = new Date().toISOString()
-  const title = extractPlanTitle(content)
   const filePath = getScopedPlanFilePath('conversation', conversationId, planId)
 
   writePlanFile(filePath, content)

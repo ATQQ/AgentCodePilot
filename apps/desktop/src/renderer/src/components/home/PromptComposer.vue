@@ -62,7 +62,6 @@ watch(
 const showAddMenu = ref(false)
 const showApprovalMenu = ref(false)
 const showPlanPicker = ref(false)
-const planMode = ref(false)
 const planRefs = ref<PlanReference[]>([])
 // const pursueGoals = ref(false) // TODO: 目标模式，后续实现
 const attachments = ref<Attachment[]>([])
@@ -73,7 +72,13 @@ const props = defineProps<{
   streaming?: boolean
   queuedMessages?: { content: string }[]
   approvalLevel?: ApprovalLevel
+  conversationId?: string | null
 }>()
+
+const planMode = computed({
+  get: () => composerStore.isPlanMode(props.conversationId),
+  set: (value: boolean) => composerStore.setPlanMode(props.conversationId, value)
+})
 
 const approvalLevel = computed(() => props.approvalLevel ?? 'auto')
 
@@ -107,14 +112,14 @@ function handleSubmit(): void {
   planRefs.value = []
   nextTick(() => resizeTextarea())
   if (refs.length > 0) {
-    planMode.value = false
+    composerStore.setPlanMode(props.conversationId, false)
   }
 }
 
 function addPlanRef(plan: PlanReference): void {
   if (planRefs.value.some((p) => p.id === plan.id)) return
   planRefs.value.push(plan)
-  planMode.value = false
+  composerStore.setPlanMode(props.conversationId, false)
 }
 
 function removePlanRef(id: string): void {
@@ -385,7 +390,7 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
                 <span class="menu-icon">&#x1F4CB;</span>
                 <span>{{ t('composer.addMenu.referencePlan') }}</span>
               </button>
-              <button class="menu-item menu-item--toggle" @click.stop="planMode = !planMode">
+              <button class="menu-item menu-item--toggle" @click.stop="composerStore.togglePlanMode(props.conversationId)">
                 <span class="menu-icon">&#x2699;</span>
                 <span>{{ t('composer.addMenu.planMode') }}</span>
                 <span class="toggle-indicator" :class="{ active: planMode }"></span>
@@ -413,7 +418,7 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
             type="button"
             class="plan-mode-badge-close"
             :title="t('composer.planModeClose')"
-            @click.stop="planMode = false"
+            @click.stop="composerStore.setPlanMode(props.conversationId, false)"
           >
             &times;
           </button>

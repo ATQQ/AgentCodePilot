@@ -465,6 +465,36 @@ export function createPlan(plan: {
   )
 }
 
+export function updatePlan(
+  planId: string,
+  updates: {
+    assistantMessageId?: string
+    userMessageId?: string
+    title?: string
+  }
+): void {
+  const db = getDatabase()
+  const fields: string[] = []
+  const values: unknown[] = []
+
+  if (updates.assistantMessageId !== undefined) {
+    fields.push('assistant_message_id = ?')
+    values.push(updates.assistantMessageId)
+  }
+  if (updates.userMessageId !== undefined) {
+    fields.push('user_message_id = ?')
+    values.push(updates.userMessageId)
+  }
+  if (updates.title !== undefined) {
+    fields.push('title = ?')
+    values.push(updates.title)
+  }
+  if (fields.length === 0) return
+
+  values.push(planId)
+  db.prepare(`UPDATE plans SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+}
+
 export function listPlansByOwner(ownerType: string, ownerId: string): PlanRow[] {
   const db = getDatabase()
   return db

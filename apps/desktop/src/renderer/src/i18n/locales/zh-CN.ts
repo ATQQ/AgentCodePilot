@@ -104,6 +104,8 @@ export default {
     scopeProject: '项目全部',
     scopeWorkspace: '工作空间全部',
     referenceToChat: '引用到对话',
+    executePlan: '开始执行',
+    executePlanMessage: '开始执行以上计划',
     copy: '复制',
     viewPlan: '查看计划',
     viewProjectPlans: '查看项目执行计划',

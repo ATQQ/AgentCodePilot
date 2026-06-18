@@ -16,6 +16,7 @@ import { getAgentIcon } from '@renderer/utils/agentIcons'
 import type { Attachment, Message, PlanReference } from '@renderer/types'
 import { useLayoutStore } from '@renderer/stores/layout.store'
 import { usePlanStore } from '@renderer/stores/plan.store'
+import { useComposerStore } from '@renderer/stores/composer.store'
 import { CODE_BLOCK_PROPS } from '@renderer/constants/codeBlockTheme'
 const { t } = useI18n()
 const router = useRouter()
@@ -24,6 +25,7 @@ const agentStore = useAgentStore()
 const settingsStore = useSettingsStore()
 const layoutStore = useLayoutStore()
 const planStore = usePlanStore()
+const composerStore = useComposerStore()
 const messagesContainer = ref<HTMLElement | null>(null)
 const composerRef = ref<InstanceType<typeof PromptComposer> | null>(null)
 const streamedMessageIds = ref<Set<string>>(new Set())
@@ -165,6 +167,9 @@ async function loadAssistantPlanMap(): Promise<void> {
   }
   assistantPlanMap.value = map
   await planStore.loadPlans(conv.id, null, null)
+  if (planStore.activePlanId) {
+    await planStore.loadPlanContent(planStore.activePlanId)
+  }
 }
 
 function getPlanIdForMessage(messageId: string): string | undefined {
@@ -186,6 +191,24 @@ function handleSubmit(
   if ((!text && attachments.length === 0 && planRefs.length === 0) || !chatStore.activeConversationId) return
   chatStore.sendMessage(chatStore.activeConversationId, text, agentStore.selectedAgentId, attachments, planMode, planRefs)
 }
+
+watch(
+  () => composerStore.pendingExecutePlan,
+  (req) => {
+    if (!req) return
+    const execute = composerStore.consumeExecutePlan()
+    if (!execute || !chatStore.activeConversationId) return
+    composerStore.setPlanMode(chatStore.activeConversationId, false)
+    chatStore.sendMessage(
+      chatStore.activeConversationId,
+      execute.message,
+      agentStore.selectedAgentId,
+      undefined,
+      false,
+      [execute.plan]
+    )
+  }
+)
 
 async function openAttachment(att: Attachment): Promise<void> {
   if (att.type !== 'file') return
@@ -440,6 +463,7 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
           <div class="debug-trigger" @click="handleDebugClick"></div>
           <PromptComposer
             ref="composerRef"
+            :conversation-id="chatStore.activeConversationId"
             :streaming="chatStore.isStreaming"
             :queued-messages="chatStore.currentQueuedMessages"
             :approval-level="chatStore.activeConversation.approvalLevel"

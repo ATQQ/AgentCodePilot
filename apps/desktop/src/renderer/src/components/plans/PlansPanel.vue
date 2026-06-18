@@ -92,6 +92,15 @@ watch(
   }
 )
 
+watch(
+  () => chatStore.isStreaming,
+  (streaming, wasStreaming) => {
+    if (wasStreaming && !streaming && planStore.activePlanId) {
+      void planStore.loadPlanContent(planStore.activePlanId)
+    }
+  }
+)
+
 async function handleScopeChange(event: Event): Promise<void> {
   const value = (event.target as HTMLSelectElement).value as 'conversation' | 'owner'
   layoutStore.plansScope = value
@@ -112,6 +121,15 @@ function handleReferencePlan(): void {
   const plan = planStore.activePlan
   if (!plan) return
   composerStore.addPlanReference({ id: plan.id, title: plan.title })
+}
+
+function handleExecutePlan(): void {
+  const plan = planStore.activePlan
+  if (!plan || !chatStore.activeConversationId) return
+  composerStore.executePlan(
+    { id: plan.id, title: plan.title },
+    t('plans.executePlanMessage')
+  )
 }
 
 async function handleCopyPlan(): Promise<void> {
@@ -157,6 +175,9 @@ async function handleCopyPlan(): Promise<void> {
         <div class="plan-preview-actions">
           <button class="action-btn" @click="handleReferencePlan">
             {{ t('plans.referenceToChat') }}
+          </button>
+          <button class="action-btn action-btn--primary" @click="handleExecutePlan">
+            {{ t('plans.executePlan') }}
           </button>
           <button class="action-btn action-btn--secondary" @click="handleCopyPlan">
             {{ t('plans.copy') }}
@@ -290,6 +311,17 @@ async function handleCopyPlan(): Promise<void> {
 
 .action-btn:hover {
   background: color-mix(in srgb, var(--accent-color) 22%, transparent);
+}
+
+.action-btn--primary {
+  background: var(--accent-color);
+  color: var(--btn-primary-text, #fff);
+  border-color: var(--accent-color);
+}
+
+.action-btn--primary:hover {
+  opacity: 0.9;
+  background: var(--accent-color);
 }
 
 .action-btn--secondary {

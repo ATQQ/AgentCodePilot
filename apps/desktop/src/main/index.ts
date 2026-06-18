@@ -39,10 +39,10 @@ import { getDatabase, closeDatabase } from './database'
 import * as repo from './database/repositories'
 import { persistAttachments, deleteConversationAttachments } from './file/attachments'
 import {
-  buildPromptWithAttachmentsAndPlans,
   collectAttachmentDirectories,
   formatMessageContentWithAttachments
 } from './file/prompt-attachments'
+import { buildAgentPrompt } from './file/plan-prompt'
 import { savePlanFromAssistantMessage } from './file/plan-service'
 import { readPlanFile } from './file/plans'
 import type { PlanDetail, PlanInfo, PlansListPayload } from '../preload/types'
@@ -310,11 +310,13 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.CHAT_SEND_FIRST, (_e, payload: SendMessagePayload): void => {
     const assistantMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-a`
-    const prompt = buildPromptWithAttachmentsAndPlans(
-      payload.content,
-      payload.attachments,
-      payload.planRefs
-    )
+    const prompt = buildAgentPrompt({
+      content: payload.content,
+      attachments: payload.attachments,
+      planRefs: payload.planRefs,
+      planMode: payload.planMode,
+      conversationId: payload.conversationId
+    })
     streamingMessages.set(assistantMsgId, {
       conversationId: payload.conversationId,
       content: '',
@@ -367,11 +369,13 @@ function registerIpcHandlers(): void {
       planRefs: payload.planRefs?.length ? JSON.stringify(payload.planRefs) : null
     })
 
-    const prompt = buildPromptWithAttachmentsAndPlans(
-      payload.content,
-      persistedAttachments ?? payload.attachments,
-      payload.planRefs
-    )
+    const prompt = buildAgentPrompt({
+      content: payload.content,
+      attachments: persistedAttachments ?? payload.attachments,
+      planRefs: payload.planRefs,
+      planMode: payload.planMode,
+      conversationId: payload.conversationId
+    })
     streamingMessages.set(assistantMsgId, {
       conversationId: payload.conversationId,
       content: '',
