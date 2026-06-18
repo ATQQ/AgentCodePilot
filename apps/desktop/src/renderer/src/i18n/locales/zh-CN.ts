@@ -243,7 +243,16 @@ export default {
       unsupported: '无法预览此文件类型',
       readAsPrefix: '按',
       readAsSuffix: '格式读取',
-      read: '读取'
+      read: '读取',
+      addToChat: '添加到对话',
+      edit: '编辑',
+      readOnly: '只读',
+      save: '保存',
+      preview: '预览',
+      source: '源码',
+      saved: '已保存',
+      saveFailed: '保存失败',
+      enterEditMode: '已进入编辑模式'
     }
   },
   env: {

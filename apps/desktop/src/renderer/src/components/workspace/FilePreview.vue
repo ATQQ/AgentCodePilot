@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { ElMessage } from 'element-plus'
+import MarkdownRender from 'markstream-vue'
 import { useFileExplorerStore } from '@renderer/stores/fileExplorer.store'
 import { useComposerStore } from '@renderer/stores/composer.store'
 import { useSettingsStore } from '@renderer/stores/settings.store'
+import { useLayoutStore } from '@renderer/stores/layout.store'
 import { toLocalFileUrl } from '@renderer/utils/localFile'
 import { resolveFileKind, getFileExtension } from '@renderer/utils/fileKind'
 import { getLanguageFromPath, PREVIEW_LANGUAGE_OPTIONS } from '@renderer/utils/monaco'
+import { CODE_BLOCK_PROPS } from '@renderer/constants/codeBlockTheme'
 
 const FileCodeBlockPreview = defineAsyncComponent(
   () => import('./FileCodeBlockPreview.vue')
@@ -20,11 +24,13 @@ const { t } = useI18n()
 const fileStore = useFileExplorerStore()
 const composerStore = useComposerStore()
 const settingsStore = useSettingsStore()
+const layoutStore = useLayoutStore()
 
 const imageSrc = ref('')
 const imageLoadFailed = ref(false)
 const showAddExtensionPrompt = ref(false)
 const selectedLanguage = ref('plaintext')
+const mdPreviewMode = ref(false)
 
 const fileName = computed(() => props.filePath.split('/').pop() ?? props.filePath)
 
@@ -33,6 +39,12 @@ const fileKind = computed(() =>
 )
 
 const isEditable = computed(() => fileKind.value === 'text' && !fileStore.fileReadError)
+
+const isMarkdown = computed(() => {
+  const ext = getFileExtension(props.filePath)
+  if (ext === 'md' || ext === 'mdx') return true
+  return getLanguageFromPath(props.filePath) === 'markdown'
+})
 
 const fileExtension = computed(() => getFileExtension(props.filePath))
 
@@ -43,6 +55,10 @@ const isDark = computed(() => {
   if (settingsStore.theme === 'light') return false
   return window.matchMedia('(prefers-color-scheme: dark)').matches
 })
+
+const markdownContent = computed(() =>
+  fileStore.editMode ? fileStore.dirtyContent : fileStore.fileContent
+)
 
 function initImageSrc(): void {
   imageLoadFailed.value = false
@@ -61,6 +77,7 @@ watch(
   () => {
     initImageSrc()
     showAddExtensionPrompt.value = false
+    mdPreviewMode.value = false
     resetLanguageSelection()
   }
 )
@@ -75,7 +92,12 @@ async function onImageError(): Promise<void> {
 }
 
 function toggleEdit(): void {
-  fileStore.setEditMode(!fileStore.editMode)
+  if (fileStore.editMode) {
+    fileStore.setEditMode(false)
+    return
+  }
+  mdPreviewMode.value = false
+  fileStore.setEditMode(true)
 }
 
 async function saveFile(): Promise<void> {
@@ -83,6 +105,26 @@ async function saveFile(): Promise<void> {
   if (ok) {
     fileStore.setEditMode(false)
   }
+}
+
+async function saveFileFromShortcut(): Promise<void> {
+  const ok = await fileStore.saveFile()
+  if (ok) {
+    fileStore.setEditMode(false)
+    ElMessage.success(t('workspace.filePreview.saved'))
+  } else {
+    ElMessage.error(t('workspace.filePreview.saveFailed'))
+  }
+}
+
+function enterEditModeFromShortcut(): void {
+  mdPreviewMode.value = false
+  fileStore.setEditMode(true)
+  ElMessage.info(t('workspace.filePreview.enterEditMode'))
+}
+
+function toggleMdPreview(): void {
+  mdPreviewMode.value = !mdPreviewMode.value
 }
 
 function addToChat(): void {
@@ -103,23 +145,69 @@ async function confirmAddExtension(): Promise<void> {
   }
   showAddExtensionPrompt.value = false
 }
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  const tag = target.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+  return target.isContentEditable
+}
+
+function handlePreviewKeydown(e: KeyboardEvent): void {
+  if (layoutStore.activeExtensionTab !== 'files' || !layoutStore.rightPanelVisible) return
+  if (!isEditable.value || fileStore.fileLoading) return
+
+  const key = e.key.toLowerCase()
+
+  if ((e.metaKey || e.ctrlKey) && key === 's' && !e.altKey) {
+    if (!fileStore.editMode) return
+    e.preventDefault()
+    e.stopPropagation()
+    void saveFileFromShortcut()
+    return
+  }
+
+  if (key === 'e' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+    if (fileStore.editMode) return
+    if (isTypingTarget(e.target)) return
+    e.preventDefault()
+    e.stopPropagation()
+    enterEditModeFromShortcut()
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('keydown', handlePreviewKeydown, true)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', handlePreviewKeydown, true)
+})
 </script>
 
 <template>
   <div class="file-preview">
     <div class="fp-toolbar">
-      <span class="fp-name">{{ fileName }}</span>
       <div class="fp-actions">
-        <button class="action-btn" @click="addToChat">添加到对话</button>
+        <button class="action-btn" @click="addToChat">{{ t('workspace.filePreview.addToChat') }}</button>
         <button v-if="isEditable" class="action-btn" @click="toggleEdit">
-          {{ fileStore.editMode ? '只读' : '编辑' }}
+          {{ fileStore.editMode ? t('workspace.filePreview.readOnly') : t('workspace.filePreview.edit') }}
         </button>
         <button
           v-if="fileStore.editMode"
           class="action-btn primary"
           @click="saveFile"
-        >保存</button>
+        >{{ t('workspace.filePreview.save') }}</button>
+        <button
+          v-if="isMarkdown && isEditable && !fileStore.editMode"
+          class="action-btn"
+          :class="{ active: mdPreviewMode }"
+          @click="toggleMdPreview"
+        >
+          {{ mdPreviewMode ? t('workspace.filePreview.source') : t('workspace.filePreview.preview') }}
+        </button>
       </div>
+      <span class="fp-name" :title="filePath">{{ fileName }}</span>
     </div>
 
     <div class="fp-content">
@@ -147,6 +235,23 @@ async function confirmAddExtension(): Promise<void> {
         class="img-preview"
         @error="onImageError"
       />
+
+      <div
+        v-else-if="fileKind === 'text' && mdPreviewMode"
+        class="md-preview-content elegant-scroll"
+      >
+        <MarkdownRender
+          mode="docs"
+          custom-id="file-preview"
+          :content="markdownContent"
+          :final="true"
+          :is-dark="isDark"
+          :batch-rendering="true"
+          :render-batch-size="16"
+          :render-batch-delay="8"
+          :code-block-props="CODE_BLOCK_PROPS"
+        />
+      </div>
 
       <Suspense v-else-if="fileKind === 'text'">
         <FileCodeBlockPreview
@@ -200,25 +305,28 @@ async function confirmAddExtension(): Promise<void> {
 .fp-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   padding: 4px 8px;
   border-bottom: 1px solid var(--sidebar-border);
   flex-shrink: 0;
-}
-
-.fp-name {
-  font-size: var(--font-size-xs);
-  color: var(--content-text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
+  min-width: 0;
 }
 
 .fp-actions {
   display: flex;
   gap: 4px;
   flex-shrink: 0;
+}
+
+.fp-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-xs);
+  color: var(--content-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
 }
 
 .action-btn {
@@ -229,10 +337,16 @@ async function confirmAddExtension(): Promise<void> {
   color: var(--content-text-secondary);
   font-size: var(--font-size-xs);
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .action-btn:hover {
   background: var(--sidebar-item-hover);
+  color: var(--sidebar-text-active);
+}
+
+.action-btn.active {
+  background: var(--sidebar-item-active);
   color: var(--sidebar-text-active);
 }
 
@@ -253,6 +367,17 @@ async function confirmAddExtension(): Promise<void> {
 .fp-content :deep(.file-code-block-preview) {
   flex: 1;
   min-height: 0;
+}
+
+.md-preview-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 16px;
+}
+
+.md-preview-content :deep(.markstream-vue) {
+  max-width: 100%;
 }
 
 .img-preview {

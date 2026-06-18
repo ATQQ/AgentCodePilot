@@ -4,6 +4,7 @@ import { useUiStore } from '@renderer/stores/ui.store'
 import { useChatStore } from '@renderer/stores/chat.store'
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
 import { useLayoutStore } from '@renderer/stores/layout.store'
+import { useFileExplorerStore } from '@renderer/stores/fileExplorer.store'
 
 export function useGlobalShortcuts(): void {
   const router = useRouter()
@@ -12,6 +13,7 @@ export function useGlobalShortcuts(): void {
   const chatStore = useChatStore()
   const workspaceStore = useWorkspaceStore()
   const layoutStore = useLayoutStore()
+  const fileExplorerStore = useFileExplorerStore()
 
   function startNewChat(): void {
     if (route.path === '/chat' && chatStore.activeConversation) {
@@ -90,6 +92,14 @@ export function useGlobalShortcuts(): void {
     }
 
     if (key === 's') {
+      if (
+        layoutStore.activeExtensionTab === 'files' &&
+        layoutStore.rightPanelVisible &&
+        fileExplorerStore.editMode &&
+        fileExplorerStore.openFilePath
+      ) {
+        return
+      }
       e.preventDefault()
       if (route.meta.fullscreen !== true) {
         uiStore.toggleSidebar()
