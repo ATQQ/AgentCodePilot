@@ -81,7 +81,7 @@ function onCloseAll(): void {
     <div v-if="!panelContext.effectivePanelCwd" class="empty-msg">请先选择项目</div>
 
     <template v-else>
-      <div class="file-split">
+      <div class="ft-body">
         <div class="main-pane">
           <SideTreeExpandBtn v-if="treeCollapsed" @expand="treeCollapsed = false" />
 
@@ -105,7 +105,7 @@ function onCloseAll(): void {
           </div>
         </div>
 
-        <SideTreePanel v-if="!treeCollapsed" @collapse="treeCollapsed = true">
+        <SideTreePanel v-if="!treeCollapsed" overlay @collapse="treeCollapsed = true">
           <template #header>
             <input
               v-model="fileStore.filter"
@@ -162,9 +162,8 @@ function onCloseAll(): void {
   overflow: hidden;
 }
 
-.file-split {
+.ft-body {
   position: relative;
-  display: flex;
   flex: 1;
   min-height: 0;
   overflow: hidden;
@@ -172,8 +171,8 @@ function onCloseAll(): void {
 
 .main-pane {
   position: relative;
-  flex: 1;
-  min-width: 0;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -199,6 +198,13 @@ function onCloseAll(): void {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.ft-preview > * {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }

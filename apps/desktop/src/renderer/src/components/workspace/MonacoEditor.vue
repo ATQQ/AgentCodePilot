@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
+import type * as Monaco from 'monaco-editor'
 import { loadMonaco, getLanguageFromPath, applyMonacoTheme } from '@renderer/utils/monaco'
 
 const props = defineProps<{
   value: string
   filePath?: string
   readOnly?: boolean
+  languageOverride?: string
 }>()
 
 const emit = defineEmits<{
@@ -13,32 +15,69 @@ const emit = defineEmits<{
 }>()
 
 const containerRef = ref<HTMLElement | null>(null)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let editorInstance: any = null
+let monacoModule: typeof Monaco | null = null
+let editorInstance: Monaco.editor.IStandaloneCodeEditor | null = null
+let resizeObserver: ResizeObserver | null = null
+let themeObserver: MutationObserver | null = null
 
-onMounted(async () => {
-  if (!containerRef.value) return
-  const monaco = await loadMonaco()
-  applyMonacoTheme(monaco)
-  const lang = props.filePath ? getLanguageFromPath(props.filePath) : 'plaintext'
+function resolveLanguage(): string {
+  return props.languageOverride ?? (props.filePath ? getLanguageFromPath(props.filePath) : 'plaintext')
+}
 
-  editorInstance = monaco.editor.create(containerRef.value, {
+function layoutEditor(): void {
+  editorInstance?.layout()
+}
+
+async function mountEditor(): Promise<void> {
+  const container = containerRef.value
+  if (!container) return
+
+  monacoModule = await loadMonaco()
+  applyMonacoTheme(monacoModule)
+
+  editorInstance = monacoModule.editor.create(container, {
     value: props.value,
-    language: lang,
+    language: resolveLanguage(),
     readOnly: props.readOnly ?? true,
     fontSize: 13,
     minimap: { enabled: false },
     scrollBeyondLastLine: false,
-    automaticLayout: true
+    automaticLayout: true,
+    wordWrap: 'off'
   })
 
   editorInstance.onDidChangeModelContent(() => {
-    emit('update:value', editorInstance.getValue())
+    emit('update:value', editorInstance!.getValue())
   })
+
+  resizeObserver = new ResizeObserver(() => layoutEditor())
+  resizeObserver.observe(container)
+
+  themeObserver = new MutationObserver(() => {
+    if (monacoModule) applyMonacoTheme(monacoModule)
+  })
+  themeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['class']
+  })
+}
+
+function destroyEditor(): void {
+  resizeObserver?.disconnect()
+  resizeObserver = null
+  themeObserver?.disconnect()
+  themeObserver = null
+  editorInstance?.dispose()
+  editorInstance = null
+  monacoModule = null
+}
+
+onMounted(() => {
+  void mountEditor()
 })
 
 onUnmounted(() => {
-  editorInstance?.dispose()
+  destroyEditor()
 })
 
 watch(
@@ -56,13 +95,11 @@ watch(
 )
 
 watch(
-  () => props.filePath,
-  async (fp) => {
-    if (!editorInstance || !fp) return
-    const monaco = await loadMonaco()
-    const lang = getLanguageFromPath(fp)
+  () => [props.filePath, props.languageOverride] as const,
+  async () => {
+    if (!editorInstance || !monacoModule) return
     const model = editorInstance.getModel()
-    if (model) monaco.editor.setModelLanguage(model, lang)
+    if (model) monacoModule.editor.setModelLanguage(model, resolveLanguage())
   }
 )
 </script>
@@ -75,5 +112,8 @@ watch(
 .monaco-editor-view {
   width: 100%;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 </style>
