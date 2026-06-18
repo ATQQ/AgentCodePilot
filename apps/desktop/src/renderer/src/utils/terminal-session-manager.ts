@@ -194,8 +194,16 @@ export function disposeTerminalSession(terminalId: string): void {
 
 export function applyThemeToAllTerminalSessions(): void {
   const theme = getXtermTheme()
+  const background = theme.background ?? cssVar('--content-bg')
   for (const session of sessions.values()) {
+    session.wrapper.style.background = background
     session.term.options.theme = theme
+
+    const viewport = session.wrapper.querySelector('.xterm-viewport') as HTMLElement | null
+    const screen = session.wrapper.querySelector('.xterm-screen') as HTMLElement | null
+    if (viewport) viewport.style.backgroundColor = background
+    if (screen) screen.style.backgroundColor = background
+
     session.term.refresh(0, session.term.rows - 1)
   }
 }

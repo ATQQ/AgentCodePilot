@@ -213,6 +213,7 @@ function onFolderCancel(): void {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  background: var(--content-bg);
 }
 
 .tab-bar {
@@ -293,17 +294,20 @@ function onFolderCancel(): void {
   flex: 1;
   overflow: hidden;
   position: relative;
+  background: var(--content-bg);
 }
 
 .tab-content {
   height: 100%;
   overflow: hidden;
+  background: var(--content-bg);
 }
 
 .split-container {
   display: flex;
   height: 100%;
   overflow: hidden;
+  background: var(--content-bg);
 }
 
 .split-pane-left {
@@ -311,6 +315,7 @@ function onFolderCancel(): void {
   overflow: hidden;
   height: 100%;
   min-width: 0;
+  background: var(--content-bg);
 }
 
 .split-pane-left.is-full {
@@ -323,6 +328,7 @@ function onFolderCancel(): void {
   min-width: 0;
   overflow: hidden;
   height: 100%;
+  background: var(--content-bg);
 }
 
 .empty-state {

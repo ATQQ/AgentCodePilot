@@ -60,6 +60,7 @@ defineExpose({ refit })
   width: 100%;
   height: 100%;
   overflow: hidden;
+  background: var(--content-bg);
 }
 
 .terminal-view :deep(.terminal-view-host) {
@@ -69,6 +70,7 @@ defineExpose({ refit })
 
 .terminal-view :deep(.xterm) {
   height: 100%;
+  background: var(--content-bg);
 }
 
 .terminal-view :deep(.xterm-viewport) {
