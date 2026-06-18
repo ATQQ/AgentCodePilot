@@ -51,6 +51,59 @@ export function extractPlanTitle(content: string): string {
   return plain.length > 40 ? `${plain.slice(0, 40)}…` : plain
 }
 
+const PLAN_H1_PATTERN = /^#\s+.+$/gm
+const PLAN_TODO_HEADING = /^##\s+TODO\s*$/im
+const PLAN_CHECKLIST_ITEM = /^- \[[ xX]\]/
+
+function trimTrailingConversationalText(plan: string): string {
+  const todoMatch = plan.match(PLAN_TODO_HEADING)
+  if (!todoMatch || todoMatch.index === undefined) return plan
+
+  const beforeTodo = plan.slice(0, todoMatch.index)
+  const fromTodo = plan.slice(todoMatch.index)
+  const lines = fromTodo.split('\n')
+
+  let lastChecklistLine = 0
+  for (let i = 1; i < lines.length; i++) {
+    if (PLAN_CHECKLIST_ITEM.test(lines[i].trim())) {
+      lastChecklistLine = i
+    }
+  }
+  if (lastChecklistLine === 0) return plan
+
+  let end = lastChecklistLine + 1
+  while (end < lines.length && lines[end].trim() === '') end++
+  if (end >= lines.length) return plan.trimEnd()
+
+  const firstTrailingLine = lines[end].trim()
+  if (
+    /^#/.test(firstTrailingLine) ||
+    PLAN_CHECKLIST_ITEM.test(firstTrailingLine) ||
+    /^[-*]/.test(firstTrailingLine) ||
+    /^```/.test(firstTrailingLine)
+  ) {
+    return plan
+  }
+
+  return (beforeTodo + lines.slice(0, end).join('\n')).trimEnd()
+}
+
+/** Strip multi-turn preamble and trailing chat from a plan-mode assistant reply. */
+export function extractPlanDocument(content: string): string {
+  const trimmed = content.trim()
+  if (!trimmed) return trimmed
+
+  let lastHeadingIndex = -1
+  let match: RegExpExecArray | null
+  while ((match = PLAN_H1_PATTERN.exec(trimmed)) !== null) {
+    lastHeadingIndex = match.index
+  }
+
+  if (lastHeadingIndex < 0) return trimmed
+
+  return trimTrailingConversationalText(trimmed.slice(lastHeadingIndex).trim())
+}
+
 export function generatePlanId(): string {
   return `plan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }

@@ -1,6 +1,7 @@
 import * as repo from '../database/repositories'
 import {
   copyPlanFile,
+  extractPlanDocument,
   extractPlanTitle,
   generatePlanId,
   getScopedPlanFilePath,
@@ -32,7 +33,8 @@ export function savePlanFromAssistantMessage(
   assistantMessageId: string,
   content: string
 ): repo.PlanRow | null {
-  if (!content.trim()) return null
+  const planContent = extractPlanDocument(content)
+  if (!planContent.trim()) return null
   if (repo.getPlanByAssistantMessageId(assistantMessageId)) return null
 
   const messages = repo.getMessagesByConversation(conversationId)
@@ -44,13 +46,13 @@ export function savePlanFromAssistantMessage(
 
   const conv = repo.getConversationById(conversationId)
   const owner = resolvePlanOwnerForConversation(conv)
-  const title = extractPlanTitle(content)
+  const title = extractPlanTitle(planContent)
   const latestPlan = getLatestPlanForConversation(conversationId)
 
   if (latestPlan && !userRequestsNewPlan(prev.content)) {
     writePlanToAllScopes(
       latestPlan.file_path,
-      content,
+      planContent,
       latestPlan.owner_type,
       latestPlan.owner_id,
       latestPlan.id
@@ -67,7 +69,7 @@ export function savePlanFromAssistantMessage(
   const createdAt = new Date().toISOString()
   const filePath = getScopedPlanFilePath('conversation', conversationId, planId)
 
-  writePlanFile(filePath, content)
+  writePlanFile(filePath, planContent)
 
   if (owner.ownerType !== 'conversation') {
     const scopePath = getScopedPlanFilePath(owner.ownerType, owner.ownerId, planId)

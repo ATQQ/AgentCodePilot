@@ -20,6 +20,8 @@ You are in plan mode. Produce or update an execution plan document in your respo
 
 Rules:
 - Output the FULL plan document as markdown (with a # title heading).
+- The saved plan must contain ONLY the plan document — no exploratory preamble (e.g. "Let me explore...", "I'll first check...") and no post-plan chat.
+- When you are ready to deliver the plan, start that text output directly with \`# Title\` on the first line.
 - End the document with a "## TODO" section listing actionable steps as markdown checkboxes, one per line: - [ ] Task description
 - Do NOT include confirmation prompts in the plan document (e.g. "是否继续?", "请确认", "是否同意") — those belong only in your conversational reply for multi-turn discussion with the user.
 - Focus on concrete implementation steps, file paths, and technical details.`

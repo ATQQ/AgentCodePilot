@@ -340,5 +340,15 @@ async function handleCopyPlan(): Promise<void> {
   overflow-y: auto;
   padding: 12px;
   font-size: var(--font-size-sm);
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+
+.plan-preview-content :deep(.markstream-vue),
+.plan-preview-content :deep(.markstream-vue *) {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
 }
 </style>
