@@ -29,8 +29,7 @@ onMounted(async () => {
     fontSize: 13,
     minimap: { enabled: false },
     scrollBeyondLastLine: false,
-    automaticLayout: true,
-    theme: document.documentElement.classList.contains('dark') ? 'app-dark' : 'app-light'
+    automaticLayout: true
   })
 
   editorInstance.onDidChangeModelContent(() => {

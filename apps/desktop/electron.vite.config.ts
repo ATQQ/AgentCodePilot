@@ -32,7 +32,8 @@ export default defineConfig({
       }
     },
     optimizeDeps: {
-      include: ['monaco-editor', 'stream-monaco', 'mermaid', 'katex']
+      exclude: ['monaco-editor'],
+      include: ['stream-monaco', 'mermaid', 'katex']
     },
     worker: {
       format: 'es'

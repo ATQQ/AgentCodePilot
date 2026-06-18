@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import type * as Monaco from 'monaco-editor'
 import { loadMonaco, getLanguageFromPath, applyMonacoTheme } from '@renderer/utils/monaco'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 
@@ -15,13 +16,12 @@ const props = withDefaults(
 
 const settingsStore = useSettingsStore()
 const containerRef = ref<HTMLElement | null>(null)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let editorInstance: any = null
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let monacoRef: any = null
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let currentModels: { original: any; modified: any } | null = null
-let currentLanguage = ''
+
+let monacoModule: typeof Monaco | null = null
+let diffEditor: Monaco.editor.IStandaloneDiffEditor | null = null
+let originalModel: Monaco.editor.ITextModel | null = null
+let modifiedModel: Monaco.editor.ITextModel | null = null
+let language = ''
 let resizeObserver: ResizeObserver | null = null
 let themeObserver: MutationObserver | null = null
 
@@ -32,155 +32,155 @@ const isDark = computed(() => {
   return settingsStore.theme === 'dark'
 })
 
-function disposeModels(): void {
-  currentModels?.original.dispose()
-  currentModels?.modified.dispose()
-  currentModels = null
-  currentLanguage = ''
+function resolveLanguage(): string {
+  return props.filePath ? getLanguageFromPath(props.filePath) : 'plaintext'
 }
 
-function getDiffOptions(): Record<string, unknown> {
-  return {
-    readOnly: true,
-    renderSideBySide: props.sideBySide,
-    useInlineViewWhenSpaceIsLimited: false,
-    renderIndicators: true,
-    ignoreTrimWhitespace: false,
-    diffWordWrap: 'on',
-    fontSize: 12,
-    minimap: { enabled: false },
-    scrollBeyondLastLine: false,
-    automaticLayout: true,
-    originalEditable: false,
-    diffAlgorithm: 'advanced'
-  }
+function disposeModels(): void {
+  originalModel?.dispose()
+  modifiedModel?.dispose()
+  originalModel = null
+  modifiedModel = null
+  language = ''
 }
 
 function layoutEditor(): void {
-  requestAnimationFrame(() => editorInstance?.layout())
+  diffEditor?.layout()
 }
 
-function syncContainerHeight(): void {
-  const host = containerRef.value?.parentElement
-  if (!host || !containerRef.value) return
-  const height = host.clientHeight
-  if (height <= 0) return
+function createModels(): void {
+  if (!monacoModule || !diffEditor) return
 
-  const current = Number.parseFloat(containerRef.value.style.height)
-  if (Number.isFinite(current) && Math.abs(current - height) < 2) {
+  disposeModels()
+  language = resolveLanguage()
+  originalModel = monacoModule.editor.createModel(props.original, language)
+  modifiedModel = monacoModule.editor.createModel(props.modified, language)
+  diffEditor.setModel({ original: originalModel, modified: modifiedModel })
+}
+
+function syncModels(): void {
+  if (!monacoModule || !diffEditor) return
+
+  const nextLanguage = resolveLanguage()
+
+  if (!originalModel || !modifiedModel || language !== nextLanguage) {
+    createModels()
     layoutEditor()
     return
   }
 
-  containerRef.value.style.height = `${height}px`
+  if (originalModel.getValue() !== props.original) {
+    originalModel.setValue(props.original)
+  }
+  if (modifiedModel.getValue() !== props.modified) {
+    modifiedModel.setValue(props.modified)
+  }
   layoutEditor()
 }
 
-function setEditorModels(): void {
-  if (!editorInstance || !monacoRef) return
-
-  const lang = props.filePath ? getLanguageFromPath(props.filePath) : 'plaintext'
-
-  if (currentModels && currentLanguage === lang) {
-    if (currentModels.original.getValue() !== props.original) {
-      currentModels.original.setValue(props.original)
-    }
-    if (currentModels.modified.getValue() !== props.modified) {
-      currentModels.modified.setValue(props.modified)
-    }
-    layoutEditor()
-    return
-  }
-
-  disposeModels()
-  currentLanguage = lang
-  currentModels = {
-    original: monacoRef.editor.createModel(props.original, lang),
-    modified: monacoRef.editor.createModel(props.modified, lang)
-  }
-  editorInstance.setModel(currentModels)
-  syncContainerHeight()
-}
-
 function applyViewMode(): void {
-  if (!editorInstance) return
-  editorInstance.updateOptions({
+  diffEditor?.updateOptions({
     renderSideBySide: props.sideBySide,
     useInlineViewWhenSpaceIsLimited: false
   })
   layoutEditor()
 }
 
-onMounted(async () => {
-  if (!containerRef.value) return
-  const monaco = await loadMonaco()
-  monacoRef = monaco
-  applyMonacoTheme(monaco)
+async function mountEditor(): Promise<void> {
+  const container = containerRef.value
+  if (!container) return
 
-  editorInstance = monaco.editor.createDiffEditor(containerRef.value, getDiffOptions())
-  setEditorModels()
-  syncContainerHeight()
+  monacoModule = await loadMonaco()
+  applyMonacoTheme(monacoModule)
 
-  if (containerRef.value.parentElement) {
-    resizeObserver = new ResizeObserver(() => syncContainerHeight())
-    resizeObserver.observe(containerRef.value.parentElement)
-  }
+  diffEditor = monacoModule.editor.createDiffEditor(container, {
+    readOnly: true,
+    originalEditable: false,
+    renderSideBySide: props.sideBySide,
+    useInlineViewWhenSpaceIsLimited: false,
+    renderIndicators: true,
+    ignoreTrimWhitespace: false,
+    diffWordWrap: 'on',
+    fontSize: 12,
+    lineNumbers: 'on',
+    minimap: { enabled: false },
+    scrollBeyondLastLine: false,
+    automaticLayout: true,
+    diffAlgorithm: 'advanced',
+    hideUnchangedRegions: {
+      enabled: true,
+      minimumLineCount: 3,
+      contextLineCount: 3
+    }
+  })
+
+  createModels()
+  applyViewMode()
+
+  resizeObserver = new ResizeObserver(() => layoutEditor())
+  resizeObserver.observe(container)
 
   themeObserver = new MutationObserver(() => {
-    if (monacoRef) applyMonacoTheme(monacoRef)
+    if (monacoModule) applyMonacoTheme(monacoModule)
   })
   themeObserver.observe(document.documentElement, {
     attributes: true,
     attributeFilter: ['class']
   })
+}
+
+function destroyEditor(): void {
+  resizeObserver?.disconnect()
+  resizeObserver = null
+  themeObserver?.disconnect()
+  themeObserver = null
+  disposeModels()
+  diffEditor?.dispose()
+  diffEditor = null
+  monacoModule = null
+}
+
+onMounted(() => {
+  void mountEditor()
 })
 
 onUnmounted(() => {
-  resizeObserver?.disconnect()
-  themeObserver?.disconnect()
-  disposeModels()
-  editorInstance?.dispose()
+  destroyEditor()
 })
 
 watch(
-  () => [props.original, props.modified, props.filePath],
-  async () => {
-    await nextTick()
-    setEditorModels()
-  },
-  { flush: 'post' }
+  () => [props.original, props.modified, props.filePath] as const,
+  () => syncModels()
 )
 
 watch(
   () => props.sideBySide,
-  () => {
-    applyViewMode()
-  }
+  () => applyViewMode()
 )
 
 watch(isDark, () => {
-  if (monacoRef) applyMonacoTheme(monacoRef)
+  if (monacoModule) applyMonacoTheme(monacoModule)
 })
 </script>
 
 <template>
-  <div ref="containerRef" class="monaco-diff" />
+  <div ref="containerRef" class="monaco-diff-editor" />
 </template>
 
 <style scoped>
-.monaco-diff {
+.monaco-diff-editor {
   width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
-  flex: 1;
+  overflow: hidden;
 }
 
-.monaco-diff :deep(.editor.original) {
+.monaco-diff-editor :deep(.editor.original) {
   border-right: 1px solid var(--sidebar-border);
 }
 
-.monaco-diff :deep(.gutter.monaco-editor) {
+.monaco-diff-editor :deep(.gutter.monaco-editor) {
   background: var(--sidebar-bg);
 }
 </style>

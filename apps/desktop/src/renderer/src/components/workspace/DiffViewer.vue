@@ -179,6 +179,7 @@ watch(
             <template v-else-if="gitStore.selectedFile">
               <div class="diff-editor-host">
                 <MonacoDiffEditor
+                  :key="`${layoutStore.reviewScope}:${gitStore.selectedFile}`"
                   :original="gitStore.diffOriginal"
                   :modified="gitStore.diffModified"
                   :file-path="gitStore.selectedFile"

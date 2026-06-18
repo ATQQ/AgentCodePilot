@@ -1,14 +1,45 @@
 import type * as Monaco from 'monaco-editor'
+import { registerMonacoThemes } from 'stream-monaco'
+import { CODE_BLOCK_MONACO_THEMES, CODE_BLOCK_THEME } from '@renderer/constants/codeBlockTheme'
+import { setupMonacoWorkers } from './monacoWorkers'
+
+const MONACO_LANGUAGES = [
+  'typescript',
+  'javascript',
+  'html',
+  'json',
+  'markdown',
+  'css',
+  'scss',
+  'yaml',
+  'shell',
+  'python',
+  'go',
+  'rust',
+  'java',
+  'sql',
+  'xml',
+  'plaintext'
+] as const
 
 let monacoPromise: Promise<typeof Monaco> | null = null
 let themesDefined = false
 
+export function getMonacoThemeName(isDark = isMonacoDarkTheme()): string {
+  return isDark ? CODE_BLOCK_THEME.dark : CODE_BLOCK_THEME.light
+}
+
 export function loadMonaco(): Promise<typeof Monaco> {
   if (!monacoPromise) {
-    monacoPromise = import('monaco-editor').then((monaco) => {
-      ensureMonacoThemes(monaco)
-      return monaco
-    })
+    setupMonacoWorkers()
+    monacoPromise = registerMonacoThemes(CODE_BLOCK_MONACO_THEMES, [...MONACO_LANGUAGES])
+      .catch(() => undefined)
+      .then(() =>
+        import('monaco-editor').then((monaco) => {
+          ensureMonacoThemes(monaco)
+          return monaco
+        })
+      )
   }
   return monacoPromise
 }
@@ -21,7 +52,7 @@ export function ensureMonacoThemes(monaco: typeof Monaco): void {
   if (themesDefined) return
   themesDefined = true
 
-  monaco.editor.defineTheme('app-light', {
+  monaco.editor.defineTheme(CODE_BLOCK_THEME.light, {
     base: 'vs',
     inherit: true,
     rules: [],
@@ -35,7 +66,7 @@ export function ensureMonacoThemes(monaco: typeof Monaco): void {
     }
   })
 
-  monaco.editor.defineTheme('app-dark', {
+  monaco.editor.defineTheme(CODE_BLOCK_THEME.dark, {
     base: 'vs-dark',
     inherit: true,
     rules: [],
@@ -52,7 +83,7 @@ export function ensureMonacoThemes(monaco: typeof Monaco): void {
 
 export function applyMonacoTheme(monaco: typeof Monaco): void {
   ensureMonacoThemes(monaco)
-  monaco.editor.setTheme(isMonacoDarkTheme() ? 'app-dark' : 'app-light')
+  monaco.editor.setTheme(getMonacoThemeName())
 }
 
 export function getLanguageFromPath(filePath: string): string {
@@ -62,18 +93,31 @@ export function getLanguageFromPath(filePath: string): string {
     tsx: 'typescript',
     js: 'javascript',
     jsx: 'javascript',
+    mjs: 'javascript',
+    cjs: 'javascript',
     vue: 'html',
     json: 'json',
     md: 'markdown',
+    mdx: 'markdown',
     css: 'css',
     scss: 'scss',
+    less: 'less',
     html: 'html',
+    htm: 'html',
     yaml: 'yaml',
     yml: 'yaml',
     sh: 'shell',
+    bash: 'shell',
+    zsh: 'shell',
     py: 'python',
     go: 'go',
-    rs: 'rust'
+    rs: 'rust',
+    java: 'java',
+    kt: 'kotlin',
+    sql: 'sql',
+    xml: 'xml',
+    toml: 'toml',
+    ini: 'ini'
   }
   return map[ext] ?? 'plaintext'
 }
