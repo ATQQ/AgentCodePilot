@@ -1,0 +1,22 @@
+export {
+  BUILTIN_EXTERNAL_APPS,
+  DEFAULT_EXTERNAL_APPS_SETTINGS,
+  REVEAL_APP,
+  REVEAL_APP_ID,
+  mergeExternalApps,
+  findExternalAppById,
+  getSelectableExternalApps,
+  getDefaultExternalAppsForSettings,
+  getExternalAppProtocolHint,
+  getBuiltinReferenceApps,
+  buildProtocolUrl,
+  getPlatformBuiltinApps,
+  resolveDefaultAppId,
+  isWindowsPlatform,
+  type ExternalAppDefinition,
+  type CustomExternalApp,
+  type ExternalAppsSettings,
+  type ExternalAppKind,
+  type OpenPathResult,
+  type OpenPathErrorCode
+} from '../../../shared/externalApps'

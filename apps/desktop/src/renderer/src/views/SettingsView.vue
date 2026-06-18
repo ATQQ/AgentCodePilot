@@ -4,10 +4,11 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import type { ThemeMode } from '@renderer/types'
-import { ArrowLeft, Bell, Brush, Document, Cpu, MagicStick } from '@element-plus/icons-vue'
+import { ArrowLeft, Bell, Brush, Document, Cpu, MagicStick, FolderOpened } from '@element-plus/icons-vue'
 import ArchivedConversationsSection from '@renderer/components/settings/ArchivedConversationsSection.vue'
 import AgentSettingsSection from '@renderer/components/settings/AgentSettingsSection.vue'
 import AiPromptsSettingsSection from '@renderer/components/settings/AiPromptsSettingsSection.vue'
+import ExternalAppsSettingsSection from '@renderer/components/settings/ExternalAppsSettingsSection.vue'
 // TODO: 恢复未实现设置项时取消注释
 // import {
 //   Setting,
@@ -33,7 +34,7 @@ const activeSection = ref('appearance')
 watch(
   () => route.query.section,
   (section) => {
-    if (typeof section === 'string' && (section === 'appearance' || section === 'notifications' || section === 'archived' || section === 'agents' || section === 'aiFeatures')) {
+    if (typeof section === 'string' && (section === 'appearance' || section === 'notifications' || section === 'archived' || section === 'agents' || section === 'aiFeatures' || section === 'externalApps')) {
       activeSection.value = section
     }
   },
@@ -68,7 +69,8 @@ const navGroups: NavGroup[] = [
     titleKey: 'settings.integration',
     items: [
       { key: 'agents', labelKey: 'settings.agentConfig.title', icon: Cpu },
-      { key: 'aiFeatures', labelKey: 'settings.aiFeatures.title', icon: MagicStick }
+      { key: 'aiFeatures', labelKey: 'settings.aiFeatures.title', icon: MagicStick },
+      { key: 'externalApps', labelKey: 'settings.externalApps.title', icon: FolderOpened }
     ]
   },
   {
@@ -253,6 +255,8 @@ function goBack(): void {
         </div>
 
         <AiPromptsSettingsSection v-else-if="activeSection === 'aiFeatures'" />
+
+        <ExternalAppsSettingsSection v-else-if="activeSection === 'externalApps'" />
 
         <ArchivedConversationsSection v-else-if="activeSection === 'archived'" />
 

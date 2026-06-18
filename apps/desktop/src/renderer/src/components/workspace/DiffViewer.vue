@@ -23,11 +23,17 @@ const treeCollapsed = ref(false)
 const treeFilter = ref('')
 
 const scopeOptions = computed(() => {
-  const unstagedCount = gitStore.changedFilesByScope.unstaged.length
-  const stagedCount = gitStore.changedFilesByScope.staged.length
+  const formatScopeLabel = (base: string, scope: GitDiffScope): string => {
+    if (gitStore.isFilesLoading(scope) && !gitStore.scopeLoaded[scope]) {
+      return `${base} …`
+    }
+    if (!gitStore.scopeLoaded[scope]) return base
+    const count = gitStore.changedFilesByScope[scope].length
+    return `${base} ${count}`
+  }
   return [
-    { value: 'unstaged' as GitDiffScope, label: `未暂存${unstagedCount ? ` ${unstagedCount}` : ''}` },
-    { value: 'staged' as GitDiffScope, label: `已暂存${stagedCount ? ` ${stagedCount}` : ''}` }
+    { value: 'unstaged' as GitDiffScope, label: formatScopeLabel('未暂存', 'unstaged') },
+    { value: 'staged' as GitDiffScope, label: formatScopeLabel('已暂存', 'staged') }
   ]
 })
 
@@ -86,9 +92,18 @@ function onCloseAll(): void {
 }
 
 watch(
+  () => panelContext.effectivePanelCwd,
+  (cwd) => {
+    if (!cwd) return
+    void gitStore.loadAllChangedFiles()
+  },
+  { immediate: true }
+)
+
+watch(
   () => layoutStore.reviewScope,
   (scope) => {
-    void gitStore.loadChangedFiles(scope)
+    gitStore.applyScope(scope)
   },
   { immediate: true }
 )

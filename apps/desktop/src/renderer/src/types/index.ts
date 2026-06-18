@@ -13,6 +13,11 @@ export type {
   PlanOwnerType,
   FilePreviewSettings,
   AiPromptsSettings,
+  ExternalAppsSettings,
+  ExternalAppDefinition,
+  ExternalAppKind,
+  CustomExternalApp,
+  OpenPathResult,
   AgentUtilityPayload
 } from '../../../preload/types'
 

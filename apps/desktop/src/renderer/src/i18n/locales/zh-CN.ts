@@ -191,7 +191,35 @@ export default {
       saving: '保存中…'
     },
     language: '语言',
-    zhCN: '简体中文'
+    zhCN: '简体中文',
+    externalApps: {
+      title: '外部打开方式',
+      desc: '配置环境信息中「本地」目录的默认打开方式，以及自定义 URL 协议。',
+      defaultTitle: '默认打开方式',
+      defaultDesc: '点击「打开」按钮时直接使用所选应用；下拉菜单中仍可切换其它应用。',
+      builtin: '内置',
+      customTitle: '自定义协议',
+      customDesc: '协议模板需包含 {path} 占位符，例如 myapp://open?folder={path}',
+      builtinHint: '已内置：{apps}',
+      builtinProtocolsTitle: '内置打开方式',
+      builtinProtocolsDesc: '以下为内置应用的协议或打开方式，供参考确认。',
+      protocolHintReveal: '系统文件管理器（showItemInFolder）',
+      protocolHintTerminal: '系统终端（macOS Terminal / Windows cmd）',
+      namePlaceholder: '显示名称',
+      protocolPlaceholder: '例如 myapp://open?folder={path}',
+      add: '添加',
+      remove: '删除'
+    }
+  },
+  env: {
+    open: '打开',
+    openMenu: '选择打开方式',
+    defaultApp: '默认',
+    revealInFolder: '打开所在文件夹',
+    copyBranch: '复制分支名',
+    copied: '已复制',
+    openFailed: '打开失败',
+    openFailedNotInstalled: '未安装 {app}，无法打开'
   },
   archived: {
     searchPlaceholder: '搜索已归档聊天',

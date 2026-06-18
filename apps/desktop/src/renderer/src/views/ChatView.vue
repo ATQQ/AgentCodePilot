@@ -15,7 +15,7 @@ import MessageAttachmentImage from '@renderer/components/chat/MessageAttachmentI
 import claudeIcon from '@renderer/assets/claude-icon.svg'
 import codexIcon from '@renderer/assets/codex-icon.svg'
 import { CODE_BLOCK_PROPS } from '@renderer/constants/codeBlockTheme'
-import cursorIcon from '@renderer/assets/cursor-icon.svg'
+import cursorIcon from '@renderer/assets/external-apps/cursor.svg'
 import type { Attachment, PlanReference } from '@renderer/types'
 import { useLayoutStore } from '@renderer/stores/layout.store'
 import { usePlanStore } from '@renderer/stores/plan.store'

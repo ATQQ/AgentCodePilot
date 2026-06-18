@@ -1,4 +1,7 @@
-import type { AiPromptsSettings, FilePreviewSettings } from '../../preload/types'
+import type { AiPromptsSettings, ExternalAppsSettings, FilePreviewSettings } from '../../preload/types'
+import { DEFAULT_EXTERNAL_APPS_SETTINGS, REVEAL_APP_ID } from '../../shared/externalApps'
+
+const LEGACY_DEFAULT_APP_IDS = new Set(['finder', 'explorer'])
 
 export const DEFAULT_TEXT_EXTENSIONS = [
   'txt', 'md', 'markdown', 'json', 'js', 'jsx', 'ts', 'tsx', 'vue', 'css', 'scss', 'less',
@@ -46,4 +49,24 @@ export function parseFilePreviewSetting(raw: string | undefined): FilePreviewSet
 
 export function parseAiPromptsSetting(raw: string | undefined): AiPromptsSettings {
   return parseJsonSetting(raw, DEFAULT_AI_PROMPTS)
+}
+
+export function parseExternalAppsSetting(raw: string | undefined): ExternalAppsSettings {
+  const parsed = parseJsonSetting<ExternalAppsSettings>(raw, DEFAULT_EXTERNAL_APPS_SETTINGS)
+  const defaultAppId = LEGACY_DEFAULT_APP_IDS.has(parsed.defaultAppId)
+    ? REVEAL_APP_ID
+    : parsed.defaultAppId || DEFAULT_EXTERNAL_APPS_SETTINGS.defaultAppId
+  return {
+    defaultAppId,
+    customApps: Array.isArray(parsed.customApps)
+      ? parsed.customApps.filter(
+          (app) =>
+            app &&
+            typeof app.id === 'string' &&
+            typeof app.name === 'string' &&
+            typeof app.protocol === 'string' &&
+            app.protocol.includes('{path}')
+        )
+      : []
+  }
 }

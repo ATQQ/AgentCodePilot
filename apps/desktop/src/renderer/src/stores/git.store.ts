@@ -185,13 +185,14 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
+  async function loadAllChangedFiles(): Promise<void> {
+    await Promise.all([loadChangedFiles('unstaged'), loadChangedFiles('staged')])
+    applyScope(layoutStore.reviewScope)
+  }
+
   async function refreshAllScopes(): Promise<void> {
     markScopesStale()
-    await Promise.all([
-      loadChangedFiles('unstaged'),
-      loadChangedFiles('staged')
-    ])
-    applyScope(layoutStore.reviewScope)
+    await loadAllChangedFiles()
   }
 
   async function loadDiffForSelection(): Promise<void> {
@@ -408,8 +409,7 @@ export const useGitStore = defineStore('git', () => {
       resetScopeCaches()
       void refreshStatus().then(async () => {
         if (!panelContext.effectivePanelCwd) return
-        applyScope(layoutStore.reviewScope)
-        await loadChangedFiles(layoutStore.reviewScope)
+        await loadAllChangedFiles()
         await loadDiffForSelection()
       })
     }
@@ -433,6 +433,7 @@ export const useGitStore = defineStore('git', () => {
     applyScope,
     refreshStatus,
     loadChangedFiles,
+    loadAllChangedFiles,
     loadDiff,
     loadDiffForSelection,
     changedFilesByScope,

@@ -20,7 +20,9 @@ import type {
   WorkspacePayload,
   SendMessagePayload,
   SettingsInfo,
-  SettingsPayload
+  SettingsPayload,
+  OpenPathPayload,
+  OpenPathResult
 } from '../preload/types'
 import { agentRegistry, initializeAgentRegistry } from './runtime'
 import { supervisedRun, supervisedStop } from './runtime/supervisor'
@@ -60,8 +62,10 @@ import {
 import { runUtilityAgent } from './runtime/utility-agent'
 import {
   parseFilePreviewSetting,
-  parseAiPromptsSetting
+  parseAiPromptsSetting,
+  parseExternalAppsSetting
 } from './settings/defaults'
+import { openPathWithApp } from './shell/open-external-app'
 import type { GitDiffScope } from '../preload/types'
 import {
   listDirectory,
@@ -203,7 +207,8 @@ function getSettingsFromDb(): SettingsInfo {
     language: all['language'] || 'zh-CN',
     permissionNotificationsEnabled: all['permissionNotificationsEnabled'] !== 'false',
     filePreview: parseFilePreviewSetting(all['filePreview']),
-    aiPrompts: parseAiPromptsSetting(all['aiPrompts'])
+    aiPrompts: parseAiPromptsSetting(all['aiPrompts']),
+    externalApps: parseExternalAppsSetting(all['externalApps'])
   }
 }
 
@@ -585,6 +590,18 @@ function registerIpcHandlers(): void {
     if (payload.aiPrompts) {
       repo.setSetting('aiPrompts', JSON.stringify(payload.aiPrompts))
     }
+    if (payload.externalApps) {
+      repo.setSetting('externalApps', JSON.stringify(payload.externalApps))
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SHELL_OPEN_PATH, async (_e, payload: OpenPathPayload): Promise<OpenPathResult> => {
+    return openPathWithApp({
+      path: payload.path,
+      kind: payload.kind,
+      protocol: payload.protocol,
+      appName: payload.appName
+    })
   })
 
   // --- Gateway ---

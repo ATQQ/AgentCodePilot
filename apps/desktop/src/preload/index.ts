@@ -16,7 +16,8 @@ import type {
   TerminalDataEvent,
   TerminalExitEvent,
   PlansListPayload,
-  PlanDetail
+  PlanDetail,
+  OpenPathPayload
 } from './types'
 import { IPC_CHANNELS } from './types'
 
@@ -165,6 +166,9 @@ const agentAPI = {
   plans: {
     list: (payload: PlansListPayload) => ipcRenderer.invoke(IPC_CHANNELS.PLANS_LIST, payload),
     get: (planId: string) => ipcRenderer.invoke(IPC_CHANNELS.PLANS_GET, planId) as Promise<PlanDetail | null>
+  },
+  shell: {
+    openPath: (payload: OpenPathPayload) => ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_PATH, payload)
   }
 }
 

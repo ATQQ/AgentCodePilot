@@ -59,7 +59,8 @@ export const IPC_CHANNELS = {
   TERMINAL_DATA: 'terminal:data',
   TERMINAL_EXIT: 'terminal:exit',
   PLANS_LIST: 'plans:list',
-  PLANS_GET: 'plans:get'
+  PLANS_GET: 'plans:get',
+  SHELL_OPEN_PATH: 'shell:openPath'
 } as const
 
 export interface FileAttachmentPayload {
@@ -110,6 +111,7 @@ export interface SettingsPayload {
   permissionNotificationsEnabled?: boolean
   filePreview?: FilePreviewSettings
   aiPrompts?: AiPromptsSettings
+  externalApps?: ExternalAppsSettings
 }
 
 export interface FilePreviewSettings {
@@ -120,6 +122,42 @@ export interface FilePreviewSettings {
 export interface AiPromptsSettings {
   commitMessage?: string
   autoCommit?: string
+}
+
+export type ExternalAppKind = 'finder' | 'protocol' | 'terminal' | 'reveal'
+
+export interface CustomExternalApp {
+  id: string
+  name: string
+  protocol: string
+}
+
+export interface ExternalAppsSettings {
+  defaultAppId: string
+  customApps: CustomExternalApp[]
+}
+
+export interface ExternalAppDefinition {
+  id: string
+  name: string
+  kind: ExternalAppKind
+  protocol?: string
+  builtin: boolean
+}
+
+export interface OpenPathPayload {
+  path: string
+  kind: ExternalAppKind
+  protocol?: string
+  appName?: string
+}
+
+export type OpenPathErrorCode = 'NOT_INSTALLED' | 'PATH_NOT_FOUND' | 'INVALID_PROTOCOL' | 'UNKNOWN'
+
+export interface OpenPathResult {
+  success: boolean
+  error?: OpenPathErrorCode
+  message?: string
 }
 
 export interface AgentUtilityPayload {
@@ -313,6 +351,7 @@ export interface SettingsInfo {
   permissionNotificationsEnabled: boolean
   filePreview: FilePreviewSettings
   aiPrompts: AiPromptsSettings
+  externalApps: ExternalAppsSettings
 }
 
 export interface TokenUsage {
@@ -456,5 +495,8 @@ export interface AgentAPI {
   plans: {
     list: (payload: PlansListPayload) => Promise<PlanInfo[]>
     get: (planId: string) => Promise<PlanDetail | null>
+  }
+  shell: {
+    openPath: (payload: OpenPathPayload) => Promise<OpenPathResult>
   }
 }

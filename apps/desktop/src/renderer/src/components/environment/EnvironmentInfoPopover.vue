@@ -1,13 +1,21 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useGitStore } from '@renderer/stores/git.store'
 import { useLayoutStore } from '@renderer/stores/layout.store'
 import { usePanelContextStore } from '@renderer/stores/panelContext.store'
+import { useSettingsStore } from '@renderer/stores/settings.store'
+import OpenPathMenu from './OpenPathMenu.vue'
+
+const { t } = useI18n()
 const gitStore = useGitStore()
 const layoutStore = useLayoutStore()
 const panelContext = usePanelContextStore()
+const settingsStore = useSettingsStore()
 
 const popoverRef = ref<HTMLElement | null>(null)
+const branchCopied = ref(false)
+let branchCopiedTimer: ReturnType<typeof setTimeout> | null = null
 
 function handleChangesClick(): void {
   if (!gitStore.status?.isRepo) return
@@ -21,6 +29,17 @@ function handleCommitClick(): void {
   layoutStore.envInfoVisible = false
 }
 
+async function copyBranch(): Promise<void> {
+  const branch = gitStore.status?.branch
+  if (!branch) return
+  await navigator.clipboard.writeText(branch)
+  branchCopied.value = true
+  if (branchCopiedTimer) clearTimeout(branchCopiedTimer)
+  branchCopiedTimer = setTimeout(() => {
+    branchCopied.value = false
+  }, 1500)
+}
+
 function onClickOutside(e: MouseEvent): void {
   if (!layoutStore.envInfoVisible) return
   const target = e.target as Node
@@ -32,12 +51,14 @@ function onClickOutside(e: MouseEvent): void {
 
 onMounted(() => {
   gitStore.startPolling()
+  void settingsStore.fetchSettings()
   document.addEventListener('mousedown', onClickOutside)
 })
 
 onUnmounted(() => {
   gitStore.stopPolling()
   document.removeEventListener('mousedown', onClickOutside)
+  if (branchCopiedTimer) clearTimeout(branchCopiedTimer)
 })
 </script>
 
@@ -76,14 +97,36 @@ onUnmounted(() => {
           <span class="env-value muted">不是 Git 仓库</span>
         </div>
 
-        <div class="env-row">
-          <span class="env-label">本地</span>
-          <span class="env-value muted">{{ panelContext.effectivePanelCwd.split('/').pop() || '本地' }}</span>
+        <div class="env-row env-row-local">
+          <div class="env-local-main">
+            <span class="env-label">本地</span>
+            <span class="env-value muted env-folder-name" :title="panelContext.effectivePanelCwd">
+              {{ panelContext.effectivePanelCwd.split('/').pop() || '本地' }}
+            </span>
+          </div>
+          <OpenPathMenu :path="panelContext.effectivePanelCwd" />
         </div>
 
         <div v-if="gitStore.status.isRepo" class="env-row">
           <span class="env-label">分支</span>
-          <span class="env-value">{{ gitStore.status.branch || '—' }}</span>
+          <span class="env-value env-branch-value">
+            <span class="branch-name">{{ gitStore.status.branch || '—' }}</span>
+            <button
+              v-if="gitStore.status.branch"
+              class="icon-btn copy-btn"
+              type="button"
+              :title="branchCopied ? t('env.copied') : t('env.copyBranch')"
+              @click="copyBranch"
+            >
+              <svg v-if="!branchCopied" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="5" y="5" width="8" height="8" rx="1.5" />
+                <path d="M5 10.5H4a1.5 1.5 0 0 1-1.5-1.5V4A1.5 1.5 0 0 1 4 2.5h5A1.5 1.5 0 0 1 10.5 4V5" />
+              </svg>
+              <svg v-else width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M4 8.5l2.5 2.5L12 5" />
+              </svg>
+            </button>
+          </span>
         </div>
 
         <div v-if="gitStore.status.isRepo" class="env-row">
@@ -149,12 +192,36 @@ onUnmounted(() => {
   cursor: pointer;
 }
 
+.icon-btn:hover:not(:disabled) {
+  background: var(--sidebar-item-hover);
+  color: var(--content-text);
+}
+
 .env-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 6px 0;
   font-size: var(--font-size-sm);
+  gap: 8px;
+}
+
+.env-row-local {
+  align-items: flex-start;
+}
+
+.env-local-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.env-folder-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .env-row-clickable {
@@ -177,6 +244,24 @@ onUnmounted(() => {
 
 .env-value {
   color: var(--content-text);
+}
+
+.env-branch-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.branch-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+}
+
+.copy-btn {
+  flex-shrink: 0;
 }
 
 .muted {

@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useAgentStore } from '@renderer/stores/agent.store'
 import claudeIcon from '@renderer/assets/claude-icon.svg'
 import codexIcon from '@renderer/assets/codex-icon.svg'
-import cursorIcon from '@renderer/assets/cursor-icon.svg'
+import cursorIcon from '@renderer/assets/external-apps/cursor.svg'
 
 const props = withDefaults(
   defineProps<{ compact?: boolean }>(),

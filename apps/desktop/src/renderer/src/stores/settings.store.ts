@@ -1,10 +1,18 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
-import type { ThemeMode, ApprovalLevel, FilePreviewSettings, AiPromptsSettings } from '@renderer/types'
+import type { ThemeMode, ApprovalLevel, FilePreviewSettings, AiPromptsSettings, ExternalAppsSettings } from '@renderer/types'
 import {
   DEFAULT_FILE_PREVIEW,
   DEFAULT_AI_PROMPTS
 } from '@renderer/constants/defaults'
+import {
+  DEFAULT_EXTERNAL_APPS_SETTINGS,
+  findExternalAppById,
+  mergeExternalApps,
+  resolveDefaultAppId
+} from '@renderer/constants/externalApps'
+import type { ExternalAppDefinition } from '@renderer/types'
+import { isWindowsPlatform } from '@renderer/utils/externalAppIcons'
 
 function getEffectiveTheme(mode: ThemeMode): 'light' | 'dark' {
   if (mode === 'system') {
@@ -34,6 +42,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const permissionNotificationsEnabled = ref(true)
   const filePreview = ref<FilePreviewSettings>({ ...DEFAULT_FILE_PREVIEW })
   const aiPrompts = ref<AiPromptsSettings>({ ...DEFAULT_AI_PROMPTS })
+  const externalApps = ref<ExternalAppsSettings>({ ...DEFAULT_EXTERNAL_APPS_SETTINGS })
 
   applyThemeToDOM(theme.value)
 
@@ -55,6 +64,7 @@ export const useSettingsStore = defineStore('settings', () => {
     permissionNotificationsEnabled.value = settings.permissionNotificationsEnabled
     filePreview.value = settings.filePreview
     aiPrompts.value = settings.aiPrompts
+    externalApps.value = settings.externalApps
     applyThemeToDOM(settings.theme)
   }
 
@@ -83,6 +93,56 @@ export const useSettingsStore = defineStore('settings', () => {
     await window.agentAPI.settings.update({ aiPrompts: value })
   }
 
+  async function setExternalApps(value: ExternalAppsSettings): Promise<void> {
+    externalApps.value = value
+    await window.agentAPI.settings.update({ externalApps: value })
+  }
+
+  async function addCustomExternalApp(name: string, protocol: string): Promise<void> {
+    const trimmedName = name.trim()
+    const trimmedProtocol = protocol.trim()
+    if (!trimmedName || !trimmedProtocol.includes('{path}')) return
+    const id = `custom-${Date.now()}`
+    await setExternalApps({
+      ...externalApps.value,
+      customApps: [...externalApps.value.customApps, { id, name: trimmedName, protocol: trimmedProtocol }]
+    })
+  }
+
+  async function removeCustomExternalApp(id: string): Promise<void> {
+    const nextCustom = externalApps.value.customApps.filter((app) => app.id !== id)
+    const nextDefault =
+      externalApps.value.defaultAppId === id
+        ? DEFAULT_EXTERNAL_APPS_SETTINGS.defaultAppId
+        : externalApps.value.defaultAppId
+    await setExternalApps({
+      defaultAppId: nextDefault,
+      customApps: nextCustom
+    })
+  }
+
+  async function setDefaultExternalApp(appId: string): Promise<void> {
+    await setExternalApps({ ...externalApps.value, defaultAppId: appId })
+  }
+
+  function getRuntimePlatform(): NodeJS.Platform {
+    const platform = window.electron?.process?.platform
+    if (platform === 'win32' || platform === 'darwin' || platform === 'linux') return platform
+    return isWindowsPlatform() ? 'win32' : 'darwin'
+  }
+
+  function getResolvedDefaultAppId(): string {
+    return resolveDefaultAppId(externalApps.value, getRuntimePlatform())
+  }
+
+  function getMergedExternalApps(): ExternalAppDefinition[] {
+    return mergeExternalApps(externalApps.value.customApps, getRuntimePlatform())
+  }
+
+  function findAppById(appId: string): ExternalAppDefinition | undefined {
+    return findExternalAppById(appId, externalApps.value, getRuntimePlatform())
+  }
+
   async function addTextExtension(ext: string): Promise<void> {
     const normalized = ext.trim().replace(/^\./, '').toLowerCase()
     if (!normalized || filePreview.value.textExtensions.includes(normalized)) return
@@ -108,12 +168,20 @@ export const useSettingsStore = defineStore('settings', () => {
     permissionNotificationsEnabled,
     filePreview,
     aiPrompts,
+    externalApps,
     fetchSettings,
     setTheme,
     setApprovalLevel,
     setPermissionNotificationsEnabled,
     setFilePreview,
     setAiPrompts,
+    setExternalApps,
+    addCustomExternalApp,
+    removeCustomExternalApp,
+    setDefaultExternalApp,
+    getMergedExternalApps,
+    getResolvedDefaultAppId,
+    findAppById,
     addTextExtension,
     extensionsToText,
     textToExtensions
