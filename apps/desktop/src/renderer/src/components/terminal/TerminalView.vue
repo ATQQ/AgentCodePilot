@@ -31,7 +31,10 @@ onUnmounted(() => {
   detachTerminalSession(props.terminalId)
 })
 
-watch(() => settingsStore.theme, applyThemeToAllTerminalSessions)
+watch(
+  () => settingsStore.theme,
+  () => nextTick(() => applyThemeToAllTerminalSessions())
+)
 
 watch(
   () => props.active,
@@ -79,6 +82,7 @@ defineExpose({ refit })
 
 .terminal-view :deep(.xterm-screen) {
   background-color: var(--content-bg) !important;
+  overflow: hidden;
 }
 
 .terminal-view :deep(.xterm-rows) {

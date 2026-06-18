@@ -192,18 +192,28 @@ export function disposeTerminalSession(terminalId: string): void {
   sessions.delete(terminalId)
 }
 
+function resetViewportScroll(viewport: HTMLElement): void {
+  const scrollTop = viewport.scrollTop
+  viewport.style.overflowY = 'hidden'
+  void viewport.offsetHeight
+  viewport.style.removeProperty('overflow-y')
+  viewport.scrollTop = scrollTop
+}
+
 export function applyThemeToAllTerminalSessions(): void {
   const theme = getXtermTheme()
-  const background = theme.background ?? cssVar('--content-bg')
   for (const session of sessions.values()) {
-    session.wrapper.style.background = background
+    session.wrapper.style.background = 'var(--content-bg)'
     session.term.options.theme = theme
+    session.term.refresh(0, session.term.rows - 1)
 
     const viewport = session.wrapper.querySelector('.xterm-viewport') as HTMLElement | null
     const screen = session.wrapper.querySelector('.xterm-screen') as HTMLElement | null
-    if (viewport) viewport.style.backgroundColor = background
-    if (screen) screen.style.backgroundColor = background
-
-    session.term.refresh(0, session.term.rows - 1)
+    if (screen) {
+      screen.style.overflow = 'hidden'
+    }
+    if (viewport) {
+      resetViewportScroll(viewport)
+    }
   }
 }

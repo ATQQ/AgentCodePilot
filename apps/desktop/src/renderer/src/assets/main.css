@@ -120,6 +120,12 @@ html.dark .el-popper.is-light .el-popper__arrow::before {
   background: color-mix(in srgb, var(--scroll-thumb, var(--content-text-tertiary)) 55%, transparent);
 }
 
+/* xterm — only viewport scrolls; screen must not show a second OS scrollbar */
+.xterm .xterm-screen {
+  overflow: hidden;
+  width: 100% !important;
+}
+
 /* xterm viewport — replace OS scrollbar (uses CSS vars, updates on theme switch) */
 .xterm .xterm-viewport {
   overflow-y: auto !important;
