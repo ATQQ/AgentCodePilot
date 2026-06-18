@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import SideTreeFolderBtn from './SideTreeFolderBtn.vue'
-
 withDefaults(
   defineProps<{
     width?: number
@@ -8,10 +6,6 @@ withDefaults(
   }>(),
   { overlay: false }
 )
-
-const emit = defineEmits<{
-  collapse: []
-}>()
 </script>
 
 <template>
@@ -22,7 +16,6 @@ const emit = defineEmits<{
   >
     <div class="side-tree-header">
       <slot name="header" />
-      <SideTreeFolderBtn title="收起文件树" @click="emit('collapse')" />
     </div>
     <div class="side-tree-body elegant-scroll">
       <slot />
@@ -54,7 +47,7 @@ const emit = defineEmits<{
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 8px;
+  padding: 6px 40px 6px 8px;
   border-bottom: 1px solid var(--sidebar-border);
   flex-shrink: 0;
 }

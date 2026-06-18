@@ -33,10 +33,10 @@ interface TabDef {
 
 const tabs: TabDef[] = [
   { id: 'review', label: '审查', icon: 'review' },
-  { id: 'terminal', label: '终端', icon: 'terminal' },
-  { id: 'browser', label: '浏览器', icon: 'browser' },
   { id: 'files', label: '文件', icon: 'files' },
-  { id: 'plans', label: t('plans.tabLabel'), icon: 'plans' }
+  { id: 'plans', label: t('plans.tabLabel'), icon: 'plans' },
+  { id: 'browser', label: '浏览器', icon: 'browser' },
+  { id: 'terminal', label: '终端', icon: 'terminal' }
 ]
 
 const isTerminalTab = computed(() => layoutStore.activeExtensionTab === 'terminal')
@@ -44,7 +44,7 @@ const isTerminalTab = computed(() => layoutStore.activeExtensionTab === 'termina
 
 <template>
   <div class="extension-panel">
-    <div class="tab-bar">
+    <div class="tab-bar elegant-scroll">
       <button
         v-for="tab in tabs"
         :key="tab.id"
@@ -130,6 +130,10 @@ const isTerminalTab = computed(() => layoutStore.activeExtensionTab === 'termina
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-app-region: no-drag;
+  /* Keep horizontal scrollbar from shifting tab buttons vertically */
+  padding-bottom: 4px;
+  margin-bottom: -4px;
+  box-sizing: border-box;
 }
 
 .tab-btn {

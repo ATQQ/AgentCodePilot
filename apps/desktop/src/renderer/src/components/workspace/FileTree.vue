@@ -8,7 +8,7 @@ import { getFileLanguageIconHtml } from '@renderer/utils/fileLanguageIcon'
 import { FileTreeNode } from './FileTreeNode'
 import EditorFileTabs from './EditorFileTabs.vue'
 import SideTreePanel from './SideTreePanel.vue'
-import SideTreeExpandBtn from './SideTreeExpandBtn.vue'
+import SideTreeFolderBtn from './SideTreeFolderBtn.vue'
 
 const FilePreviewComp = defineAsyncComponent(
   () => import('./FilePreview.vue')
@@ -83,7 +83,11 @@ function onCloseAll(): void {
     <template v-else>
       <div class="ft-body">
         <div class="main-pane">
-          <SideTreeExpandBtn v-if="treeCollapsed" @expand="treeCollapsed = false" />
+          <SideTreeFolderBtn
+            :title="treeCollapsed ? '展开文件树' : '收起文件树'"
+            floating
+            @click="treeCollapsed = !treeCollapsed"
+          />
 
           <EditorFileTabs
             :tabs="fileStore.openTabs"
@@ -105,7 +109,7 @@ function onCloseAll(): void {
           </div>
         </div>
 
-        <SideTreePanel v-if="!treeCollapsed" overlay @collapse="treeCollapsed = true">
+        <SideTreePanel v-if="!treeCollapsed" overlay>
           <template #header>
             <input
               v-model="fileStore.filter"

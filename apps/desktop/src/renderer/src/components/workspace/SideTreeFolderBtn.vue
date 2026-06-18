@@ -38,17 +38,25 @@ defineEmits<{
   cursor: pointer;
   flex-shrink: 0;
   box-shadow: var(--shadow-sm);
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .side-tree-folder-btn.floating {
   position: absolute;
   top: 8px;
   right: 8px;
-  z-index: 4;
+  z-index: 6;
 }
 
 .side-tree-folder-btn:hover {
   background: var(--sidebar-item-hover);
   color: var(--content-text);
+}
+
+.side-tree-folder-btn:active {
+  border-width: 1px;
+  padding: 0;
+  transform: none;
 }
 </style>
