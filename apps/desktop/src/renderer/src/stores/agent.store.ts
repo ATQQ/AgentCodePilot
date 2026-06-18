@@ -20,5 +20,9 @@ export const useAgentStore = defineStore('agent', () => {
     selectedAgentId.value = id
   }
 
-  return { agents, selectedAgentId, currentAgent, fetchAgents, selectAgent }
+  function getAgentName(id: string): string {
+    return agents.value.find((a) => a.id === id)?.name ?? id
+  }
+
+  return { agents, selectedAgentId, currentAgent, fetchAgents, selectAgent, getAgentName }
 })

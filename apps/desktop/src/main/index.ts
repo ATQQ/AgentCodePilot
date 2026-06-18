@@ -88,7 +88,10 @@ registerLocalFileScheme()
 
 let mainWindow: BrowserWindow | null = null
 
-const streamingMessages = new Map<string, { conversationId: string; content: string; rawInput: string }>()
+const streamingMessages = new Map<
+  string,
+  { conversationId: string; content: string; rawInput: string; agentId?: string }
+>()
 
 function resolveConversationCwd(conversationId: string, payloadCwd?: string): string {
   const conv = repo.getConversationById(conversationId)
@@ -168,6 +171,7 @@ function emitAgentEvent(event: AgentEvent): void {
           role: 'assistant',
           content: entry.content,
           createdAt: new Date().toISOString(),
+          agentId: entry.agentId ?? null,
           inputTokens: event.usage?.inputTokens ?? null,
           outputTokens: event.usage?.outputTokens ?? null,
           cacheReadTokens: event.usage?.cacheReadTokens ?? null,
@@ -314,7 +318,8 @@ function registerIpcHandlers(): void {
     streamingMessages.set(assistantMsgId, {
       conversationId: payload.conversationId,
       content: '',
-      rawInput: prompt
+      rawInput: prompt,
+      agentId: payload.agentId
     })
     const runContext = getConversationRunContext(payload.conversationId)
     const approvalLevel = getRunApprovalLevel(payload.conversationId)
@@ -370,7 +375,8 @@ function registerIpcHandlers(): void {
     streamingMessages.set(assistantMsgId, {
       conversationId: payload.conversationId,
       content: '',
-      rawInput: prompt
+      rawInput: prompt,
+      agentId: payload.agentId
     })
     const runContext = getConversationRunContext(payload.conversationId)
     const approvalLevel = getRunApprovalLevel(payload.conversationId)
@@ -479,6 +485,9 @@ function registerIpcHandlers(): void {
         }
         if (r.debug_output) {
           msg.debugOutput = r.debug_output
+        }
+        if (r.agent_id) {
+          msg.agentId = r.agent_id
         }
         return msg
       })

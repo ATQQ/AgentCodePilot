@@ -12,20 +12,11 @@ import ModelSelector from '@renderer/components/home/ModelSelector.vue'
 import ToolCallsSection from '@renderer/components/chat/ToolCallsSection.vue'
 import ApprovalRequestCard from '@renderer/components/chat/ApprovalRequestCard.vue'
 import MessageAttachmentImage from '@renderer/components/chat/MessageAttachmentImage.vue'
-import claudeIcon from '@renderer/assets/claude-icon.svg'
-import codexIcon from '@renderer/assets/codex-icon.svg'
-import { CODE_BLOCK_PROPS } from '@renderer/constants/codeBlockTheme'
-import cursorIcon from '@renderer/assets/external-apps/cursor.svg'
-import type { Attachment, PlanReference } from '@renderer/types'
+import { getAgentIcon } from '@renderer/utils/agentIcons'
+import type { Attachment, Message, PlanReference } from '@renderer/types'
 import { useLayoutStore } from '@renderer/stores/layout.store'
 import { usePlanStore } from '@renderer/stores/plan.store'
-
-const agentIcons: Record<string, string> = {
-  'claude-code': claudeIcon,
-  'codex': codexIcon,
-  'cursor': cursorIcon
-}
-
+import { CODE_BLOCK_PROPS } from '@renderer/constants/codeBlockTheme'
 const { t } = useI18n()
 const router = useRouter()
 const chatStore = useChatStore()
@@ -193,8 +184,7 @@ function handleSubmit(
   planRefs: PlanReference[]
 ): void {
   if ((!text && attachments.length === 0 && planRefs.length === 0) || !chatStore.activeConversationId) return
-  const agentId = chatStore.activeConversation?.agentId ?? agentStore.selectedAgentId
-  chatStore.sendMessage(chatStore.activeConversationId, text, agentId, attachments, planMode, planRefs)
+  chatStore.sendMessage(chatStore.activeConversationId, text, agentStore.selectedAgentId, attachments, planMode, planRefs)
 }
 
 async function openAttachment(att: Attachment): Promise<void> {
@@ -212,9 +202,23 @@ function handleCancelQueue(index: number): void {
   chatStore.cancelQueuedMessage(index)
 }
 
-const currentAgentIcon = computed(() => {
-  const agentId = chatStore.activeConversation?.agentId ?? agentStore.selectedAgentId
-  return agentIcons[agentId] || claudeIcon
+function getMessageAgentId(msg: Message): string {
+  if (msg.agentId) return msg.agentId
+  return chatStore.activeConversation?.agentId ?? agentStore.selectedAgentId
+}
+
+function getMessageAgentIcon(msg: Message): string {
+  return getAgentIcon(getMessageAgentId(msg))
+}
+
+function getMessageAgentName(msg: Message): string {
+  return agentStore.getAgentName(getMessageAgentId(msg))
+}
+
+const waitingAgentIcon = computed(() => {
+  const convId = chatStore.activeConversationId
+  const agentId = (convId ? chatStore.getPendingAgent(convId) : undefined) ?? agentStore.selectedAgentId
+  return getAgentIcon(agentId)
 })
 
 const isArchived = computed(() => chatStore.activeConversation?.archived === true)
@@ -297,9 +301,9 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
         >
           <div v-if="msg.role === 'assistant'" class="message-role">
             <span class="agent-avatar">
-              <img :src="currentAgentIcon" width="14" height="14" alt="" />
+              <img :src="getMessageAgentIcon(msg)" width="14" height="14" alt="" />
             </span>
-            <span class="message-role-name">{{ agentStore.currentAgent?.name }}</span>
+            <span class="message-role-name">{{ getMessageAgentName(msg) }}</span>
             <span v-if="getPendingApproval(msg.id)" class="approval-inline-tag">
               {{ t('approval.waitingTag') }}
             </span>
@@ -414,7 +418,7 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
         </div>
         <div v-if="chatStore.isWaiting" class="thinking-indicator">
           <span class="agent-avatar">
-            <img :src="currentAgentIcon" width="14" height="14" alt="" />
+            <img :src="waitingAgentIcon" width="14" height="14" alt="" />
           </span>
           <div class="thinking-dots">
             <span class="dot"></span>

@@ -13,9 +13,7 @@ const modelStore = useModelStore()
 const agentStore = useAgentStore()
 const chatStore = useChatStore()
 
-const activeAgentId = computed(
-  () => chatStore.activeConversation?.agentId ?? agentStore.selectedAgentId
-)
+const activeAgentId = computed(() => agentStore.selectedAgentId)
 
 const showSelector = computed(() => activeAgentId.value === 'claude-code')
 

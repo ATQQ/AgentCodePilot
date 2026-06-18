@@ -59,6 +59,7 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   createdAt: string
+  agentId?: string
   planMode?: boolean
   planRefs?: import('../../../preload/types').PlanReference[]
   usage?: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number; costUSD: number }

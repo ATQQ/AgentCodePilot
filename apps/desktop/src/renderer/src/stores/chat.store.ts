@@ -5,6 +5,7 @@ import type { AgentEvent, AttachmentPayload, PlanReference } from '../../../prel
 import type { ApprovalLevel } from '@renderer/types'
 import { useWorkspaceStore } from './workspace.store'
 import { useModelStore } from './model.store'
+import { useAgentStore } from './agent.store'
 import { getToolCallFingerprint } from '@renderer/utils/toolCall'
 import { attachmentFromPayload, enrichAttachment } from '@renderer/utils/localFile'
 
@@ -15,6 +16,7 @@ export const useChatStore = defineStore('chat', () => {
   const waitingConversationIds = ref<Set<string>>(new Set())
   const pendingApprovals = ref<Map<string, ApprovalRequest>>(new Map())
   const queuedMessages = ref<{ conversationId: string; content: string; agentId: string; modelId?: string; planMode?: boolean; planRefs?: PlanReference[] }[]>([])
+  const pendingAgentByConversation = ref<Map<string, string>>(new Map())
   const toolUseIdAliases = ref<Map<string, string>>(new Map())
 
   const activeConversation = computed(
@@ -64,6 +66,24 @@ export const useChatStore = defineStore('chat', () => {
 
   function hasPendingApproval(conversationId: string): boolean {
     return pendingApprovalConversationIds.value.has(conversationId)
+  }
+
+  function setPendingAgent(conversationId: string, agentId: string): void {
+    const next = new Map(pendingAgentByConversation.value)
+    next.set(conversationId, agentId)
+    pendingAgentByConversation.value = next
+  }
+
+  function getPendingAgent(conversationId: string): string | undefined {
+    return pendingAgentByConversation.value.get(conversationId)
+  }
+
+  function assignAgentToAssistantMessage(conversationId: string, message: Message): void {
+    if (message.role !== 'assistant' || message.agentId) return
+    const pendingAgent = getPendingAgent(conversationId)
+    if (pendingAgent) {
+      message.agentId = pendingAgent
+    }
   }
 
   function resolveToolUseId(messageId: string, toolUseId: string): string {
@@ -193,6 +213,7 @@ export const useChatStore = defineStore('chat', () => {
       role: m.role,
       content: m.content,
       createdAt: m.createdAt,
+      agentId: m.agentId,
       planMode: m.planMode,
       planRefs: m.planRefs,
       attachments: m.attachments?.map((att) => enrichAttachment(att as Attachment)),
@@ -204,7 +225,15 @@ export const useChatStore = defineStore('chat', () => {
 
   function setActive(id: string | null): void {
     activeConversationId.value = id
-    if (id) loadMessages(id)
+    if (id) {
+      loadMessages(id)
+      const conv = conversations.value.find((c) => c.id === id)
+      if (conv) {
+        const agentStore = useAgentStore()
+        agentStore.selectAgent(conv.agentId)
+        setPendingAgent(id, conv.agentId)
+      }
+    }
   }
 
   async function createConversation(
@@ -253,6 +282,7 @@ export const useChatStore = defineStore('chat', () => {
     })
     activeConversationId.value = result.id
     waitingConversationIds.value.add(result.id)
+    setPendingAgent(result.id, agentId)
     return result.id
   }
 
@@ -310,6 +340,7 @@ export const useChatStore = defineStore('chat', () => {
       })
       return
     }
+    setPendingAgent(conversationId, agentId)
     addMessage(conversationId, 'user', content, attachments, effectivePlanMode, planRefs)
     waitingConversationIds.value.add(conversationId)
     const workspaceStore = useWorkspaceStore()
@@ -354,6 +385,7 @@ export const useChatStore = defineStore('chat', () => {
     const idx = queuedMessages.value.findIndex((m) => m.conversationId === conversationId)
     if (idx === -1) return
     const next = queuedMessages.value.splice(idx, 1)[0]
+    setPendingAgent(next.conversationId, next.agentId)
     addMessage(next.conversationId, 'user', next.content, undefined, next.planMode, next.planRefs)
     waitingConversationIds.value.add(next.conversationId)
     const conv = conversations.value.find((c) => c.id === next.conversationId)
@@ -390,6 +422,7 @@ export const useChatStore = defineStore('chat', () => {
             content: '',
             createdAt: new Date().toISOString()
           }
+          assignAgentToAssistantMessage(event.conversationId, msg)
           conv.messages.push(msg)
         }
         msg.content += event.delta
@@ -411,6 +444,7 @@ export const useChatStore = defineStore('chat', () => {
                 createdAt: new Date().toISOString(),
                 stopped: true
               }
+              assignAgentToAssistantMessage(event.conversationId, msg)
               conv.messages.push(msg)
             } else {
               if (!msg.content.trim()) {
@@ -420,6 +454,7 @@ export const useChatStore = defineStore('chat', () => {
             }
           }
           if (msg) {
+            assignAgentToAssistantMessage(event.conversationId, msg)
             if (event.usage) msg.usage = event.usage
             if (event.debugInput) msg.debugInput = event.debugInput
             if (event.debugOutput) msg.debugOutput = event.debugOutput
@@ -439,7 +474,12 @@ export const useChatStore = defineStore('chat', () => {
       case 'message.error': {
         const conv = conversations.value.find((c) => c.id === event.conversationId)
         if (conv) {
+          const pendingAgent = getPendingAgent(event.conversationId)
           addMessage(event.conversationId, 'assistant', `[Error] ${event.error}`)
+          const lastMsg = conv.messages[conv.messages.length - 1]
+          if (lastMsg?.role === 'assistant' && pendingAgent) {
+            lastMsg.agentId = pendingAgent
+          }
         }
         waitingConversationIds.value.delete(event.conversationId)
         streamingConversationIds.value.delete(event.conversationId)
@@ -457,6 +497,7 @@ export const useChatStore = defineStore('chat', () => {
             content: '',
             createdAt: new Date().toISOString()
           }
+          assignAgentToAssistantMessage(event.conversationId, msg)
           conv.messages.push(msg)
         }
         if (!msg.toolCalls) msg.toolCalls = []
@@ -718,6 +759,7 @@ export const useChatStore = defineStore('chat', () => {
     setConversationApprovalLevel,
     setConversationModelId,
     initAgentEventListener,
-    initApprovalNavigateListener
+    initApprovalNavigateListener,
+    getPendingAgent
   }
 })

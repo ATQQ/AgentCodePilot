@@ -169,6 +169,9 @@ function runMigrations(database: Database.Database): void {
   if (!msgCols3.find((c) => c.name === 'plan_refs')) {
     database.exec('ALTER TABLE messages ADD COLUMN plan_refs TEXT')
   }
+  if (!msgCols3.find((c) => c.name === 'agent_id')) {
+    database.exec('ALTER TABLE messages ADD COLUMN agent_id TEXT')
+  }
 }
 
 export function closeDatabase(): void {

@@ -323,6 +323,7 @@ export interface MessageInfo {
   role: 'user' | 'assistant'
   content: string
   createdAt: string
+  agentId?: string
   planMode?: boolean
   planRefs?: PlanReference[]
   attachments?: AttachmentPayload[]

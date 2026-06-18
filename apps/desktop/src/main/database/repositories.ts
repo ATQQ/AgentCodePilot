@@ -32,6 +32,7 @@ export interface MessageRow {
   debug_output: string | null
   plan_mode: number | null
   plan_refs: string | null
+  agent_id: string | null
 }
 
 export interface ProjectRow {
@@ -242,11 +243,12 @@ export function addMessage(msg: {
   debugOutput?: string | null
   planMode?: boolean | null
   planRefs?: string | null
+  agentId?: string | null
 }): void {
   const db = getDatabase()
   db.prepare(
-    `INSERT INTO messages (id, conversation_id, role, content, created_at, attachments, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, raw_input, debug_input, debug_output, plan_mode, plan_refs)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO messages (id, conversation_id, role, content, created_at, attachments, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, raw_input, debug_input, debug_output, plan_mode, plan_refs, agent_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     msg.id,
     msg.conversationId,
@@ -263,7 +265,8 @@ export function addMessage(msg: {
     msg.debugInput ?? null,
     msg.debugOutput ?? null,
     msg.planMode ? 1 : 0,
-    msg.planRefs ?? null
+    msg.planRefs ?? null,
+    msg.agentId ?? null
   )
 
   db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(
