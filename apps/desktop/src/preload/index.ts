@@ -127,6 +127,8 @@ const agentAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.GIT_STAGE, cwd, paths),
     unstage: (cwd: string, paths: string[]) =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_UNSTAGE, cwd, paths),
+    discard: (cwd: string, paths: string[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_DISCARD, cwd, paths),
     commit: (cwd: string, message: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT, cwd, message),
     push: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT_PUSH, cwd),

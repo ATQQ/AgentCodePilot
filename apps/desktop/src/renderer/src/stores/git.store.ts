@@ -23,6 +23,7 @@ export const useGitStore = defineStore('git', () => {
   const diffModified = ref('')
   const diffLoading = ref(false)
   const diffRefreshing = ref(false)
+  const diffError = ref<string | null>(null)
   const commitMessage = ref('')
   const operationError = ref<string | null>(null)
 
@@ -57,6 +58,7 @@ export const useGitStore = defineStore('git', () => {
     diffModified.value = ''
     diffLoading.value = false
     diffRefreshing.value = false
+    diffError.value = null
     commitMessage.value = ''
     operationError.value = null
   }
@@ -99,6 +101,15 @@ export const useGitStore = defineStore('git', () => {
       diffOriginal.value = ''
       diffModified.value = ''
     }
+  }
+
+  async function ensureGitReady(): Promise<boolean> {
+    const cwd = panelContext.effectivePanelCwd
+    if (!cwd) return false
+    if (!status.value?.isRepo) {
+      await refreshStatus()
+    }
+    return status.value?.isRepo === true
   }
 
   async function refreshStatus(): Promise<void> {
@@ -163,6 +174,10 @@ export const useGitStore = defineStore('git', () => {
           selectedFile.value = nextSelected
         }
       }
+
+      if (layoutStore.reviewScope === scope && nextSelected) {
+        await loadDiffForSelection()
+      }
     } finally {
       if (requestId === loadFilesRequestId[scope]) {
         filesLoadingByScope.value[scope] = false
@@ -179,14 +194,31 @@ export const useGitStore = defineStore('git', () => {
     applyScope(layoutStore.reviewScope)
   }
 
+  async function loadDiffForSelection(): Promise<void> {
+    const file = selectedFile.value
+    if (!file) return
+    await loadDiff(file, layoutStore.reviewScope === 'staged')
+  }
+
   async function loadDiff(file: string, staged: boolean): Promise<void> {
     const cwd = panelContext.effectivePanelCwd
-    if (!cwd || !status.value?.isRepo) return
+    if (!cwd) return
 
     const scope: GitDiffScope = staged ? 'staged' : 'unstaged'
     const key = diffCacheKey(scope, file)
     const cached = diffCache.get(key)
     const requestId = ++loadDiffRequestId
+
+    const ready = await ensureGitReady()
+    if (!ready) {
+      if (requestId !== loadDiffRequestId) return
+      diffError.value = '不是 Git 仓库'
+      diffLoading.value = false
+      diffRefreshing.value = false
+      return
+    }
+
+    diffError.value = null
 
     if (cached) {
       diffOriginal.value = cached.original
@@ -207,6 +239,13 @@ export const useGitStore = defineStore('git', () => {
       if (selectedFile.value === file && layoutStore.reviewScope === scope) {
         diffOriginal.value = result.original
         diffModified.value = result.modified
+      }
+    } catch (err) {
+      if (requestId !== loadDiffRequestId) return
+      diffError.value = err instanceof Error ? err.message : '加载 diff 失败'
+      if (selectedFile.value === file && layoutStore.reviewScope === scope) {
+        diffOriginal.value = ''
+        diffModified.value = ''
       }
     } finally {
       if (requestId === loadDiffRequestId) {
@@ -248,7 +287,28 @@ export const useGitStore = defineStore('git', () => {
       const next = tabs[tabs.length - 1] ?? null
       selectedFile.value = next
       selectedFileByScope.value[scope] = next
+      if (!next) {
+        diffOriginal.value = ''
+        diffModified.value = ''
+      }
     }
+  }
+
+  function closeOtherTabs(keepPath: string): void {
+    const scope = layoutStore.reviewScope
+    openTabsByScope.value[scope] = [keepPath]
+    selectedFile.value = keepPath
+    selectedFileByScope.value[scope] = keepPath
+    void loadDiff(keepPath, scope === 'staged')
+  }
+
+  function closeAllTabs(): void {
+    const scope = layoutStore.reviewScope
+    openTabsByScope.value[scope] = []
+    selectedFile.value = null
+    selectedFileByScope.value[scope] = null
+    diffOriginal.value = ''
+    diffModified.value = ''
   }
 
   function selectFile(path: string): void {
@@ -281,6 +341,20 @@ export const useGitStore = defineStore('git', () => {
       await refreshAllScopes()
     } catch (err) {
       operationError.value = err instanceof Error ? err.message : '取消暂存失败'
+    }
+  }
+
+  async function discardFiles(paths: string[]): Promise<void> {
+    const cwd = panelContext.effectivePanelCwd
+    if (!cwd || paths.length === 0) return
+    operationError.value = null
+    try {
+      await window.agentAPI.git.discard(cwd, paths)
+      invalidateDiffCache(paths)
+      await refreshStatus()
+      await refreshAllScopes()
+    } catch (err) {
+      operationError.value = err instanceof Error ? err.message : '放弃更改失败'
     }
   }
 
@@ -332,10 +406,11 @@ export const useGitStore = defineStore('git', () => {
     () => panelContext.effectivePanelCwd,
     () => {
       resetScopeCaches()
-      void refreshStatus().then(() => {
+      void refreshStatus().then(async () => {
         if (!panelContext.effectivePanelCwd) return
         applyScope(layoutStore.reviewScope)
-        void loadChangedFiles(layoutStore.reviewScope)
+        await loadChangedFiles(layoutStore.reviewScope)
+        await loadDiffForSelection()
       })
     }
   )
@@ -349,6 +424,7 @@ export const useGitStore = defineStore('git', () => {
     diffModified,
     diffLoading,
     diffRefreshing,
+    diffError,
     commitMessage,
     operationError,
     filesLoadingByScope,
@@ -358,14 +434,18 @@ export const useGitStore = defineStore('git', () => {
     refreshStatus,
     loadChangedFiles,
     loadDiff,
+    loadDiffForSelection,
     changedFilesByScope,
     openTabsByScope,
     getOpenTabs,
     openFileTab,
     closeFileTab,
+    closeOtherTabs,
+    closeAllTabs,
     selectFile,
     stageFiles,
     unstageFiles,
+    discardFiles,
     commit,
     push,
     startPolling,

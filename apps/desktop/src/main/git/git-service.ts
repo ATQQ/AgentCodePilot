@@ -1,5 +1,6 @@
 import { existsSync } from 'fs'
 import { join } from 'path'
+import { readFile, unlink } from 'fs/promises'
 import simpleGit from 'simple-git'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
@@ -121,6 +122,19 @@ export async function getGitStatus(cwd: string): Promise<GitStatusResult> {
   }
 }
 
+function countLines(content: string): number {
+  if (!content) return 0
+  return content.split('\n').length
+}
+
+function isUntrackedPath(
+  filePath: string,
+  statusFiles: Awaited<ReturnType<ReturnType<typeof simpleGit>['status']>>['files']
+): boolean {
+  const entry = statusFiles.find((f) => f.path === filePath)
+  return entry?.index === '?' || entry?.working_dir === '?'
+}
+
 export async function getChangedFiles(cwd: string, scope: GitDiffScope): Promise<GitChangedFile[]> {
   if (!isGitRepo(cwd)) return []
 
@@ -139,13 +153,42 @@ export async function getChangedFiles(cwd: string, scope: GitDiffScope): Promise
 
   for (const filePath of unique) {
     try {
+      const fileStatus = status.files.find((f) => f.path === filePath)
+
+      if (scope === 'unstaged' && isUntrackedPath(filePath, status.files)) {
+        try {
+          const content = await readFile(join(cwd, filePath), 'utf-8')
+          result.push({
+            path: filePath,
+            additions: countLines(content),
+            deletions: 0,
+            status: scope
+          })
+        } catch {
+          result.push({ path: filePath, additions: 0, deletions: 0, status: scope })
+        }
+        continue
+      }
+
       const args = scope === 'staged' ? ['--cached', '--', filePath] : ['--', filePath]
       const summary = await git.diffSummary(args)
       const file = summary.files[0] as { insertions?: number; deletions?: number } | undefined
+      let additions = file?.insertions ?? 0
+      let deletions = file?.deletions ?? 0
+
+      if (additions === 0 && deletions === 0 && scope === 'staged' && fileStatus?.index === 'A') {
+        try {
+          const content = await git.show([`:${filePath}`])
+          additions = countLines(content)
+        } catch {
+          /* keep zero counts */
+        }
+      }
+
       result.push({
         path: filePath,
-        additions: file?.insertions ?? 0,
-        deletions: file?.deletions ?? 0,
+        additions,
+        deletions,
         status: scope
       })
     } catch {
@@ -154,6 +197,14 @@ export async function getChangedFiles(cwd: string, scope: GitDiffScope): Promise
   }
 
   return result
+}
+
+function isDeletedPath(
+  filePath: string,
+  statusFiles: Awaited<ReturnType<ReturnType<typeof simpleGit>['status']>>['files']
+): boolean {
+  const entry = statusFiles.find((f) => f.path === filePath)
+  return entry?.working_dir === 'D' || entry?.index === 'D'
 }
 
 export async function getGitDiff(
@@ -166,6 +217,18 @@ export async function getGitDiff(
 
   const git = simpleGit(cwd)
   const { file, staged = false } = options
+  const status = await git.status()
+  const untracked = isUntrackedPath(file, status.files)
+  const deleted = isDeletedPath(file, status.files)
+
+  if (!staged && untracked) {
+    try {
+      const modified = await readFile(join(cwd, file), 'utf-8')
+      return { original: '', modified, unified: '' }
+    } catch {
+      return { original: '', modified: '', unified: '' }
+    }
+  }
 
   const unified = staged
     ? await git.diff(['--cached', '--', file])
@@ -173,32 +236,26 @@ export async function getGitDiff(
 
   let original = ''
   try {
-    original = staged
-      ? await git.show([`HEAD:${file}`])
-      : await git.show([`HEAD:${file}`])
+    original = await git.show([`HEAD:${file}`])
   } catch {
     original = ''
   }
 
-  let modified = original
-  if (!staged) {
+  let modified = ''
+  if (staged) {
     try {
-      const { readFile } = await import('fs/promises')
-      modified = await readFile(join(cwd, file), 'utf-8')
+      modified = await git.show([`:${file}`])
     } catch {
-      modified = original
+      modified = ''
     }
+  } else if (deleted) {
+    modified = ''
   } else {
     try {
-      const stagedContent = await git.show([`:${file}`])
-      modified = stagedContent
+      modified = await readFile(join(cwd, file), 'utf-8')
     } catch {
-      modified = original
+      modified = ''
     }
-  }
-
-  if (!unified && original === modified) {
-    return { original, modified, unified: '' }
   }
 
   return { original, modified, unified }
@@ -216,6 +273,32 @@ export async function unstageFiles(cwd: string, paths: string[]): Promise<void> 
   if (paths.length === 0) return
   const git = simpleGit(cwd)
   await git.reset(['HEAD', '--', ...paths])
+}
+
+export async function discardFileChanges(cwd: string, paths: string[]): Promise<void> {
+  if (!isGitRepo(cwd)) throw new Error('不是 Git 仓库')
+  if (paths.length === 0) return
+
+  const git = simpleGit(cwd)
+  const status = await git.status()
+  const untracked: string[] = []
+  const tracked: string[] = []
+
+  for (const filePath of paths) {
+    if (isUntrackedPath(filePath, status.files)) {
+      untracked.push(filePath)
+    } else {
+      tracked.push(filePath)
+    }
+  }
+
+  if (tracked.length > 0) {
+    await git.checkout(['--', ...tracked])
+  }
+
+  for (const filePath of untracked) {
+    await unlink(join(cwd, filePath))
+  }
 }
 
 export async function commitChanges(cwd: string, message: string): Promise<void> {

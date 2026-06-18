@@ -15,6 +15,7 @@ const emit = defineEmits<{
   select: [path: string]
   stage: [path: string]
   unstage: [path: string]
+  discard: [path: string]
 }>()
 
 const filter = computed(() => props.filter ?? '')
@@ -66,6 +67,7 @@ function isExpanded(path: string): boolean {
         @select="(path) => emit('select', path)"
         @stage="(path) => emit('stage', path)"
         @unstage="(path) => emit('unstage', path)"
+        @discard="(path) => emit('discard', path)"
       />
     </div>
   </div>
@@ -161,6 +163,48 @@ function isExpanded(path: string): boolean {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+}
+
+:deep(.file-actions) {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+:deep(.file-row:hover .file-actions) {
+  display: inline-flex;
+}
+
+:deep(.action-btn) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--content-text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 14px;
+  line-height: 1;
+}
+
+:deep(.action-btn:hover) {
+  background: var(--sidebar-item-active);
+  color: var(--content-text);
+}
+
+:deep(.action-btn.stage) {
+  color: #16a34a;
+}
+
+:deep(.action-btn.discard:hover) {
+  color: #dc2626;
 }
 
 :deep(.file-stat) {
@@ -172,25 +216,4 @@ function isExpanded(path: string): boolean {
 
 :deep(.add) { color: #16a34a; }
 :deep(.del) { color: #dc2626; }
-
-:deep(.stage-btn) {
-  display: none;
-  width: 18px;
-  height: 18px;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  font-size: 14px;
-  font-weight: 600;
-  color: #16a34a;
-  flex-shrink: 0;
-}
-
-:deep(.stage-btn.unstage) {
-  color: var(--content-text-secondary);
-}
-
-:deep(.file-row:hover .stage-btn) {
-  display: inline-flex;
-}
 </style>

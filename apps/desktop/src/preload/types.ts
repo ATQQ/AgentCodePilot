@@ -40,6 +40,7 @@ export const IPC_CHANNELS = {
   GIT_DIFF: 'git:diff',
   GIT_STAGE: 'git:stage',
   GIT_UNSTAGE: 'git:unstage',
+  GIT_DISCARD: 'git:discard',
   GIT_COMMIT: 'git:commit',
   GIT_PUSH: 'git:push',
   GIT_STAGED_DIFF: 'git:stagedDiff',
@@ -434,6 +435,7 @@ export interface AgentAPI {
     diff: (cwd: string, file: string, staged?: boolean) => Promise<GitDiffResult>
     stage: (cwd: string, paths: string[]) => Promise<void>
     unstage: (cwd: string, paths: string[]) => Promise<void>
+    discard: (cwd: string, paths: string[]) => Promise<void>
     commit: (cwd: string, message: string) => Promise<void>
     push: (cwd: string) => Promise<void>
     stagedDiff: (cwd: string) => Promise<string>

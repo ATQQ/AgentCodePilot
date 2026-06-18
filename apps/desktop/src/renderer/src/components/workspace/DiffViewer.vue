@@ -7,10 +7,7 @@ import type { GitDiffScope } from '@renderer/types'
 import EditorFileTabs from './EditorFileTabs.vue'
 import SideTreePanel from './SideTreePanel.vue'
 import SideTreeExpandBtn from './SideTreeExpandBtn.vue'
-
-const MonacoDiff = defineAsyncComponent(
-  () => import('@renderer/components/workspace/MonacoDiffEditor.vue')
-)
+import MonacoDiffEditor from './MonacoDiffEditor.vue'
 const GitChangedFileTree = defineAsyncComponent(
   () => import('@renderer/components/workspace/GitChangedFileTree.vue')
 )
@@ -44,6 +41,8 @@ const showDiffEmptyLoading = computed(
   () => gitStore.diffLoading && !gitStore.diffOriginal && !gitStore.diffModified
 )
 
+const showDiffLoadFailed = computed(() => !!gitStore.diffError)
+
 const activeFileMeta = computed(() =>
   gitStore.changedFiles.find((f) => f.path === gitStore.selectedFile)
 )
@@ -54,18 +53,14 @@ function onScopeChange(scope: GitDiffScope): void {
 
 function onFileSelect(path: string): void {
   gitStore.openFileTab(path)
-  void gitStore.loadDiff(path, layoutStore.reviewScope === 'staged')
 }
 
 function onTabSelect(path: string): void {
   gitStore.selectFile(path)
-  void gitStore.loadDiff(path, layoutStore.reviewScope === 'staged')
 }
 
 function onTabClose(path: string): void {
   gitStore.closeFileTab(path)
-  const file = gitStore.selectedFile
-  if (file) void gitStore.loadDiff(file, layoutStore.reviewScope === 'staged')
 }
 
 function onStage(path: string): void {
@@ -76,24 +71,35 @@ function onUnstage(path: string): void {
   void gitStore.unstageFiles([path])
 }
 
+function onDiscard(path: string): void {
+  const name = path.split('/').pop() ?? path
+  if (!window.confirm(`确定放弃「${name}」的更改？此操作不可撤销。`)) return
+  void gitStore.discardFiles([path])
+}
+
+function onCloseOthers(path: string): void {
+  gitStore.closeOtherTabs(path)
+}
+
+function onCloseAll(): void {
+  gitStore.closeAllTabs()
+}
+
 watch(
   () => layoutStore.reviewScope,
   (scope) => {
-    gitStore.applyScope(scope)
     void gitStore.loadChangedFiles(scope)
-    const file = gitStore.selectedFile
-    if (file) void gitStore.loadDiff(file, scope === 'staged')
   },
   { immediate: true }
 )
 
 watch(
-  () => gitStore.selectedFile,
-  (file) => {
-    if (file) {
-      void gitStore.loadDiff(file, layoutStore.reviewScope === 'staged')
-    }
-  }
+  () => [gitStore.selectedFile, layoutStore.reviewScope] as const,
+  ([file, scope]) => {
+    gitStore.applyScope(scope)
+    if (file) void gitStore.loadDiff(file, scope === 'staged')
+  },
+  { immediate: true }
 )
 </script>
 
@@ -152,6 +158,8 @@ watch(
             :active="gitStore.selectedFile"
             @select="onTabSelect"
             @close="onTabClose"
+            @close-others="onCloseOthers"
+            @close-all="onCloseAll"
           />
 
           <div v-if="gitStore.selectedFile && activeFileMeta" class="file-meta-bar">
@@ -165,24 +173,24 @@ watch(
           <div class="diff-area">
             <div v-if="!gitStore.selectedFile" class="empty-msg">选择文件查看差异</div>
             <div v-else-if="showDiffEmptyLoading" class="empty-msg">加载中…</div>
-            <template v-else>
-              <Suspense :key="`${gitStore.selectedFile}-${layoutStore.reviewScope}-${layoutStore.diffViewMode}`">
-                <MonacoDiff
+            <div v-else-if="showDiffLoadFailed" class="empty-msg">
+              无法加载 diff{{ gitStore.diffError ? `：${gitStore.diffError}` : '' }}
+            </div>
+            <template v-else-if="gitStore.selectedFile">
+              <div class="diff-editor-host">
+                <MonacoDiffEditor
                   :original="gitStore.diffOriginal"
                   :modified="gitStore.diffModified"
-                  :language="gitStore.selectedFile?.split('.').pop() ?? ''"
+                  :file-path="gitStore.selectedFile"
                   :side-by-side="layoutStore.diffViewMode === 'side-by-side'"
                 />
-                <template #fallback>
-                  <div class="empty-msg">加载编辑器…</div>
-                </template>
-              </Suspense>
+              </div>
               <div v-if="gitStore.diffRefreshing" class="diff-refresh-hint">更新中…</div>
             </template>
           </div>
         </div>
 
-        <SideTreePanel v-if="!treeCollapsed" @collapse="treeCollapsed = true">
+        <SideTreePanel v-if="!treeCollapsed" overlay @collapse="treeCollapsed = true">
           <template #header>
             <input
               v-model="treeFilter"
@@ -201,6 +209,7 @@ watch(
             @select="onFileSelect"
             @stage="onStage"
             @unstage="onUnstage"
+            @discard="onDiscard"
           />
           <div v-if="filesLoading && gitStore.changedFiles.length > 0" class="list-refresh-hint">
             刷新中…
@@ -265,7 +274,6 @@ watch(
 
 .dv-body {
   position: relative;
-  display: flex;
   flex: 1;
   min-height: 0;
   overflow: hidden;
@@ -273,8 +281,8 @@ watch(
 
 .main-pane {
   position: relative;
-  flex: 1;
-  min-width: 0;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -332,6 +340,14 @@ watch(
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.diff-editor-host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .diff-refresh-hint {

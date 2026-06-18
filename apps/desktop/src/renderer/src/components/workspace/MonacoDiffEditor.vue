@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed, nextTick } from 'vue'
 import { loadMonaco, getLanguageFromPath, applyMonacoTheme } from '@renderer/utils/monaco'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 
@@ -7,7 +7,7 @@ const props = withDefaults(
   defineProps<{
     original: string
     modified: string
-    language?: string
+    filePath?: string
     sideBySide?: boolean
   }>(),
   { sideBySide: true }
@@ -15,13 +15,14 @@ const props = withDefaults(
 
 const settingsStore = useSettingsStore()
 const containerRef = ref<HTMLElement | null>(null)
-let resizeObserver: ResizeObserver | null = null
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let editorInstance: any = null
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let monacoRef: any = null
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let currentModels: { original: any; modified: any } | null = null
+let currentLanguage = ''
+let resizeObserver: ResizeObserver | null = null
 let themeObserver: MutationObserver | null = null
 
 const isDark = computed(() => {
@@ -35,6 +36,7 @@ function disposeModels(): void {
   currentModels?.original.dispose()
   currentModels?.modified.dispose()
   currentModels = null
+  currentLanguage = ''
 }
 
 function getDiffOptions(): Record<string, unknown> {
@@ -54,16 +56,50 @@ function getDiffOptions(): Record<string, unknown> {
   }
 }
 
+function layoutEditor(): void {
+  requestAnimationFrame(() => editorInstance?.layout())
+}
+
+function syncContainerHeight(): void {
+  const host = containerRef.value?.parentElement
+  if (!host || !containerRef.value) return
+  const height = host.clientHeight
+  if (height <= 0) return
+
+  const current = Number.parseFloat(containerRef.value.style.height)
+  if (Number.isFinite(current) && Math.abs(current - height) < 2) {
+    layoutEditor()
+    return
+  }
+
+  containerRef.value.style.height = `${height}px`
+  layoutEditor()
+}
+
 function setEditorModels(): void {
   if (!editorInstance || !monacoRef) return
+
+  const lang = props.filePath ? getLanguageFromPath(props.filePath) : 'plaintext'
+
+  if (currentModels && currentLanguage === lang) {
+    if (currentModels.original.getValue() !== props.original) {
+      currentModels.original.setValue(props.original)
+    }
+    if (currentModels.modified.getValue() !== props.modified) {
+      currentModels.modified.setValue(props.modified)
+    }
+    layoutEditor()
+    return
+  }
+
   disposeModels()
-  const lang = props.language ? getLanguageFromPath('file.' + props.language) : 'plaintext'
+  currentLanguage = lang
   currentModels = {
     original: monacoRef.editor.createModel(props.original, lang),
     modified: monacoRef.editor.createModel(props.modified, lang)
   }
   editorInstance.setModel(currentModels)
-  layoutEditor()
+  syncContainerHeight()
 }
 
 function applyViewMode(): void {
@@ -73,20 +109,6 @@ function applyViewMode(): void {
     useInlineViewWhenSpaceIsLimited: false
   })
   layoutEditor()
-}
-
-function layoutEditor(): void {
-  requestAnimationFrame(() => editorInstance?.layout())
-}
-
-function syncContainerHeight(): void {
-  const host = containerRef.value?.parentElement
-  if (!host || !containerRef.value) return
-  const height = host.clientHeight
-  if (height > 0) {
-    containerRef.value.style.height = `${height}px`
-    layoutEditor()
-  }
 }
 
 onMounted(async () => {
@@ -121,10 +143,12 @@ onUnmounted(() => {
 })
 
 watch(
-  () => [props.original, props.modified, props.language],
-  () => {
+  () => [props.original, props.modified, props.filePath],
+  async () => {
+    await nextTick()
     setEditorModels()
-  }
+  },
+  { flush: 'post' }
 )
 
 watch(
@@ -148,7 +172,7 @@ watch(isDark, () => {
   width: 100%;
   height: 100%;
   min-width: 0;
-  min-height: 200px;
+  min-height: 0;
   flex: 1;
 }
 

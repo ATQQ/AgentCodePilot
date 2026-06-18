@@ -51,6 +51,7 @@ import {
   getGitDiff,
   stageFiles,
   unstageFiles,
+  discardFileChanges,
   commitChanges,
   pushChanges,
   getStagedDiff,
@@ -674,6 +675,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.GIT_UNSTAGE, (_e, cwd: string, paths: string[]) =>
     unstageFiles(cwd, paths)
+  )
+
+  ipcMain.handle(IPC_CHANNELS.GIT_DISCARD, (_e, cwd: string, paths: string[]) =>
+    discardFileChanges(cwd, paths)
   )
 
   ipcMain.handle(IPC_CHANNELS.GIT_COMMIT, (_e, cwd: string, message: string) =>

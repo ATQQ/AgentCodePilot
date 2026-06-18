@@ -135,6 +135,22 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     }
   }
 
+  function closeOtherTabs(keepPath: string): void {
+    openTabs.value = [keepPath]
+    if (openFilePath.value !== keepPath) {
+      void openFile(keepPath)
+    }
+  }
+
+  function closeAllTabs(): void {
+    openTabs.value = []
+    openFilePath.value = null
+    fileContent.value = ''
+    dirtyContent.value = ''
+    fileReadError.value = null
+    editMode.value = false
+  }
+
   function selectTab(path: string): void {
     if (openFilePath.value !== path) {
       void openFile(path)
@@ -223,6 +239,8 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     isExpanded,
     openFile,
     closeTab,
+    closeOtherTabs,
+    closeAllTabs,
     selectTab,
     readFileAsText,
     saveFile,

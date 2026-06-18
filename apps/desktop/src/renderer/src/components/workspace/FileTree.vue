@@ -66,6 +66,14 @@ function onTabSelect(path: string): void {
 function onTabClose(path: string): void {
   fileStore.closeTab(path)
 }
+
+function onCloseOthers(path: string): void {
+  fileStore.closeOtherTabs(path)
+}
+
+function onCloseAll(): void {
+  fileStore.closeAllTabs()
+}
 </script>
 
 <template>
@@ -82,6 +90,8 @@ function onTabClose(path: string): void {
             :active="fileStore.openFilePath"
             @select="onTabSelect"
             @close="onTabClose"
+            @close-others="onCloseOthers"
+            @close-all="onCloseAll"
           />
 
           <div class="ft-preview">
