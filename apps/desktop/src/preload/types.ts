@@ -95,6 +95,11 @@ export interface SendMessagePayload {
   planRefs?: PlanReference[]
 }
 
+export interface SendMessageResult {
+  assistantMessageId: string
+  attachments?: AttachmentPayload[]
+}
+
 export interface CreateConversationPayload {
   agentId: string
   modelId?: string
@@ -112,6 +117,7 @@ export interface SettingsPayload {
   filePreview?: FilePreviewSettings
   aiPrompts?: AiPromptsSettings
   externalApps?: ExternalAppsSettings
+  maxAgentTurns?: number
 }
 
 export interface FilePreviewSettings {
@@ -364,6 +370,7 @@ export interface SettingsInfo {
   filePreview: FilePreviewSettings
   aiPrompts: AiPromptsSettings
   externalApps: ExternalAppsSettings
+  maxAgentTurns: number
 }
 
 export interface TokenUsage {
@@ -406,7 +413,7 @@ export type AgentEvent =
   | { type: 'message.started'; conversationId: string; messageId: string }
   | { type: 'message.delta'; conversationId: string; messageId: string; delta: string }
   | { type: 'message.completed'; conversationId: string; messageId: string; usage?: TokenUsage; debugInput?: string; debugOutput?: string; stopped?: boolean }
-  | { type: 'message.error'; conversationId: string; error: string }
+  | { type: 'message.error'; conversationId: string; messageId: string; error: string }
   | { type: 'tool.started'; conversationId: string; messageId: string; tool: ToolUseInfo }
   | { type: 'tool.input_updated'; conversationId: string; messageId: string; toolUseId: string; input: Record<string, unknown> }
   | { type: 'tool.progress'; conversationId: string; messageId: string; toolUseId: string; elapsedSeconds: number }
@@ -425,7 +432,7 @@ export interface AgentAPI {
   }
   chat: {
     createConversation: (payload: CreateConversationPayload) => Promise<ConversationInfo>
-    sendMessage: (payload: SendMessagePayload) => Promise<AttachmentPayload[] | undefined>
+    sendMessage: (payload: SendMessagePayload) => Promise<SendMessageResult>
     sendFirstMessage: (payload: SendMessagePayload) => Promise<void>
     stop: (conversationId: string) => Promise<void>
     onAgentEvent: (callback: (event: AgentEvent) => void) => () => void

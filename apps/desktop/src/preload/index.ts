@@ -4,9 +4,9 @@ import type {
   AgentEvent,
   AgentConfigSettings,
   ApprovalRespondPayload,
-  AttachmentPayload,
   CreateConversationPayload,
   SendMessagePayload,
+  SendMessageResult,
   SettingsPayload,
   ConversationUpdatePayload,
   ProjectPayload,
@@ -20,6 +20,7 @@ import type {
   OpenPathPayload
 } from './types'
 import { IPC_CHANNELS } from './types'
+import { cloneForIpc } from '../shared/ipc-clone'
 
 const agentAPI = {
   agents: {
@@ -32,11 +33,11 @@ const agentAPI = {
   },
   chat: {
     createConversation: (payload: CreateConversationPayload) =>
-      ipcRenderer.invoke(IPC_CHANNELS.CHAT_CREATE, payload),
+      ipcRenderer.invoke(IPC_CHANNELS.CHAT_CREATE, cloneForIpc(payload)),
     sendMessage: (payload: SendMessagePayload) =>
-      ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND, payload) as Promise<AttachmentPayload[] | undefined>,
+      ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND, cloneForIpc(payload)) as Promise<SendMessageResult>,
     sendFirstMessage: (payload: SendMessagePayload) =>
-      ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND_FIRST, payload),
+      ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND_FIRST, cloneForIpc(payload)),
     stop: (conversationId: string) => ipcRenderer.invoke(IPC_CHANNELS.CHAT_STOP, conversationId),
     onAgentEvent: (callback: (event: AgentEvent) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, data: AgentEvent): void =>

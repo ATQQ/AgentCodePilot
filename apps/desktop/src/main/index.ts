@@ -8,7 +8,6 @@ import type {
   AgentEvent,
   AgentConfigSettings,
   AgentInfo,
-  AttachmentPayload,
   ConversationInfo,
   ConversationListItem,
   CreateConversationPayload,
@@ -19,6 +18,7 @@ import type {
   ProviderConfigPayload,
   WorkspacePayload,
   SendMessagePayload,
+  SendMessageResult,
   SettingsInfo,
   SettingsPayload,
   OpenPathPayload,
@@ -26,6 +26,8 @@ import type {
 } from '../preload/types'
 import { agentRegistry, initializeAgentRegistry } from './runtime'
 import { supervisedRun, supervisedStop } from './runtime/supervisor'
+import { cloneForIpc } from '../shared/ipc-clone'
+import { parseMaxAgentTurnsSetting, clampMaxAgentTurns } from '../shared/agent-run-settings'
 import {
   getAgentConfig,
   getModelCatalog,
@@ -200,7 +202,11 @@ function emitAgentEvent(event: AgentEvent): void {
     repo.setConversationSessionId(event.conversationId, null)
   }
 
-  mainWindow?.webContents.send(IPC_CHANNELS.AGENT_EVENT, event)
+  mainWindow?.webContents.send(IPC_CHANNELS.AGENT_EVENT, cloneForIpc(event))
+}
+
+function getMaxAgentTurns(): number {
+  return parseMaxAgentTurnsSetting(repo.getAllSettings()['maxAgentTurns'])
 }
 
 function getSettingsFromDb(): SettingsInfo {
@@ -212,7 +218,8 @@ function getSettingsFromDb(): SettingsInfo {
     permissionNotificationsEnabled: all['permissionNotificationsEnabled'] !== 'false',
     filePreview: parseFilePreviewSetting(all['filePreview']),
     aiPrompts: parseAiPromptsSetting(all['aiPrompts']),
-    externalApps: parseExternalAppsSetting(all['externalApps'])
+    externalApps: parseExternalAppsSetting(all['externalApps']),
+    maxAgentTurns: parseMaxAgentTurnsSetting(all['maxAgentTurns'])
   }
 }
 
@@ -340,7 +347,8 @@ function registerIpcHandlers(): void {
       conversationHistory: runContext.conversationHistory,
       attachmentDirectories: collectAttachmentDirectories(payload.attachments),
       approvalLevel,
-      planMode: payload.planMode ?? false
+      planMode: payload.planMode ?? false,
+      maxTurns: getMaxAgentTurns()
     }
 
     supervisedRun(runInput, emitAgentEvent)
@@ -348,7 +356,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     IPC_CHANNELS.CHAT_SEND,
-    (_e, payload: SendMessagePayload): AttachmentPayload[] | undefined => {
+    (_e, payload: SendMessagePayload): SendMessageResult => {
     const userMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
     const assistantMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-a`
     const now = new Date().toISOString()
@@ -401,11 +409,15 @@ function registerIpcHandlers(): void {
         persistedAttachments ?? payload.attachments
       ),
       approvalLevel,
-      planMode: payload.planMode ?? false
+      planMode: payload.planMode ?? false,
+      maxTurns: getMaxAgentTurns()
     }
 
     supervisedRun(runInput, emitAgentEvent)
-    return persistedAttachments
+    return cloneForIpc({
+      assistantMessageId: assistantMsgId,
+      attachments: persistedAttachments
+    })
   })
 
   ipcMain.handle(IPC_CHANNELS.CHAT_STOP, (_e, conversationId: string): void => {
@@ -605,6 +617,9 @@ function registerIpcHandlers(): void {
     }
     if (payload.externalApps) {
       repo.setSetting('externalApps', JSON.stringify(payload.externalApps))
+    }
+    if (payload.maxAgentTurns !== undefined) {
+      repo.setSetting('maxAgentTurns', String(clampMaxAgentTurns(payload.maxAgentTurns)))
     }
   })
 

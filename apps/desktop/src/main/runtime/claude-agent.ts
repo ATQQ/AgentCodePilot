@@ -4,8 +4,13 @@ import type { AgentEvent, TokenUsage } from '../../preload/types'
 import type { AgentAdapter, AgentRunInput } from './types'
 import type { ApprovalLevel } from './permissions'
 import { buildPermissionOptions, buildToolAccessOptions } from './permissions'
+import { DEFAULT_MAX_AGENT_TURNS } from '../../shared/agent-run-settings'
 
 const AGENT_TOOLS = ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'WebFetch', 'WebSearch'] as const
+
+function formatMaxTurnsNotice(limit: number): string {
+  return `\n\n---\n\n⚠️ 已达到单次 Agent 回合上限（${limit} 轮）。如需继续，请发送「继续」或把任务拆小后重试。`
+}
 
 function isStaleSessionError(error: unknown): boolean {
   const msg = error instanceof Error ? error.message : String(error)
@@ -62,6 +67,7 @@ export class ClaudeAgentAdapter implements AgentAdapter {
       emit({
         type: 'message.error',
         conversationId: input.conversationId,
+        messageId: input.messageId,
         error: errorMessage
       })
     }
@@ -115,6 +121,8 @@ export class ClaudeAgentAdapter implements AgentAdapter {
     )
     const toolAccessOptions = buildToolAccessOptions(approvalLevel, AGENT_TOOLS)
 
+    const maxTurns = input.maxTurns ?? DEFAULT_MAX_AGENT_TURNS
+
     const queryOptions: Options = {
       abortController: controller,
       cwd: input.cwd || app.getPath('home'),
@@ -123,7 +131,7 @@ export class ClaudeAgentAdapter implements AgentAdapter {
         : {}),
       ...toolAccessOptions,
       skills: 'all' as const,
-      maxTurns: 20,
+      maxTurns,
       ...permissionOptions,
       includePartialMessages: true,
       ...(input.model ? { model: input.model } : {}),
@@ -252,9 +260,20 @@ export class ClaudeAgentAdapter implements AgentAdapter {
               await this.runOnce(input, emit, undefined, { skipStarted: true })
               return
             }
+            if (result.subtype === 'error_max_turns') {
+              emit({
+                type: 'message.delta',
+                conversationId: input.conversationId,
+                messageId: input.messageId,
+                delta: formatMaxTurnsNotice(maxTurns)
+              })
+              this.emitCompleted(input, emit, usage, rawMessages, queryOptions, false)
+              return
+            }
             emit({
               type: 'message.error',
               conversationId: input.conversationId,
+              messageId: input.messageId,
               error: errText
             })
             this.abortControllers.delete(input.conversationId)
@@ -263,7 +282,14 @@ export class ClaudeAgentAdapter implements AgentAdapter {
         }
       }
 
-      this.emitCompleted(input, emit, usage, rawMessages, queryOptions)
+      this.emitCompleted(
+        input,
+        emit,
+        usage,
+        rawMessages,
+        queryOptions,
+        controller.signal.aborted
+      )
     } catch (error: unknown) {
       if (controller.signal.aborted) {
         this.emitCompleted(input, emit, usage, rawMessages, queryOptions, true)

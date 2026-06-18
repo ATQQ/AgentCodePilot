@@ -3,12 +3,22 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { useAgentStore } from '@renderer/stores/agent.store'
+import { useSettingsStore } from '@renderer/stores/settings.store'
 import { getAgentIcon } from '@renderer/utils/agentIcons'
+import {
+  DEFAULT_MAX_AGENT_TURNS,
+  MIN_MAX_AGENT_TURNS,
+  MAX_MAX_AGENT_TURNS,
+  clampMaxAgentTurns
+} from '../../../../shared/agent-run-settings'
 import MockAgentSettingsPanel from '@renderer/components/settings/MockAgentSettingsPanel.vue'
 import type { AgentModelOption, ModelCatalogSource } from '@renderer/types'
 
 const { t } = useI18n()
 const agentStore = useAgentStore()
+const settingsStore = useSettingsStore()
+
+const draftMaxTurns = ref(DEFAULT_MAX_AGENT_TURNS)
 
 const activeAgentId = ref('')
 const loading = ref(false)
@@ -63,12 +73,20 @@ async function loadAgent(agentId: string): Promise<void> {
 }
 
 onMounted(async () => {
+  await settingsStore.fetchSettings()
+  draftMaxTurns.value = settingsStore.maxAgentTurns
   await agentStore.fetchAgents()
   activeAgentId.value = configurableAgents.value[0]?.id ?? 'claude-code'
   if (activeAgentId.value) {
     await loadAgent(activeAgentId.value)
   }
 })
+
+async function saveMaxTurns(): Promise<void> {
+  const next = clampMaxAgentTurns(draftMaxTurns.value)
+  draftMaxTurns.value = next
+  await settingsStore.setMaxAgentTurns(next)
+}
 
 watch(activeAgentId, (agentId) => {
   if (agentId) void loadAgent(agentId)
@@ -141,6 +159,26 @@ async function resetConfig(): Promise<void> {
   <div class="agent-settings">
     <h1 class="page-title">{{ t('settings.agentConfig.title') }}</h1>
     <p class="page-desc">{{ t('settings.agentConfig.desc') }}</p>
+
+    <div class="setting-card">
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">{{ t('settings.agentConfig.maxTurns') }}</div>
+          <div class="setting-desc">
+            {{ t('settings.agentConfig.maxTurnsDesc', { min: MIN_MAX_AGENT_TURNS, max: MAX_MAX_AGENT_TURNS, default: DEFAULT_MAX_AGENT_TURNS }) }}
+          </div>
+        </div>
+        <input
+          v-model.number="draftMaxTurns"
+          type="number"
+          class="turns-input"
+          :min="MIN_MAX_AGENT_TURNS"
+          :max="MAX_MAX_AGENT_TURNS"
+          step="1"
+          @change="saveMaxTurns"
+        />
+      </div>
+    </div>
 
     <div v-if="configurableAgents.length" class="agent-tabs">
       <button
@@ -392,6 +430,11 @@ async function resetConfig(): Promise<void> {
 
 .model-select {
   min-width: 180px;
+}
+
+.turns-input {
+  width: 96px;
+  text-align: center;
 }
 
 .custom-models {

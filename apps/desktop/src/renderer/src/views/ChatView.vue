@@ -100,17 +100,62 @@ watch(
 )
 
 watch(
-  () => chatStore.isWaiting,
-  (waiting) => {
-    if (waiting) {
-      waitingSeconds.value = 0
-      waitingTimer = setInterval(() => { waitingSeconds.value++ }, 1000)
+  () => chatStore.isStoppable,
+  (stoppable, wasStoppable) => {
+    if (stoppable && !wasStoppable) {
       scrollToBottom()
-    } else {
-      if (waitingTimer) { clearInterval(waitingTimer); waitingTimer = null }
+    }
+  }
+)
+
+function isThinkingMessage(msg: Message): boolean {
+  if (msg.role !== 'assistant' || msg.stopped) return false
+  if (msg.content.trim() || msg.toolCalls?.length) return false
+  const convId = chatStore.activeConversationId
+  if (!convId || msg.id !== chatStore.getActiveAssistantMessageId(convId)) return false
+  return chatStore.isConversationThinking(convId)
+}
+
+const showStandaloneThinking = computed(() => {
+  if (!chatStore.activeConversationId) return false
+  if (!chatStore.isWaiting) return false
+  const activeId = chatStore.getActiveAssistantMessageId(chatStore.activeConversationId)
+  if (!activeId) return true
+  return !chatStore.activeConversation?.messages.some((m) => m.id === activeId)
+})
+
+const isAssistantThinking = computed(() => {
+  const convId = chatStore.activeConversationId
+  return convId ? chatStore.isConversationThinking(convId) : false
+})
+
+function refreshWaitingSeconds(): void {
+  const convId = chatStore.activeConversationId
+  waitingSeconds.value = convId ? chatStore.getThinkingElapsedSeconds(convId) : 0
+}
+
+watch(
+  () => isAssistantThinking.value,
+  (thinking) => {
+    if (thinking) {
+      refreshWaitingSeconds()
+      waitingTimer = setInterval(refreshWaitingSeconds, 1000)
+      scrollToBottom()
+    } else if (waitingTimer) {
+      clearInterval(waitingTimer)
+      waitingTimer = null
     }
   },
   { immediate: true }
+)
+
+watch(
+  () => chatStore.activeConversationId,
+  () => {
+    if (isAssistantThinking.value) {
+      refreshWaitingSeconds()
+    }
+  }
 )
 
 watch(
@@ -346,7 +391,16 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
                 :tool-calls="msg.toolCalls"
                 :has-text-content="!!msg.content.trim()"
               />
+              <div v-if="isThinkingMessage(msg)" class="thinking-indicator thinking-indicator--inline">
+                <div class="thinking-dots">
+                  <span class="dot"></span>
+                  <span class="dot"></span>
+                  <span class="dot"></span>
+                </div>
+                <span class="thinking-text">{{ t('chat.thinking') }} {{ waitingSeconds }}s</span>
+              </div>
               <MarkdownRender
+                v-else-if="msg.content.trim()"
                 mode="chat"
                 custom-id="chat"
                 :content="msg.content"
@@ -439,7 +493,7 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
             </div>
           </div>
         </div>
-        <div v-if="chatStore.isWaiting" class="thinking-indicator">
+        <div v-if="showStandaloneThinking" class="thinking-indicator">
           <span class="agent-avatar">
             <img :src="waitingAgentIcon" width="14" height="14" alt="" />
           </span>
@@ -465,6 +519,7 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
             ref="composerRef"
             :conversation-id="chatStore.activeConversationId"
             :streaming="chatStore.isStreaming"
+            :stoppable="chatStore.isStoppable"
             :queued-messages="chatStore.currentQueuedMessages"
             :approval-level="chatStore.activeConversation.approvalLevel"
             @submit="handleSubmit"
@@ -800,6 +855,10 @@ html.dark .approval-inline-tag {
   gap: var(--spacing-sm);
   align-self: flex-start;
   padding: var(--spacing-sm) 0;
+}
+
+.thinking-indicator--inline {
+  padding: var(--spacing-xs) 0;
 }
 
 .thinking-dots {

@@ -170,6 +170,8 @@ export default {
     agentConfig: {
       title: 'Agent 配置',
       desc: '按 Agent 分别管理模型与可选列表。Claude Code 优先读取 SDK 与 ~/.claude/settings.json，应用内配置作为兜底覆盖。',
+      maxTurns: '单次最大回合数',
+      maxTurnsDesc: '每条用户消息允许 Agent 调用的最大工具回合数。范围 {min}–{max}，默认 {default}。复杂任务可适当调高。',
       discoveredSource: '当前检测来源',
       sourceSdk: 'Claude Agent SDK',
       sourceClaudeSettings: 'Claude Code 设置 (~/.claude/settings.json)',

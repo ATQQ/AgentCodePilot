@@ -145,6 +145,15 @@ async function streamMarkdown(
   }
 }
 
+function emitStoppedCompleted(input: AgentRunInput, emit: (event: AgentEvent) => void): void {
+  emit({
+    type: 'message.completed',
+    conversationId: input.conversationId,
+    messageId: input.messageId,
+    stopped: true
+  })
+}
+
 export class MockAgentAdapter implements AgentAdapter {
   readonly id = 'mock'
   readonly name = 'Mock Agent'
@@ -164,31 +173,39 @@ export class MockAgentAdapter implements AgentAdapter {
     const mockConfig = resolveMockAgentConfig(getAgentConfig('mock').mock)
     if (mockConfig.initialDelayMs > 0) {
       await delay(mockConfig.initialDelayMs)
-      if (controller.signal.aborted) return
+      if (controller.signal.aborted) {
+        emitStoppedCompleted(input, emit)
+        return
+      }
     }
 
     await simulateToolCalls(input, emit, controller.signal)
-    if (!controller.signal.aborted) {
-      await streamMarkdown(input, emit, controller.signal)
+    if (controller.signal.aborted) {
+      emitStoppedCompleted(input, emit)
+      return
+    }
+    await streamMarkdown(input, emit, controller.signal)
+
+    if (controller.signal.aborted) {
+      emitStoppedCompleted(input, emit)
+      return
     }
 
-    if (!controller.signal.aborted) {
-      emit({
-        type: 'message.completed',
-        conversationId: input.conversationId,
-        messageId: input.messageId,
-        usage: MOCK_USAGE,
-        debugInput: JSON.stringify({
-          agentId: 'mock',
-          prompt: input.content,
-          cwd: input.cwd ?? '~/projects/demo-web-app'
-        }),
-        debugOutput: JSON.stringify({
-          tools: MOCK_TOOL_STEPS.map((s) => s.toolName),
-          markdownSections: ['text', 'katex', 'code', 'table', 'mermaid']
-        })
+    emit({
+      type: 'message.completed',
+      conversationId: input.conversationId,
+      messageId: input.messageId,
+      usage: MOCK_USAGE,
+      debugInput: JSON.stringify({
+        agentId: 'mock',
+        prompt: input.content,
+        cwd: input.cwd ?? '~/projects/demo-web-app'
+      }),
+      debugOutput: JSON.stringify({
+        tools: MOCK_TOOL_STEPS.map((s) => s.toolName),
+        markdownSections: ['text', 'katex', 'code', 'table', 'mermaid']
       })
-    }
+    })
 
     this.abortControllers.delete(input.conversationId)
   }

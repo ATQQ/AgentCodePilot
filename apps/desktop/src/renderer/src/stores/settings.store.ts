@@ -6,6 +6,10 @@ import {
   DEFAULT_AI_PROMPTS
 } from '@renderer/constants/defaults'
 import {
+  DEFAULT_MAX_AGENT_TURNS,
+  clampMaxAgentTurns
+} from '../../../shared/agent-run-settings'
+import {
   DEFAULT_EXTERNAL_APPS_SETTINGS,
   findExternalAppById,
   getVisibleExternalApps,
@@ -43,6 +47,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const filePreview = ref<FilePreviewSettings>({ ...DEFAULT_FILE_PREVIEW })
   const aiPrompts = ref<AiPromptsSettings>({ ...DEFAULT_AI_PROMPTS })
   const externalApps = ref<ExternalAppsSettings>({ ...DEFAULT_EXTERNAL_APPS_SETTINGS })
+  const maxAgentTurns = ref(DEFAULT_MAX_AGENT_TURNS)
 
   applyThemeToDOM(theme.value)
 
@@ -65,6 +70,7 @@ export const useSettingsStore = defineStore('settings', () => {
     filePreview.value = settings.filePreview
     aiPrompts.value = settings.aiPrompts
     externalApps.value = settings.externalApps
+    maxAgentTurns.value = settings.maxAgentTurns
     applyThemeToDOM(settings.theme)
   }
 
@@ -188,6 +194,12 @@ export const useSettingsStore = defineStore('settings', () => {
     return findExternalAppById(appId, externalApps.value, getRuntimePlatform())
   }
 
+  async function setMaxAgentTurns(turns: number): Promise<void> {
+    const next = clampMaxAgentTurns(turns)
+    maxAgentTurns.value = next
+    await window.agentAPI.settings.update({ maxAgentTurns: next })
+  }
+
   async function addTextExtension(ext: string): Promise<void> {
     const normalized = ext.trim().replace(/^\./, '').toLowerCase()
     if (!normalized || filePreview.value.textExtensions.includes(normalized)) return
@@ -214,6 +226,7 @@ export const useSettingsStore = defineStore('settings', () => {
     filePreview,
     aiPrompts,
     externalApps,
+    maxAgentTurns,
     fetchSettings,
     setTheme,
     setApprovalLevel,
@@ -221,6 +234,7 @@ export const useSettingsStore = defineStore('settings', () => {
     setFilePreview,
     setAiPrompts,
     setExternalApps,
+    setMaxAgentTurns,
     addCustomExternalApp,
     updateCustomExternalApp,
     toggleBuiltinExternalApp,

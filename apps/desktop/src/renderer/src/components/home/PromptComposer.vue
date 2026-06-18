@@ -70,6 +70,7 @@ const urlInputValue = ref('')
 
 const props = defineProps<{
   streaming?: boolean
+  stoppable?: boolean
   queuedMessages?: { content: string }[]
   approvalLevel?: ApprovalLevel
   conversationId?: string | null
@@ -485,7 +486,7 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
       <div class="toolbar-right">
         <slot name="selectors" :compact="isCompact" />
         <button
-          v-if="props.streaming && !input.trim()"
+          v-if="props.stoppable && !input.trim() && attachments.length === 0 && planRefs.length === 0"
           class="stop-btn"
           @click="handleStop"
           :title="t('chat.stop')"
@@ -495,7 +496,7 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
         <button
           v-else
           class="send-btn"
-          :disabled="!input.trim() && attachments.length === 0"
+          :disabled="!input.trim() && attachments.length === 0 && planRefs.length === 0"
           @click="handleSubmit"
         >
           <el-icon :size="14"><Top /></el-icon>
