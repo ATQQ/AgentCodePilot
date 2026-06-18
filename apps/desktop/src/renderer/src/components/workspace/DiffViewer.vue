@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, defineAsyncComponent } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { Minus, Plus, RefreshLeft } from '@element-plus/icons-vue'
 import { useGitStore } from '@renderer/stores/git.store'
 import { useLayoutStore } from '@renderer/stores/layout.store'
 import { usePanelContextStore } from '@renderer/stores/panelContext.store'
@@ -18,6 +20,7 @@ const GitCommitBar = defineAsyncComponent(
 const gitStore = useGitStore()
 const layoutStore = useLayoutStore()
 const panelContext = usePanelContextStore()
+const { t } = useI18n()
 
 const treeCollapsed = ref(false)
 const treeFilter = ref('')
@@ -48,6 +51,10 @@ const showDiffEmptyLoading = computed(
 )
 
 const showDiffLoadFailed = computed(() => !!gitStore.diffError)
+
+const bulkActionsDisabled = computed(
+  () => filesLoading.value || gitStore.changedFiles.length === 0
+)
 
 const activeFileMeta = computed(() =>
   gitStore.changedFiles.find((f) => f.path === gitStore.selectedFile)
@@ -81,6 +88,29 @@ function onDiscard(path: string): void {
   const name = path.split('/').pop() ?? path
   if (!window.confirm(`确定放弃「${name}」的更改？此操作不可撤销。`)) return
   void gitStore.discardFiles([path])
+}
+
+function allChangedPaths(): string[] {
+  return gitStore.changedFiles.map((f) => f.path)
+}
+
+function onStageAll(): void {
+  const paths = allChangedPaths()
+  if (paths.length === 0) return
+  void gitStore.stageFiles(paths)
+}
+
+function onDiscardAll(): void {
+  const paths = allChangedPaths()
+  if (paths.length === 0) return
+  if (!window.confirm(t('review.discardAllConfirm', { count: paths.length }))) return
+  void gitStore.discardFiles(paths)
+}
+
+function onUnstageAll(): void {
+  const paths = allChangedPaths()
+  if (paths.length === 0) return
+  void gitStore.unstageFiles(paths)
 }
 
 function onCloseOthers(path: string): void {
@@ -164,11 +194,42 @@ watch(
 
       <div class="dv-body">
         <div class="main-pane">
-          <SideTreeFolderBtn
-            :title="treeCollapsed ? '展开文件树' : '收起文件树'"
-            floating
-            @click="treeCollapsed = !treeCollapsed"
-          />
+          <div class="side-tree-actions">
+            <template v-if="layoutStore.reviewScope === 'unstaged'">
+              <button
+                type="button"
+                class="side-tree-action-btn"
+                :title="t('review.discardAll')"
+                :disabled="bulkActionsDisabled"
+                @click="onDiscardAll"
+              >
+                <el-icon :size="14"><RefreshLeft /></el-icon>
+              </button>
+              <button
+                type="button"
+                class="side-tree-action-btn"
+                :title="t('review.stageAll')"
+                :disabled="bulkActionsDisabled"
+                @click="onStageAll"
+              >
+                <el-icon :size="14"><Plus /></el-icon>
+              </button>
+            </template>
+            <button
+              v-else
+              type="button"
+              class="side-tree-action-btn"
+              :title="t('review.unstageAll')"
+              :disabled="bulkActionsDisabled"
+              @click="onUnstageAll"
+            >
+              <el-icon :size="14"><Minus /></el-icon>
+            </button>
+            <SideTreeFolderBtn
+              :title="treeCollapsed ? t('review.expandTree') : t('review.collapseTree')"
+              @click="treeCollapsed = !treeCollapsed"
+            />
+          </div>
 
           <GitCommitBar v-if="layoutStore.reviewScope === 'staged'" />
 
@@ -306,6 +367,43 @@ watch(
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.side-tree-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.side-tree-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-sm);
+  background: var(--content-bg);
+  color: var(--content-text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+  outline: none;
+}
+
+.side-tree-action-btn:hover:not(:disabled) {
+  background: var(--sidebar-item-hover);
+  color: var(--content-text);
+}
+
+.side-tree-action-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .filter-input {

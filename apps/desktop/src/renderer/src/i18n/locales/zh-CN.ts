@@ -111,6 +111,14 @@ export default {
     viewProjectPlans: '查看项目执行计划',
     headerButton: '执行计划 ({count})'
   },
+  review: {
+    expandTree: '展开文件树',
+    collapseTree: '收起文件树',
+    discardAll: '放弃所有更改',
+    stageAll: '暂存所有更改',
+    unstageAll: '取消暂存所有更改',
+    discardAllConfirm: '确定放弃全部 {count} 个文件的更改？此操作不可撤销。'
+  },
   settings: {
     title: '设置',
     searchPlaceholder: '搜索设置...',
