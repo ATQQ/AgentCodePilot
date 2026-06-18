@@ -22,6 +22,7 @@ let diffEditor: Monaco.editor.IStandaloneDiffEditor | null = null
 let originalModel: Monaco.editor.ITextModel | null = null
 let modifiedModel: Monaco.editor.ITextModel | null = null
 let language = ''
+let disposed = false
 let resizeObserver: ResizeObserver | null = null
 let themeObserver: MutationObserver | null = null
 
@@ -36,7 +37,13 @@ function resolveLanguage(): string {
   return props.filePath ? getLanguageFromPath(props.filePath) : 'plaintext'
 }
 
+function detachModelsFromEditor(): void {
+  if (!diffEditor || (!originalModel && !modifiedModel)) return
+  diffEditor.setModel(null)
+}
+
 function disposeModels(): void {
+  detachModelsFromEditor()
   originalModel?.dispose()
   modifiedModel?.dispose()
   originalModel = null
@@ -59,7 +66,7 @@ function createModels(): void {
 }
 
 function syncModels(): void {
-  if (!monacoModule || !diffEditor) return
+  if (!monacoModule || !diffEditor || disposed) return
 
   const nextLanguage = resolveLanguage()
 
@@ -107,11 +114,12 @@ async function mountEditor(): Promise<void> {
     scrollBeyondLastLine: false,
     automaticLayout: true,
     diffAlgorithm: 'advanced',
-    hideUnchangedRegions: {
-      enabled: true,
-      minimumLineCount: 3,
-      contextLineCount: 3
-    }
+    hideUnchangedRegions: { enabled: false },
+    hover: { enabled: false },
+    quickSuggestions: false,
+    parameterHints: { enabled: false },
+    codeLens: false,
+    contextmenu: false
   })
 
   createModels()
@@ -130,10 +138,14 @@ async function mountEditor(): Promise<void> {
 }
 
 function destroyEditor(): void {
+  if (disposed) return
+  disposed = true
+
   resizeObserver?.disconnect()
   resizeObserver = null
   themeObserver?.disconnect()
   themeObserver = null
+
   disposeModels()
   diffEditor?.dispose()
   diffEditor = null

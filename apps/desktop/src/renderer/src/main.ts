@@ -1,4 +1,4 @@
-import './utils/monacoWorkers'
+import './utils/monacoBootstrap'
 import './assets/main.css'
 import 'element-plus/dist/index.css'
 

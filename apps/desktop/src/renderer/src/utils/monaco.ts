@@ -1,7 +1,6 @@
 import type * as Monaco from 'monaco-editor'
 import { registerMonacoThemes } from 'stream-monaco'
 import { CODE_BLOCK_MONACO_THEMES, CODE_BLOCK_THEME } from '@renderer/constants/codeBlockTheme'
-import { setupMonacoWorkers } from './monacoWorkers'
 
 const MONACO_LANGUAGES = [
   'typescript',
@@ -31,15 +30,11 @@ export function getMonacoThemeName(isDark = isMonacoDarkTheme()): string {
 
 export function loadMonaco(): Promise<typeof Monaco> {
   if (!monacoPromise) {
-    setupMonacoWorkers()
-    monacoPromise = registerMonacoThemes(CODE_BLOCK_MONACO_THEMES, [...MONACO_LANGUAGES])
-      .catch(() => undefined)
-      .then(() =>
-        import('monaco-editor').then((monaco) => {
-          ensureMonacoThemes(monaco)
-          return monaco
-        })
-      )
+    monacoPromise = import('monaco-editor').then(async (monaco) => {
+      ensureMonacoThemes(monaco)
+      await registerMonacoThemes(CODE_BLOCK_MONACO_THEMES, [...MONACO_LANGUAGES]).catch(() => undefined)
+      return monaco
+    })
   }
   return monacoPromise
 }
