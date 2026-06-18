@@ -17,6 +17,8 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
   const dirtyContent = ref('')
   const fileReadError = ref<string | null>(null)
   const forceTextRead = ref(false)
+  const previewLanguageOverride = ref<string | null>(null)
+  const textReadOverrides = ref<Record<string, { language: string }>>({})
 
   const panelContext = usePanelContextStore()
 
@@ -72,12 +74,22 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     return expandedDirs.value.has(dirPath)
   }
 
-  async function openFile(path: string, options?: { asText?: boolean }): Promise<void> {
+  async function openFile(
+    path: string,
+    options?: { asText?: boolean; language?: string }
+  ): Promise<void> {
     const roots = workspaceRoots.value
     if (roots.length === 0) return
 
     const settingsStore = useSettingsStore()
-    const asText = options?.asText ?? false
+    if (options?.asText) {
+      textReadOverrides.value[path] = {
+        language: options.language ?? textReadOverrides.value[path]?.language ?? 'plaintext'
+      }
+    }
+
+    const override = textReadOverrides.value[path]
+    const asText = options?.asText ?? Boolean(override)
     const kind = resolveFileKind(path, settingsStore.filePreview, asText)
 
     openFilePath.value = path
@@ -86,6 +98,7 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     }
     fileReadError.value = null
     forceTextRead.value = asText
+    previewLanguageOverride.value = override?.language ?? options?.language ?? null
     editMode.value = false
 
     if (kind === 'unsupported') {
@@ -116,8 +129,8 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     }
   }
 
-  async function readFileAsText(path: string): Promise<void> {
-    await openFile(path, { asText: true })
+  async function readFileAsText(path: string, language = 'plaintext'): Promise<void> {
+    await openFile(path, { asText: true, language })
   }
 
   function closeTab(path: string): void {
@@ -178,6 +191,8 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
       dirtyContent.value = ''
       fileReadError.value = null
       forceTextRead.value = false
+      previewLanguageOverride.value = null
+      delete textReadOverrides.value[path]
     }
     const parent = path.replace(/[/\\][^/\\]+$/, '')
     delete childrenCache.value[parent]
@@ -209,6 +224,8 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     editMode.value = false
     fileReadError.value = null
     forceTextRead.value = false
+    previewLanguageOverride.value = null
+    textReadOverrides.value = {}
   }
 
   watch(
@@ -229,6 +246,8 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     editMode,
     fileReadError,
     forceTextRead,
+    previewLanguageOverride,
+    textReadOverrides,
     filteredTree,
     treeRoot,
     childrenCache,

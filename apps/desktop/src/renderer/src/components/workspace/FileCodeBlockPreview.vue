@@ -13,6 +13,7 @@ const props = defineProps<{
   filePath: string
   readOnly?: boolean
   isDark: boolean
+  languageOverride?: string
 }>()
 
 const emit = defineEmits<{ 'update:value': [v: string] }>()
@@ -23,7 +24,7 @@ let resizeObserver: ResizeObserver | null = null
 let styleObserver: MutationObserver | null = null
 let monacoModule: typeof Monaco | null = null
 
-const language = computed(() => getLanguageFromPath(props.filePath))
+const language = computed(() => props.languageOverride ?? getLanguageFromPath(props.filePath))
 
 const codeNode = computed(() => {
   const lang = language.value

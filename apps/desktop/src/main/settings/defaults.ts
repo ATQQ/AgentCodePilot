@@ -4,7 +4,7 @@ import { DEFAULT_EXTERNAL_APPS_SETTINGS, REVEAL_APP_ID } from '../../shared/exte
 const LEGACY_DEFAULT_APP_IDS = new Set(['finder', 'explorer'])
 
 export const DEFAULT_TEXT_EXTENSIONS = [
-  'txt', 'md', 'markdown', 'json', 'js', 'jsx', 'ts', 'tsx', 'vue', 'css', 'scss', 'less',
+  'txt', 'md', 'markdown', 'json', 'js', 'jsx', 'mjs', 'ts', 'mts', 'tsx', 'vue', 'css', 'scss', 'less',
   'html', 'htm', 'xml', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'conf', 'sh', 'bash', 'zsh',
   'py', 'rb', 'go', 'rs', 'java', 'kt', 'kts', 'swift', 'c', 'cpp', 'h', 'hpp', 'cs',
   'sql', 'graphql', 'gql', 'env', 'gitignore', 'dockerignore', 'editorconfig', 'properties',
@@ -66,7 +66,16 @@ export function parseExternalAppsSetting(raw: string | undefined): ExternalAppsS
             typeof app.name === 'string' &&
             typeof app.protocol === 'string' &&
             app.protocol.includes('{path}')
-        )
+        ).map((app) => ({
+          id: app.id,
+          name: app.name,
+          protocol: app.protocol,
+          iconUrl: typeof app.iconUrl === 'string' ? app.iconUrl : undefined,
+          iconSvg: typeof app.iconSvg === 'string' ? app.iconSvg : undefined
+        }))
+      : [],
+    disabledBuiltinIds: Array.isArray(parsed.disabledBuiltinIds)
+      ? parsed.disabledBuiltinIds.filter((id): id is string => typeof id === 'string')
       : []
   }
 }

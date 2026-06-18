@@ -16,7 +16,12 @@ const ICONS: Record<string, string> = {
   custom: customIcon
 }
 
-export function getExternalAppIcon(appId: string): string {
+export function getExternalAppIcon(appId: string, iconUrl?: string, iconSvg?: string): string {
+  if (iconUrl?.trim()) return iconUrl.trim()
+  if (iconSvg?.trim()) {
+    const encoded = encodeURIComponent(iconSvg.trim())
+    return `data:image/svg+xml,${encoded}`
+  }
   return ICONS[appId] ?? customIcon
 }
 

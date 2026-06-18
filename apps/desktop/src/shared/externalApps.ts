@@ -16,17 +16,22 @@ export interface ExternalAppDefinition {
   kind: ExternalAppKind
   protocol?: string
   builtin: boolean
+  iconUrl?: string
+  iconSvg?: string
 }
 
 export interface CustomExternalApp {
   id: string
   name: string
   protocol: string
+  iconUrl?: string
+  iconSvg?: string
 }
 
 export interface ExternalAppsSettings {
   defaultAppId: string
   customApps: CustomExternalApp[]
+  disabledBuiltinIds?: string[]
 }
 
 export const DEFAULT_EXTERNAL_APPS_SETTINGS: ExternalAppsSettings = {
@@ -107,25 +112,36 @@ export function buildProtocolUrl(template: string, filePath: string): string {
   return template.replace('{path}', filePath)
 }
 
+export function isBuiltinAppVisible(appId: string, settings: ExternalAppsSettings): boolean {
+  return !settings.disabledBuiltinIds?.includes(appId)
+}
+
 export function mergeExternalApps(
   customApps: CustomExternalApp[],
-  platform = process.platform
+  platform = process.platform,
+  settings?: ExternalAppsSettings,
+  includeDisabled = false
 ): ExternalAppDefinition[] {
+  const builtins = getPlatformBuiltinApps(platform).filter(
+    (app) => includeDisabled || !settings || isBuiltinAppVisible(app.id, settings)
+  )
   const custom = customApps.map((app) => ({
     id: app.id,
     name: app.name,
     kind: 'protocol' as const,
     protocol: app.protocol,
-    builtin: false
+    builtin: false,
+    iconUrl: app.iconUrl,
+    iconSvg: app.iconSvg
   }))
-  return [...getPlatformBuiltinApps(platform), ...custom]
+  return [...builtins, ...custom]
 }
 
 export function getSelectableExternalApps(
   settings: ExternalAppsSettings,
   platform = process.platform
 ): ExternalAppDefinition[] {
-  return mergeExternalApps(settings.customApps, platform)
+  return mergeExternalApps(settings.customApps, platform, settings)
 }
 
 export function findExternalAppById(
@@ -135,14 +151,36 @@ export function findExternalAppById(
 ): ExternalAppDefinition | undefined {
   const resolvedId = LEGACY_DEFAULT_APP_IDS.has(appId) ? REVEAL_APP_ID : appId
   if (resolvedId === REVEAL_APP_ID) return REVEAL_APP
-  return mergeExternalApps(settings.customApps, platform).find((app) => app.id === resolvedId)
+  const custom = settings.customApps.find((app) => app.id === resolvedId)
+  if (custom) {
+    return {
+      id: custom.id,
+      name: custom.name,
+      kind: 'protocol',
+      protocol: custom.protocol,
+      builtin: false,
+      iconUrl: custom.iconUrl,
+      iconSvg: custom.iconSvg
+    }
+  }
+  return mergeExternalApps(settings.customApps, platform, settings, true).find(
+    (app) => app.id === resolvedId
+  )
 }
 
 export function getDefaultExternalAppsForSettings(
   settings: ExternalAppsSettings,
   platform = process.platform
 ): ExternalAppDefinition[] {
-  return [REVEAL_APP, ...mergeExternalApps(settings.customApps, platform)]
+  return [REVEAL_APP, ...mergeExternalApps(settings.customApps, platform, settings, true)]
+}
+
+export function getVisibleExternalApps(
+  settings: ExternalAppsSettings,
+  platform = process.platform
+): ExternalAppDefinition[] {
+  const apps = getDefaultExternalAppsForSettings(settings, platform)
+  return apps.filter((app) => !app.builtin || isBuiltinAppVisible(app.id, settings))
 }
 
 export function getExternalAppProtocolHint(app: ExternalAppDefinition): string | null {

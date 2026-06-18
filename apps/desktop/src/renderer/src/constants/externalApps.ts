@@ -7,6 +7,8 @@ export {
   findExternalAppById,
   getSelectableExternalApps,
   getDefaultExternalAppsForSettings,
+  getVisibleExternalApps,
+  isBuiltinAppVisible,
   getExternalAppProtocolHint,
   getBuiltinReferenceApps,
   buildProtocolUrl,

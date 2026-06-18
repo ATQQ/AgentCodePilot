@@ -130,11 +130,14 @@ export interface CustomExternalApp {
   id: string
   name: string
   protocol: string
+  iconUrl?: string
+  iconSvg?: string
 }
 
 export interface ExternalAppsSettings {
   defaultAppId: string
   customApps: CustomExternalApp[]
+  disabledBuiltinIds?: string[]
 }
 
 export interface ExternalAppDefinition {
@@ -143,6 +146,8 @@ export interface ExternalAppDefinition {
   kind: ExternalAppKind
   protocol?: string
   builtin: boolean
+  iconUrl?: string
+  iconSvg?: string
 }
 
 export interface OpenPathPayload {
@@ -269,9 +274,15 @@ export interface AgentModelOption {
   description?: string
 }
 
+export interface MockAgentConfig {
+  initialDelayMs?: number
+  responses?: string[]
+}
+
 export interface AgentConfigSettings {
   defaultModelId?: string
   models?: AgentModelOption[]
+  mock?: MockAgentConfig
 }
 
 export type ModelCatalogSource = 'sdk' | 'claude-settings' | 'app-config' | 'fallback'

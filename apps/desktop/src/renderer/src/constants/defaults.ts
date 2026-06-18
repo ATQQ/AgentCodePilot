@@ -1,7 +1,7 @@
 import type { AiPromptsSettings, FilePreviewSettings } from '@renderer/types'
 
 export const DEFAULT_TEXT_EXTENSIONS = [
-  'txt', 'md', 'markdown', 'json', 'js', 'jsx', 'ts', 'tsx', 'vue', 'css', 'scss', 'less',
+  'txt', 'md', 'markdown', 'json', 'js', 'jsx', 'mjs', 'ts', 'mts', 'tsx', 'vue', 'css', 'scss', 'less',
   'html', 'htm', 'xml', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'conf', 'sh', 'bash', 'zsh',
   'py', 'rb', 'go', 'rs', 'java', 'kt', 'kts', 'swift', 'c', 'cpp', 'h', 'hpp', 'cs',
   'sql', 'graphql', 'gql', 'env', 'gitignore', 'dockerignore', 'editorconfig', 'properties',

@@ -4,6 +4,9 @@ export default {
     cancel: '取消',
     confirm: '确认',
     save: '保存',
+    saveSuccess: '保存成功',
+    close: '关闭',
+    loading: '加载中…',
     backToApp: '返回应用'
   },
   sidebar: {
@@ -156,7 +159,7 @@ export default {
     off: '关闭',
     agentConfig: {
       title: 'Agent 配置',
-      desc: '管理 Claude Code 的默认模型与可选模型列表。优先读取 SDK 与 ~/.claude/settings.json，应用内配置作为兜底覆盖。',
+      desc: '按 Agent 分别管理模型与可选列表。Claude Code 优先读取 SDK 与 ~/.claude/settings.json，应用内配置作为兜底覆盖。',
       discoveredSource: '当前检测来源',
       sourceSdk: 'Claude Agent SDK',
       sourceClaudeSettings: 'Claude Code 设置 (~/.claude/settings.json)',
@@ -171,23 +174,44 @@ export default {
       modelName: '显示名称',
       modelDescription: '描述（可选）',
       addModel: '添加模型',
-      reset: '恢复自动检测'
+      reset: '恢复自动检测',
+      resetSuccess: '已恢复默认配置',
+      noConfig: '{agent} 暂无可配置项',
+      mock: {
+        initialDelay: '默认等待时间',
+        initialDelayDesc: '开始返回内容前的等待时长（毫秒），用于模拟网络延迟',
+        responses: 'Markdown 响应内容',
+        responsesDesc: '可配置多条 Markdown，每次对话随机返回其中一条',
+        addResponse: '添加响应',
+        responseItem: '响应 #{index}'
+      }
     },
     aiFeatures: {
       title: 'AI 功能',
-      desc: '维护独立 AI 功能的提示词，以及文件预览所支持的后缀列表。',
+      desc: '按功能分类维护独立 AI 提示词，hover 后可预览或编辑。',
+      categoryGit: 'Git',
       commitMessage: 'Commit Message 生成',
       commitMessageDesc: '审查面板中 AI 生成提交消息时使用的 system prompt',
       autoCommit: '自动提交',
       autoCommitDesc: '一键自动提交时使用的提示词（预留）',
-      filePreview: '文件预览',
-      textExtensions: '文本预览后缀',
-      textExtensionsDesc: '逗号或换行分隔，不含点号，例如 ts、vue、md',
-      imageExtensions: '图片预览后缀',
-      imageExtensionsDesc: '逗号或换行分隔，例如 png、jpg、webp',
-      resetPrompts: '恢复默认提示词',
-      resetExtensions: '恢复默认后缀',
+      preview: '预览',
+      edit: '编辑',
+      resetItem: '恢复默认',
+      emptyPrompt: '（未设置）',
       save: '保存',
+      saving: '保存中…'
+    },
+    filePreview: {
+      title: '文件预览',
+      desc: '配置工作区文件预览所支持的后缀列表。',
+      textExtensions: '文本预览后缀',
+      textExtensionsDesc: '以标签形式管理，输入后按回车添加，支持逗号分隔批量粘贴并自动去重',
+      imageExtensions: '图片预览后缀',
+      imageExtensionsDesc: '以标签形式管理，输入后按回车添加，支持逗号分隔批量粘贴并自动去重',
+      addExtension: '添加后缀…',
+      copyAll: '复制全部',
+      copySuccess: '已复制到剪贴板',
+      resetExtensions: '恢复默认后缀',
       saving: '保存中…'
     },
     language: '语言',
@@ -196,19 +220,30 @@ export default {
       title: '外部打开方式',
       desc: '配置环境信息中「本地」目录的默认打开方式，以及自定义 URL 协议。',
       defaultTitle: '默认打开方式',
-      defaultDesc: '点击「打开」按钮时直接使用所选应用；下拉菜单中仍可切换其它应用。',
+      defaultDesc: '选择默认应用；内置应用可勾选是否在菜单中显示，协议信息直接展示在列表中。',
       builtin: '内置',
+      visibility: '是否在菜单中显示',
+      showInMenu: '显示',
       customTitle: '自定义协议',
-      customDesc: '协议模板需包含 {path} 占位符，例如 myapp://open?folder={path}',
-      builtinHint: '已内置：{apps}',
-      builtinProtocolsTitle: '内置打开方式',
-      builtinProtocolsDesc: '以下为内置应用的协议或打开方式，供参考确认。',
+      customDesc: '协议模板需包含 {path} 占位符，例如 myapp://open?folder={path}。可设置图标链接或 SVG 内容。',
       protocolHintReveal: '系统文件管理器（showItemInFolder）',
       protocolHintTerminal: '系统终端（macOS Terminal / Windows cmd）',
       namePlaceholder: '显示名称',
       protocolPlaceholder: '例如 myapp://open?folder={path}',
+      iconUrlPlaceholder: '图标 URL（可选）',
+      iconSvgPlaceholder: 'SVG 内容（可选，与 URL 二选一）',
+      editIcon: '图标',
+      editIconTitle: '编辑自定义图标',
       add: '添加',
       remove: '删除'
+    }
+  },
+  workspace: {
+    filePreview: {
+      unsupported: '无法预览此文件类型',
+      readAsPrefix: '按',
+      readAsSuffix: '格式读取',
+      read: '读取'
     }
   },
   env: {

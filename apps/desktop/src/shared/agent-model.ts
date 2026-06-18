@@ -4,9 +4,15 @@ export interface AgentModelOption {
   description?: string
 }
 
+export interface MockAgentConfig {
+  initialDelayMs?: number
+  responses?: string[]
+}
+
 export interface AgentConfigSettings {
   defaultModelId?: string
   models?: AgentModelOption[]
+  mock?: MockAgentConfig
 }
 
 export type ModelCatalogSource = 'sdk' | 'claude-settings' | 'app-config' | 'fallback'

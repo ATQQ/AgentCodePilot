@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useFileExplorerStore } from '@renderer/stores/fileExplorer.store'
 import { useComposerStore } from '@renderer/stores/composer.store'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import { toLocalFileUrl } from '@renderer/utils/localFile'
 import { resolveFileKind, getFileExtension } from '@renderer/utils/fileKind'
+import { getLanguageFromPath, PREVIEW_LANGUAGE_OPTIONS } from '@renderer/utils/monaco'
 
 const FileCodeBlockPreview = defineAsyncComponent(
   () => import('./FileCodeBlockPreview.vue')
@@ -14,6 +16,7 @@ const props = defineProps<{
   filePath: string
 }>()
 
+const { t } = useI18n()
 const fileStore = useFileExplorerStore()
 const composerStore = useComposerStore()
 const settingsStore = useSettingsStore()
@@ -21,6 +24,7 @@ const settingsStore = useSettingsStore()
 const imageSrc = ref('')
 const imageLoadFailed = ref(false)
 const showAddExtensionPrompt = ref(false)
+const selectedLanguage = ref('plaintext')
 
 const fileName = computed(() => props.filePath.split('/').pop() ?? props.filePath)
 
@@ -31,6 +35,8 @@ const fileKind = computed(() =>
 const isEditable = computed(() => fileKind.value === 'text' && !fileStore.fileReadError)
 
 const fileExtension = computed(() => getFileExtension(props.filePath))
+
+const languageOptions = PREVIEW_LANGUAGE_OPTIONS
 
 const isDark = computed(() => {
   if (settingsStore.theme === 'dark') return true
@@ -43,13 +49,19 @@ function initImageSrc(): void {
   imageSrc.value = toLocalFileUrl(props.filePath)
 }
 
+function resetLanguageSelection(): void {
+  selectedLanguage.value = getLanguageFromPath(props.filePath)
+}
+
 initImageSrc()
+resetLanguageSelection()
 
 watch(
   () => props.filePath,
   () => {
     initImageSrc()
     showAddExtensionPrompt.value = false
+    resetLanguageSelection()
   }
 )
 
@@ -77,9 +89,10 @@ function addToChat(): void {
   composerStore.addFileReference(props.filePath)
 }
 
-async function readAsText(): Promise<void> {
-  await fileStore.readFileAsText(props.filePath)
-  if (!fileStore.fileReadError) {
+async function readAsFormat(): Promise<void> {
+  const wasUnsupported = fileKind.value === 'unsupported'
+  await fileStore.readFileAsText(props.filePath, selectedLanguage.value)
+  if (!fileStore.fileReadError && wasUnsupported && fileExtension.value) {
     showAddExtensionPrompt.value = true
   }
 }
@@ -114,7 +127,18 @@ async function confirmAddExtension(): Promise<void> {
 
       <div v-else-if="fileStore.fileReadError" class="center-msg column">
         <span>{{ fileStore.fileReadError }}</span>
-        <button class="action-btn" @click="readAsText">按文本格式读取</button>
+        <div class="read-as-row">
+          <span>{{ t('workspace.filePreview.readAsPrefix') }}</span>
+          <select v-model="selectedLanguage" class="format-select">
+            <option v-for="opt in languageOptions" :key="opt.id" :value="opt.id">
+              {{ opt.label }}
+            </option>
+          </select>
+          <span>{{ t('workspace.filePreview.readAsSuffix') }}</span>
+          <button class="action-btn primary" @click="readAsFormat">
+            {{ t('workspace.filePreview.read') }}
+          </button>
+        </div>
       </div>
 
       <img
@@ -130,6 +154,7 @@ async function confirmAddExtension(): Promise<void> {
           :file-path="filePath"
           :read-only="!fileStore.editMode"
           :is-dark="isDark"
+          :language-override="fileStore.previewLanguageOverride ?? undefined"
           @update:value="(v) => fileStore.dirtyContent = v"
         />
         <template #fallback>
@@ -138,8 +163,19 @@ async function confirmAddExtension(): Promise<void> {
       </Suspense>
 
       <div v-else class="center-msg column">
-        <span>无法预览此文件类型</span>
-        <button class="action-btn" @click="readAsText">按文本格式读取</button>
+        <span>{{ t('workspace.filePreview.unsupported') }}</span>
+        <div class="read-as-row">
+          <span>{{ t('workspace.filePreview.readAsPrefix') }}</span>
+          <select v-model="selectedLanguage" class="format-select">
+            <option v-for="opt in languageOptions" :key="opt.id" :value="opt.id">
+              {{ opt.label }}
+            </option>
+          </select>
+          <span>{{ t('workspace.filePreview.readAsSuffix') }}</span>
+          <button class="action-btn primary" @click="readAsFormat">
+            {{ t('workspace.filePreview.read') }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -238,6 +274,24 @@ async function confirmAddExtension(): Promise<void> {
 .center-msg.column {
   flex-direction: column;
   gap: 12px;
+}
+
+.read-as-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.format-select {
+  padding: 4px 8px;
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-sm);
+  background: var(--content-bg);
+  color: var(--content-text);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
 }
 
 .extension-prompt {

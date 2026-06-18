@@ -3,6 +3,7 @@ import { registerMonacoThemes } from 'stream-monaco'
 import { CODE_BLOCK_MONACO_THEMES, CODE_BLOCK_THEME } from '@renderer/constants/codeBlockTheme'
 
 const MONACO_LANGUAGES = [
+  'plaintext',
   'typescript',
   'javascript',
   'html',
@@ -17,9 +18,29 @@ const MONACO_LANGUAGES = [
   'rust',
   'java',
   'sql',
-  'xml',
-  'plaintext'
+  'xml'
 ] as const
+
+export type PreviewLanguageId = (typeof MONACO_LANGUAGES)[number]
+
+export const PREVIEW_LANGUAGE_OPTIONS: { id: PreviewLanguageId; label: string }[] = [
+  { id: 'plaintext', label: '纯文本' },
+  { id: 'typescript', label: 'TypeScript' },
+  { id: 'javascript', label: 'JavaScript' },
+  { id: 'html', label: 'HTML' },
+  { id: 'json', label: 'JSON' },
+  { id: 'markdown', label: 'Markdown' },
+  { id: 'css', label: 'CSS' },
+  { id: 'scss', label: 'SCSS' },
+  { id: 'yaml', label: 'YAML' },
+  { id: 'shell', label: 'Shell' },
+  { id: 'python', label: 'Python' },
+  { id: 'go', label: 'Go' },
+  { id: 'rust', label: 'Rust' },
+  { id: 'java', label: 'Java' },
+  { id: 'sql', label: 'SQL' },
+  { id: 'xml', label: 'XML' }
+]
 
 let monacoPromise: Promise<typeof Monaco> | null = null
 let themesDefined = false
@@ -86,6 +107,7 @@ export function getLanguageFromPath(filePath: string): string {
   const map: Record<string, string> = {
     ts: 'typescript',
     tsx: 'typescript',
+    mts: 'typescript',
     js: 'javascript',
     jsx: 'javascript',
     mjs: 'javascript',

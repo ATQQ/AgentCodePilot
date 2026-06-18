@@ -9,6 +9,8 @@ import {
 const props = withDefaults(
   defineProps<{
     appId: string
+    iconUrl?: string
+    iconSvg?: string
     size?: number
   }>(),
   {
@@ -16,9 +18,9 @@ const props = withDefaults(
   }
 )
 
-const src = computed(() => getExternalAppIcon(props.appId))
-const isMono = computed(() => isMonochromeExternalAppIcon(props.appId))
-const isInset = computed(() => needsInsetExternalAppIcon(props.appId))
+const src = computed(() => getExternalAppIcon(props.appId, props.iconUrl, props.iconSvg))
+const isMono = computed(() => !props.iconUrl && !props.iconSvg && isMonochromeExternalAppIcon(props.appId))
+const isInset = computed(() => !props.iconUrl && !props.iconSvg && needsInsetExternalAppIcon(props.appId))
 const wrapStyle = computed(() => ({
   width: `${props.size}px`,
   height: `${props.size}px`

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
-import type { ThemeMode, ApprovalLevel, FilePreviewSettings, AiPromptsSettings, ExternalAppsSettings } from '@renderer/types'
+import type { ThemeMode, ApprovalLevel, FilePreviewSettings, AiPromptsSettings, ExternalAppsSettings, CustomExternalApp } from '@renderer/types'
 import {
   DEFAULT_FILE_PREVIEW,
   DEFAULT_AI_PROMPTS
@@ -8,7 +8,7 @@ import {
 import {
   DEFAULT_EXTERNAL_APPS_SETTINGS,
   findExternalAppById,
-  mergeExternalApps,
+  getVisibleExternalApps,
   resolveDefaultAppId
 } from '@renderer/constants/externalApps'
 import type { ExternalAppDefinition } from '@renderer/types'
@@ -98,14 +98,59 @@ export const useSettingsStore = defineStore('settings', () => {
     await window.agentAPI.settings.update({ externalApps: value })
   }
 
-  async function addCustomExternalApp(name: string, protocol: string): Promise<void> {
+  async function addCustomExternalApp(
+    name: string,
+    protocol: string,
+    iconUrl?: string,
+    iconSvg?: string
+  ): Promise<void> {
     const trimmedName = name.trim()
     const trimmedProtocol = protocol.trim()
     if (!trimmedName || !trimmedProtocol.includes('{path}')) return
     const id = `custom-${Date.now()}`
     await setExternalApps({
       ...externalApps.value,
-      customApps: [...externalApps.value.customApps, { id, name: trimmedName, protocol: trimmedProtocol }]
+      customApps: [
+        ...externalApps.value.customApps,
+        {
+          id,
+          name: trimmedName,
+          protocol: trimmedProtocol,
+          iconUrl: iconUrl?.trim() || undefined,
+          iconSvg: iconSvg?.trim() || undefined
+        }
+      ]
+    })
+  }
+
+  async function updateCustomExternalApp(
+    id: string,
+    patch: Partial<Pick<CustomExternalApp, 'name' | 'protocol' | 'iconUrl' | 'iconSvg'>>
+  ): Promise<void> {
+    await setExternalApps({
+      ...externalApps.value,
+      customApps: externalApps.value.customApps.map((app) =>
+        app.id === id ? { ...app, ...patch } : app
+      )
+    })
+  }
+
+  async function toggleBuiltinExternalApp(appId: string, visible: boolean): Promise<void> {
+    const disabled = new Set(externalApps.value.disabledBuiltinIds ?? [])
+    if (visible) {
+      disabled.delete(appId)
+    } else {
+      disabled.add(appId)
+    }
+    const nextDisabled = [...disabled]
+    let nextDefault = externalApps.value.defaultAppId
+    if (!visible && nextDefault === appId) {
+      nextDefault = DEFAULT_EXTERNAL_APPS_SETTINGS.defaultAppId
+    }
+    await setExternalApps({
+      ...externalApps.value,
+      defaultAppId: nextDefault,
+      disabledBuiltinIds: nextDisabled
     })
   }
 
@@ -136,7 +181,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   function getMergedExternalApps(): ExternalAppDefinition[] {
-    return mergeExternalApps(externalApps.value.customApps, getRuntimePlatform())
+    return getVisibleExternalApps(externalApps.value, getRuntimePlatform())
   }
 
   function findAppById(appId: string): ExternalAppDefinition | undefined {
@@ -177,6 +222,8 @@ export const useSettingsStore = defineStore('settings', () => {
     setAiPrompts,
     setExternalApps,
     addCustomExternalApp,
+    updateCustomExternalApp,
+    toggleBuiltinExternalApp,
     removeCustomExternalApp,
     setDefaultExternalApp,
     getMergedExternalApps,

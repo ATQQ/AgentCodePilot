@@ -1,26 +1,71 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { ElMessage } from 'element-plus'
+import { View, Edit } from '@element-plus/icons-vue'
 import { useSettingsStore } from '@renderer/stores/settings.store'
-import {
-  DEFAULT_AI_PROMPTS,
-  DEFAULT_FILE_PREVIEW
-} from '@renderer/constants/defaults'
+import { DEFAULT_AI_PROMPTS } from '@renderer/constants/defaults'
+
+type PromptKey = 'commitMessage' | 'autoCommit'
+
+interface PromptItem {
+  key: PromptKey
+  labelKey: string
+  descKey: string
+}
+
+interface PromptCategory {
+  key: string
+  labelKey: string
+  items: PromptItem[]
+}
 
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
 
-const commitMessagePrompt = ref('')
-const autoCommitPrompt = ref('')
-const textExtensionsText = ref('')
-const imageExtensionsText = ref('')
+const promptDrafts = ref<Record<PromptKey, string>>({
+  commitMessage: '',
+  autoCommit: ''
+})
 const saving = ref(false)
+const dialogVisible = ref(false)
+const dialogMode = ref<'preview' | 'edit'>('preview')
+const activePromptKey = ref<PromptKey | null>(null)
+const editDraft = ref('')
+
+const categories: PromptCategory[] = [
+  {
+    key: 'git',
+    labelKey: 'settings.aiFeatures.categoryGit',
+    items: [
+      {
+        key: 'commitMessage',
+        labelKey: 'settings.aiFeatures.commitMessage',
+        descKey: 'settings.aiFeatures.commitMessageDesc'
+      },
+      {
+        key: 'autoCommit',
+        labelKey: 'settings.aiFeatures.autoCommit',
+        descKey: 'settings.aiFeatures.autoCommitDesc'
+      }
+    ]
+  }
+]
+
+const activePromptLabel = computed(() => {
+  if (!activePromptKey.value) return ''
+  for (const category of categories) {
+    const item = category.items.find((entry) => entry.key === activePromptKey.value)
+    if (item) return t(item.labelKey)
+  }
+  return ''
+})
 
 function syncDraft(): void {
-  commitMessagePrompt.value = settingsStore.aiPrompts.commitMessage ?? DEFAULT_AI_PROMPTS.commitMessage ?? ''
-  autoCommitPrompt.value = settingsStore.aiPrompts.autoCommit ?? DEFAULT_AI_PROMPTS.autoCommit ?? ''
-  textExtensionsText.value = settingsStore.extensionsToText(settingsStore.filePreview.textExtensions)
-  imageExtensionsText.value = settingsStore.extensionsToText(settingsStore.filePreview.imageExtensions)
+  promptDrafts.value = {
+    commitMessage: settingsStore.aiPrompts.commitMessage ?? DEFAULT_AI_PROMPTS.commitMessage ?? '',
+    autoCommit: settingsStore.aiPrompts.autoCommit ?? DEFAULT_AI_PROMPTS.autoCommit ?? ''
+  }
 }
 
 onMounted(async () => {
@@ -28,31 +73,60 @@ onMounted(async () => {
   syncDraft()
 })
 
-async function save(): Promise<void> {
+function getPromptPreview(key: PromptKey): string {
+  const value = promptDrafts.value[key].trim()
+  if (!value) return t('settings.aiFeatures.emptyPrompt')
+  return value.length > 120 ? `${value.slice(0, 120)}…` : value
+}
+
+function openPreview(key: PromptKey): void {
+  activePromptKey.value = key
+  dialogMode.value = 'preview'
+  dialogVisible.value = true
+}
+
+function openEdit(key: PromptKey): void {
+  activePromptKey.value = key
+  editDraft.value = promptDrafts.value[key]
+  dialogMode.value = 'edit'
+  dialogVisible.value = true
+}
+
+function closeDialog(): void {
+  dialogVisible.value = false
+  activePromptKey.value = null
+}
+
+async function persistPrompts(next: Record<PromptKey, string>): Promise<void> {
   saving.value = true
   try {
     await settingsStore.setAiPrompts({
-      commitMessage: commitMessagePrompt.value.trim() || DEFAULT_AI_PROMPTS.commitMessage,
-      autoCommit: autoCommitPrompt.value.trim() || DEFAULT_AI_PROMPTS.autoCommit
-    })
-    await settingsStore.setFilePreview({
-      textExtensions: settingsStore.textToExtensions(textExtensionsText.value),
-      imageExtensions: settingsStore.textToExtensions(imageExtensionsText.value)
+      commitMessage: next.commitMessage.trim() || DEFAULT_AI_PROMPTS.commitMessage,
+      autoCommit: next.autoCommit.trim() || DEFAULT_AI_PROMPTS.autoCommit
     })
     syncDraft()
+    ElMessage.success(t('common.saveSuccess'))
   } finally {
     saving.value = false
   }
 }
 
-function resetPrompts(): void {
-  commitMessagePrompt.value = DEFAULT_AI_PROMPTS.commitMessage ?? ''
-  autoCommitPrompt.value = DEFAULT_AI_PROMPTS.autoCommit ?? ''
+async function applyEdit(): Promise<void> {
+  if (!activePromptKey.value) return
+  const next = {
+    ...promptDrafts.value,
+    [activePromptKey.value]: editDraft.value
+  }
+  await persistPrompts(next)
+  closeDialog()
 }
 
-function resetExtensions(): void {
-  textExtensionsText.value = settingsStore.extensionsToText(DEFAULT_FILE_PREVIEW.textExtensions)
-  imageExtensionsText.value = settingsStore.extensionsToText(DEFAULT_FILE_PREVIEW.imageExtensions)
+async function resetPrompt(key: PromptKey): Promise<void> {
+  const next = {
+    ...promptDrafts.value,
+    [key]: DEFAULT_AI_PROMPTS[key] ?? ''
+  }
+  await persistPrompts(next)
 }
 </script>
 
@@ -61,73 +135,73 @@ function resetExtensions(): void {
     <h1 class="page-title">{{ t('settings.aiFeatures.title') }}</h1>
     <p class="page-desc">{{ t('settings.aiFeatures.desc') }}</p>
 
-    <div class="setting-card">
-      <div class="setting-block">
-        <div class="setting-label">{{ t('settings.aiFeatures.commitMessage') }}</div>
-        <div class="setting-desc">{{ t('settings.aiFeatures.commitMessageDesc') }}</div>
-        <textarea
-          v-model="commitMessagePrompt"
-          class="prompt-textarea"
-          rows="8"
-          spellcheck="false"
-        />
-      </div>
+    <div v-for="category in categories" :key="category.key" class="setting-card">
+      <h2 class="category-title">{{ t(category.labelKey) }}</h2>
 
-      <div class="setting-block">
-        <div class="setting-label">{{ t('settings.aiFeatures.autoCommit') }}</div>
-        <div class="setting-desc">{{ t('settings.aiFeatures.autoCommitDesc') }}</div>
-        <textarea
-          v-model="autoCommitPrompt"
-          class="prompt-textarea"
-          rows="4"
-          spellcheck="false"
-        />
+      <div class="prompt-list">
+        <div v-for="item in category.items" :key="item.key" class="prompt-row">
+          <div class="prompt-main">
+            <div class="prompt-label">{{ t(item.labelKey) }}</div>
+            <div class="prompt-desc">{{ t(item.descKey) }}</div>
+            <div class="prompt-preview">{{ getPromptPreview(item.key) }}</div>
+          </div>
+          <div class="prompt-actions">
+            <button
+              type="button"
+              class="icon-action-btn"
+              :title="t('settings.aiFeatures.preview')"
+              @click="openPreview(item.key)"
+            >
+              <el-icon :size="14"><View /></el-icon>
+            </button>
+            <button
+              type="button"
+              class="icon-action-btn"
+              :title="t('settings.aiFeatures.edit')"
+              @click="openEdit(item.key)"
+            >
+              <el-icon :size="14"><Edit /></el-icon>
+            </button>
+            <button
+              type="button"
+              class="text-action-btn"
+              :disabled="saving"
+              @click="resetPrompt(item.key)"
+            >
+              {{ t('settings.aiFeatures.resetItem') }}
+            </button>
+          </div>
+        </div>
       </div>
+    </div>
 
-      <div class="setting-actions">
-        <button class="secondary-btn" type="button" @click="resetPrompts">
-          {{ t('settings.aiFeatures.resetPrompts') }}
+    <el-dialog
+      v-model="dialogVisible"
+      :title="activePromptLabel"
+      width="640px"
+      destroy-on-close
+      @close="closeDialog"
+    >
+      <template v-if="dialogMode === 'preview' && activePromptKey">
+        <pre class="dialog-prompt">{{ promptDrafts[activePromptKey] }}</pre>
+      </template>
+      <template v-else-if="dialogMode === 'edit'">
+        <textarea v-model="editDraft" class="dialog-textarea" rows="14" spellcheck="false" />
+      </template>
+      <template #footer>
+        <button v-if="dialogMode === 'preview'" class="secondary-btn" type="button" @click="closeDialog">
+          {{ t('common.close') }}
         </button>
-      </div>
-    </div>
-
-    <div class="setting-card">
-      <h2 class="section-subtitle">{{ t('settings.aiFeatures.filePreview') }}</h2>
-
-      <div class="setting-block">
-        <div class="setting-label">{{ t('settings.aiFeatures.textExtensions') }}</div>
-        <div class="setting-desc">{{ t('settings.aiFeatures.textExtensionsDesc') }}</div>
-        <textarea
-          v-model="textExtensionsText"
-          class="prompt-textarea"
-          rows="4"
-          spellcheck="false"
-        />
-      </div>
-
-      <div class="setting-block">
-        <div class="setting-label">{{ t('settings.aiFeatures.imageExtensions') }}</div>
-        <div class="setting-desc">{{ t('settings.aiFeatures.imageExtensionsDesc') }}</div>
-        <textarea
-          v-model="imageExtensionsText"
-          class="prompt-textarea"
-          rows="2"
-          spellcheck="false"
-        />
-      </div>
-
-      <div class="setting-actions">
-        <button class="secondary-btn" type="button" @click="resetExtensions">
-          {{ t('settings.aiFeatures.resetExtensions') }}
-        </button>
-      </div>
-    </div>
-
-    <div class="footer-actions">
-      <button class="primary-btn" type="button" :disabled="saving" @click="save">
-        {{ saving ? t('settings.aiFeatures.saving') : t('settings.aiFeatures.save') }}
-      </button>
-    </div>
+        <template v-else>
+          <button class="secondary-btn" type="button" :disabled="saving" @click="closeDialog">
+            {{ t('common.cancel') }}
+          </button>
+          <button class="primary-btn" type="button" :disabled="saving" @click="applyEdit">
+            {{ saving ? t('settings.aiFeatures.saving') : t('common.save') }}
+          </button>
+        </template>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -138,37 +212,139 @@ function resetExtensions(): void {
   font-size: var(--font-size-sm);
 }
 
-.section-subtitle {
+.setting-card {
+  margin-bottom: var(--spacing-lg);
+  padding: var(--spacing-lg);
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-lg);
+  background: var(--content-bg);
+}
+
+.category-title {
   margin: 0 0 var(--spacing-md);
   font-size: var(--font-size-base);
   font-weight: 600;
   color: var(--content-text);
 }
 
-.setting-block {
-  margin-bottom: var(--spacing-md);
+.prompt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.setting-label {
-  font-size: var(--font-size-sm);
-  font-weight: 500;
-  color: var(--content-text);
-  margin-bottom: 4px;
-}
-
-.setting-desc {
-  font-size: var(--font-size-xs);
-  color: var(--content-text-secondary);
-  margin-bottom: var(--spacing-sm);
-}
-
-.prompt-textarea {
-  width: 100%;
-  min-height: 80px;
+.prompt-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
   padding: 10px 12px;
   border: 1px solid var(--sidebar-border);
   border-radius: var(--radius-md);
-  background: var(--sidebar-bg);
+  background: var(--btn-secondary-bg);
+  transition: border-color 0.15s;
+}
+
+.prompt-row:hover {
+  border-color: var(--composer-border-focus);
+}
+
+.prompt-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.prompt-label {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--content-text);
+}
+
+.prompt-desc {
+  margin-top: 2px;
+  font-size: var(--font-size-xs);
+  color: var(--content-text-secondary);
+}
+
+.prompt-preview {
+  margin-top: 6px;
+  font-size: var(--font-size-xs);
+  color: var(--content-text-tertiary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prompt-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.prompt-row:hover .prompt-actions {
+  opacity: 1;
+}
+
+.icon-action-btn,
+.text-action-btn {
+  border: none;
+  background: transparent;
+  color: var(--content-text-secondary);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: background 0.15s, color 0.15s;
+}
+
+.icon-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+}
+
+.icon-action-btn:hover,
+.text-action-btn:hover:not(:disabled) {
+  background: var(--sidebar-item-hover);
+  color: var(--content-text);
+}
+
+.text-action-btn {
+  padding: 4px 8px;
+  font-size: var(--font-size-xs);
+}
+
+.text-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialog-prompt {
+  margin: 0;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--btn-secondary-bg);
+  color: var(--content-text);
+  font-size: var(--font-size-sm);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.dialog-textarea {
+  width: 100%;
+  min-height: 280px;
+  padding: 12px;
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-md);
+  background: var(--btn-secondary-bg);
   color: var(--content-text);
   font-size: var(--font-size-sm);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -177,14 +353,9 @@ function resetExtensions(): void {
   box-sizing: border-box;
 }
 
-.prompt-textarea:focus {
+.dialog-textarea:focus {
   outline: none;
   border-color: var(--composer-border-focus);
-}
-
-.setting-actions {
-  display: flex;
-  gap: var(--spacing-sm);
 }
 
 .secondary-btn,
@@ -210,11 +381,5 @@ function resetExtensions(): void {
 .primary-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-}
-
-.footer-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: var(--spacing-md);
 }
 </style>

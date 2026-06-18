@@ -1,4 +1,4 @@
-export type { AgentModelOption, AgentConfigSettings, ModelCatalogSource, ModelCatalogResult } from '../../../preload/types'
+export type { AgentModelOption, AgentConfigSettings, MockAgentConfig, ModelCatalogSource, ModelCatalogResult } from '../../../preload/types'
 export type {
   GitChangedFile,
   GitStatusResult,

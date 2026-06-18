@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { ElMessage } from 'element-plus'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import {
   getDefaultExternalAppsForSettings,
   getExternalAppProtocolHint,
-  getBuiltinReferenceApps,
-  getPlatformBuiltinApps
+  isBuiltinAppVisible
 } from '@renderer/constants/externalApps'
+import ExternalAppIcon from '@renderer/components/common/ExternalAppIcon.vue'
 import type { ExternalAppDefinition } from '@renderer/types'
 import { isWindowsPlatform } from '@renderer/utils/externalAppIcons'
 
@@ -16,13 +17,14 @@ const settingsStore = useSettingsStore()
 
 const customName = ref('')
 const customProtocol = ref('')
+const customIconUrl = ref('')
+const customIconSvg = ref('')
 const saving = ref(false)
+const editingCustomId = ref<string | null>(null)
+const editIconUrl = ref('')
+const editIconSvg = ref('')
 
 const runtimePlatform = computed(() => (isWindowsPlatform() ? 'win32' : 'darwin') as NodeJS.Platform)
-
-const platformApps = computed(() => getPlatformBuiltinApps(runtimePlatform.value))
-
-const builtinReferenceApps = computed(() => getBuiltinReferenceApps(runtimePlatform.value))
 
 const allApps = computed(() =>
   getDefaultExternalAppsForSettings(settingsStore.externalApps, runtimePlatform.value)
@@ -30,10 +32,15 @@ const allApps = computed(() =>
 
 function formatProtocolHint(app: ExternalAppDefinition): string {
   const hint = getExternalAppProtocolHint(app)
-  if (!hint) return t('settings.externalApps.builtin')
+  if (!hint) return ''
   if (hint === 'showItemInFolder') return t('settings.externalApps.protocolHintReveal')
   if (hint === 'system-terminal') return t('settings.externalApps.protocolHintTerminal')
   return hint
+}
+
+function isAppVisible(app: ExternalAppDefinition): boolean {
+  if (!app.builtin) return true
+  return isBuiltinAppVisible(app.id, settingsStore.externalApps)
 }
 
 onMounted(async () => {
@@ -44,6 +51,18 @@ async function setDefault(appId: string): Promise<void> {
   saving.value = true
   try {
     await settingsStore.setDefaultExternalApp(appId)
+    ElMessage.success(t('common.saveSuccess'))
+  } finally {
+    saving.value = false
+  }
+}
+
+async function toggleVisibility(app: ExternalAppDefinition, visible: boolean): Promise<void> {
+  if (!app.builtin) return
+  saving.value = true
+  try {
+    await settingsStore.toggleBuiltinExternalApp(app.id, visible)
+    ElMessage.success(t('common.saveSuccess'))
   } finally {
     saving.value = false
   }
@@ -52,9 +71,17 @@ async function setDefault(appId: string): Promise<void> {
 async function addCustom(): Promise<void> {
   saving.value = true
   try {
-    await settingsStore.addCustomExternalApp(customName.value, customProtocol.value)
+    await settingsStore.addCustomExternalApp(
+      customName.value,
+      customProtocol.value,
+      customIconUrl.value,
+      customIconSvg.value
+    )
     customName.value = ''
     customProtocol.value = ''
+    customIconUrl.value = ''
+    customIconSvg.value = ''
+    ElMessage.success(t('common.saveSuccess'))
   } finally {
     saving.value = false
   }
@@ -64,6 +91,31 @@ async function removeCustom(id: string): Promise<void> {
   saving.value = true
   try {
     await settingsStore.removeCustomExternalApp(id)
+    if (editingCustomId.value === id) editingCustomId.value = null
+    ElMessage.success(t('common.saveSuccess'))
+  } finally {
+    saving.value = false
+  }
+}
+
+function startEditCustom(app: ExternalAppDefinition): void {
+  const custom = settingsStore.externalApps.customApps.find((entry) => entry.id === app.id)
+  if (!custom) return
+  editingCustomId.value = app.id
+  editIconUrl.value = custom.iconUrl ?? ''
+  editIconSvg.value = custom.iconSvg ?? ''
+}
+
+async function saveCustomIcon(): Promise<void> {
+  if (!editingCustomId.value) return
+  saving.value = true
+  try {
+    await settingsStore.updateCustomExternalApp(editingCustomId.value, {
+      iconUrl: editIconUrl.value.trim() || undefined,
+      iconSvg: editIconSvg.value.trim() || undefined
+    })
+    editingCustomId.value = null
+    ElMessage.success(t('common.saveSuccess'))
   } finally {
     saving.value = false
   }
@@ -80,37 +132,48 @@ async function removeCustom(id: string): Promise<void> {
       <p class="section-desc">{{ t('settings.externalApps.defaultDesc') }}</p>
 
       <div class="app-list">
-        <label
+        <div
           v-for="app in allApps"
           :key="app.id"
           class="app-row"
+          :class="{ disabled: app.builtin && !isAppVisible(app) }"
         >
-          <input
-            type="radio"
-            name="defaultExternalApp"
-            :value="app.id"
-            :checked="settingsStore.getResolvedDefaultAppId() === app.id"
-            :disabled="saving"
-            @change="setDefault(app.id)"
+          <label v-if="isAppVisible(app)" class="default-radio">
+            <input
+              type="radio"
+              name="defaultExternalApp"
+              :value="app.id"
+              :checked="settingsStore.getResolvedDefaultAppId() === app.id"
+              :disabled="saving"
+              @change="setDefault(app.id)"
+            />
+          </label>
+          <span v-else class="default-radio-spacer" />
+
+          <ExternalAppIcon
+            :app-id="app.id"
+            :icon-url="app.iconUrl"
+            :icon-svg="app.iconSvg"
+            :size="20"
           />
-          <span class="app-name">{{ app.name }}</span>
-          <span class="app-tag">{{ formatProtocolHint(app) }}</span>
-        </label>
-      </div>
-    </div>
 
-    <div class="setting-card">
-      <h2 class="section-subtitle">{{ t('settings.externalApps.builtinProtocolsTitle') }}</h2>
-      <p class="section-desc">{{ t('settings.externalApps.builtinProtocolsDesc') }}</p>
+          <div class="app-meta">
+            <div class="app-name-row">
+              <span class="app-name">{{ app.name }}</span>
+              <span v-if="app.builtin" class="app-badge">{{ t('settings.externalApps.builtin') }}</span>
+            </div>
+            <code v-if="formatProtocolHint(app)" class="app-protocol">{{ formatProtocolHint(app) }}</code>
+          </div>
 
-      <div class="builtin-protocol-list">
-        <div
-          v-for="app in builtinReferenceApps"
-          :key="app.id"
-          class="builtin-protocol-row"
-        >
-          <span class="builtin-protocol-name">{{ app.name }}</span>
-          <code class="builtin-protocol-value">{{ formatProtocolHint(app) }}</code>
+          <label v-if="app.builtin" class="visibility-toggle" :title="t('settings.externalApps.visibility')">
+            <input
+              type="checkbox"
+              :checked="isAppVisible(app)"
+              :disabled="saving"
+              @change="toggleVisibility(app, ($event.target as HTMLInputElement).checked)"
+            />
+            <span>{{ t('settings.externalApps.showInMenu') }}</span>
+          </label>
         </div>
       </div>
     </div>
@@ -119,23 +182,30 @@ async function removeCustom(id: string): Promise<void> {
       <h2 class="section-subtitle">{{ t('settings.externalApps.customTitle') }}</h2>
       <p class="section-desc">{{ t('settings.externalApps.customDesc') }}</p>
 
-      <div class="builtin-hint">
-        {{ t('settings.externalApps.builtinHint', { apps: platformApps.map((a) => a.name).join('、') }) }}
-      </div>
-
       <div v-if="settingsStore.externalApps.customApps.length" class="custom-list">
         <div
           v-for="app in settingsStore.externalApps.customApps"
           :key="app.id"
           class="custom-row"
         >
+          <ExternalAppIcon
+            :app-id="app.id"
+            :icon-url="app.iconUrl"
+            :icon-svg="app.iconSvg"
+            :size="20"
+          />
           <div class="custom-meta">
             <div class="custom-name">{{ app.name }}</div>
             <div class="custom-protocol">{{ app.protocol }}</div>
           </div>
-          <button class="danger-btn" type="button" :disabled="saving" @click="removeCustom(app.id)">
-            {{ t('settings.externalApps.remove') }}
-          </button>
+          <div class="custom-actions">
+            <button class="ghost-btn" type="button" :disabled="saving" @click="startEditCustom({ ...app, kind: 'protocol', builtin: false })">
+              {{ t('settings.externalApps.editIcon') }}
+            </button>
+            <button class="danger-btn" type="button" :disabled="saving" @click="removeCustom(app.id)">
+              {{ t('settings.externalApps.remove') }}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -147,11 +217,22 @@ async function removeCustom(id: string): Promise<void> {
         />
         <input
           v-model="customProtocol"
-          class="text-input protocol-input"
+          class="text-input"
           :placeholder="t('settings.externalApps.protocolPlaceholder')"
         />
+        <input
+          v-model="customIconUrl"
+          class="text-input"
+          :placeholder="t('settings.externalApps.iconUrlPlaceholder')"
+        />
+        <textarea
+          v-model="customIconSvg"
+          class="text-area"
+          rows="2"
+          :placeholder="t('settings.externalApps.iconSvgPlaceholder')"
+        />
         <button
-          class="primary-btn"
+          class="primary-btn add-btn"
           type="button"
           :disabled="saving || !customName.trim() || !customProtocol.includes('{path}')"
           @click="addCustom"
@@ -160,6 +241,30 @@ async function removeCustom(id: string): Promise<void> {
         </button>
       </div>
     </div>
+
+    <el-dialog
+      v-if="editingCustomId"
+      :model-value="true"
+      :title="t('settings.externalApps.editIconTitle')"
+      width="520px"
+      destroy-on-close
+      @close="editingCustomId = null"
+    >
+      <div class="icon-edit-form">
+        <label class="field-label">{{ t('settings.externalApps.iconUrlPlaceholder') }}</label>
+        <input v-model="editIconUrl" class="text-input" />
+        <label class="field-label">{{ t('settings.externalApps.iconSvgPlaceholder') }}</label>
+        <textarea v-model="editIconSvg" class="text-area" rows="4" spellcheck="false" />
+      </div>
+      <template #footer>
+        <button class="ghost-btn" type="button" @click="editingCustomId = null">
+          {{ t('common.cancel') }}
+        </button>
+        <button class="primary-btn" type="button" :disabled="saving" @click="saveCustomIcon">
+          {{ t('common.save') }}
+        </button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -189,72 +294,70 @@ async function removeCustom(id: string): Promise<void> {
 .app-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .app-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 4px;
-  cursor: pointer;
-}
-
-.app-name {
-  font-size: var(--font-size-sm);
-  color: var(--content-text);
-  flex-shrink: 0;
-}
-
-.app-tag {
-  margin-left: auto;
-  font-size: var(--font-size-xs);
-  color: var(--content-text-tertiary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 280px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
-
-.builtin-protocol-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.builtin-protocol-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 10px;
+  gap: 10px;
+  padding: 10px 12px;
   border: 1px solid var(--sidebar-border);
   border-radius: var(--radius-md);
   background: var(--btn-secondary-bg);
 }
 
-.builtin-protocol-name {
+.app-row.disabled {
+  opacity: 0.55;
+}
+
+.default-radio,
+.default-radio-spacer {
+  width: 16px;
   flex-shrink: 0;
+}
+
+.app-meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.app-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-name {
   font-size: var(--font-size-sm);
   color: var(--content-text);
 }
 
-.builtin-protocol-value {
-  font-size: var(--font-size-xs);
-  color: var(--content-text-secondary);
-  word-break: break-all;
-  text-align: right;
+.app-badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--sidebar-item-hover);
+  font-size: 10px;
+  color: var(--content-text-tertiary);
 }
 
-.builtin-hint {
-  margin-bottom: var(--spacing-md);
-  padding: 8px 10px;
-  border-radius: var(--radius-md);
-  background: var(--btn-secondary-bg);
+.app-protocol {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--content-text-tertiary);
+  word-break: break-all;
+}
+
+.visibility-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
   font-size: var(--font-size-xs);
   color: var(--content-text-secondary);
-  line-height: 1.5;
+  cursor: pointer;
+  white-space: nowrap;
 }
 
 .custom-list {
@@ -267,11 +370,15 @@ async function removeCustom(id: string): Promise<void> {
 .custom-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   padding: 8px 10px;
   border: 1px solid var(--sidebar-border);
   border-radius: var(--radius-md);
+}
+
+.custom-meta {
+  min-width: 0;
+  flex: 1;
 }
 
 .custom-name {
@@ -286,29 +393,50 @@ async function removeCustom(id: string): Promise<void> {
   word-break: break-all;
 }
 
+.custom-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .add-form {
   display: grid;
-  grid-template-columns: 1fr 1.4fr auto;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
-.text-input {
+.text-input,
+.text-area {
   width: 100%;
   padding: 8px 10px;
   border: 1px solid var(--sidebar-border);
   border-radius: var(--radius-md);
-  background: var(--content-bg);
+  background: var(--btn-secondary-bg);
   color: var(--content-text);
   font-size: var(--font-size-sm);
   outline: none;
+  box-sizing: border-box;
 }
 
-.text-input:focus {
+.text-area {
+  grid-column: 1 / -1;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.add-btn {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.text-input:focus,
+.text-area:focus {
   border-color: var(--composer-border-focus);
 }
 
 .primary-btn,
-.danger-btn {
+.danger-btn,
+.ghost-btn {
   padding: 8px 12px;
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
@@ -317,8 +445,8 @@ async function removeCustom(id: string): Promise<void> {
 
 .primary-btn {
   border: none;
-  background: var(--sidebar-item-active);
-  color: var(--sidebar-text-active);
+  background: var(--accent-color);
+  color: #fff;
 }
 
 .primary-btn:disabled {
@@ -326,15 +454,31 @@ async function removeCustom(id: string): Promise<void> {
   cursor: not-allowed;
 }
 
+.ghost-btn {
+  border: 1px solid var(--sidebar-border);
+  background: transparent;
+  color: var(--content-text-secondary);
+}
+
 .danger-btn {
   border: 1px solid var(--sidebar-border);
   background: transparent;
   color: var(--content-text-secondary);
-  flex-shrink: 0;
 }
 
 .danger-btn:hover:not(:disabled) {
   color: #dc2626;
   border-color: #dc2626;
+}
+
+.icon-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field-label {
+  font-size: var(--font-size-xs);
+  color: var(--content-text-secondary);
 }
 </style>

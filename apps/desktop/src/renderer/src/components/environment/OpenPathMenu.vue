@@ -99,7 +99,7 @@ onUnmounted(() => {
   <div ref="rootRef" class="open-path-menu">
     <div class="open-split">
       <button class="open-main" type="button" @click="openDefault">
-        <ExternalAppIcon :app-id="defaultAppId" />
+        <ExternalAppIcon :app-id="defaultAppId" :icon-url="defaultApp?.iconUrl" :icon-svg="defaultApp?.iconSvg" />
         <span class="open-label">{{ t('env.open') }}</span>
       </button>
       <button
@@ -123,7 +123,11 @@ onUnmounted(() => {
         type="button"
         @click.stop="selectApp(app)"
       >
-        <ExternalAppIcon :app-id="app.id" />
+        <ExternalAppIcon
+          :app-id="app.id"
+          :icon-url="app.iconUrl"
+          :icon-svg="app.iconSvg"
+        />
         <span class="open-item-name">{{ app.name }}</span>
         <span v-if="app.id === defaultAppId" class="open-item-badge">
           {{ t('env.defaultApp') }}
