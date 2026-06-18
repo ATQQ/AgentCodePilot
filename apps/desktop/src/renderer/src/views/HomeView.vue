@@ -53,7 +53,7 @@ async function handleSubmit(
 </script>
 
 <template>
-  <div class="home-view">
+  <div class="home-view elegant-scroll">
     <div class="home-center">
       <HomeEmptyState />
       <div class="composer-wrapper">

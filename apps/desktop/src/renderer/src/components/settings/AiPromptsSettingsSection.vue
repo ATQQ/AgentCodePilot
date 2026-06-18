@@ -183,7 +183,7 @@ async function resetPrompt(key: PromptKey): Promise<void> {
       @close="closeDialog"
     >
       <template v-if="dialogMode === 'preview' && activePromptKey">
-        <pre class="dialog-prompt">{{ promptDrafts[activePromptKey] }}</pre>
+        <pre class="dialog-prompt elegant-scroll">{{ promptDrafts[activePromptKey] }}</pre>
       </template>
       <template v-else-if="dialogMode === 'edit'">
         <textarea v-model="editDraft" class="dialog-textarea" rows="14" spellcheck="false" />

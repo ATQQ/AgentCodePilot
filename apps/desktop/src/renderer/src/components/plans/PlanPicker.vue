@@ -108,7 +108,7 @@ function formatTime(dateStr: string): string {
 
       <div v-if="loading" class="plan-picker-empty">{{ t('plans.loading') }}</div>
       <div v-else-if="plans.length === 0" class="plan-picker-empty">{{ t('plans.empty') }}</div>
-      <div v-else class="plan-picker-list">
+      <div v-else class="plan-picker-list elegant-scroll">
         <button
           v-for="plan in plans"
           :key="plan.id"

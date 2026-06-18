@@ -28,7 +28,7 @@ async function pickOther(): Promise<void> {
   <div class="folder-picker-overlay" @click.self="emit('cancel')">
     <div class="folder-picker">
       <div class="picker-header">选择终端目录</div>
-      <div class="folder-list">
+      <div class="folder-list elegant-scroll">
         <button
           v-for="folder in folders"
           :key="folder"

@@ -95,7 +95,7 @@ watch(
             />
             <kbd class="search-kbd">ESC</kbd>
           </div>
-          <div v-if="filteredConversations.length" class="search-results">
+          <div v-if="filteredConversations.length" class="search-results elegant-scroll">
             <div class="results-label">{{ query ? '搜索结果' : '近期对话' }}</div>
             <div
               v-for="(conv, idx) in filteredConversations"

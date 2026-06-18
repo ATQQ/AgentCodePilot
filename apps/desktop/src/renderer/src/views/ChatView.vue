@@ -431,11 +431,11 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
           <div v-if="debugMode && msg.role === 'assistant'" class="debug-panel">
             <div class="debug-section">
               <span class="debug-label">REQUEST</span>
-              <pre class="debug-json">{{ msg.debugInput ? JSON.stringify(JSON.parse(msg.debugInput), null, 2) : '(无数据)' }}</pre>
+              <pre class="debug-json elegant-scroll">{{ msg.debugInput ? JSON.stringify(JSON.parse(msg.debugInput), null, 2) : '(无数据)' }}</pre>
             </div>
             <div class="debug-section">
               <span class="debug-label">RESPONSE</span>
-              <pre class="debug-json">{{ msg.debugOutput ? JSON.stringify(JSON.parse(msg.debugOutput), null, 2) : '(无数据)' }}</pre>
+              <pre class="debug-json elegant-scroll">{{ msg.debugOutput ? JSON.stringify(JSON.parse(msg.debugOutput), null, 2) : '(无数据)' }}</pre>
             </div>
           </div>
         </div>

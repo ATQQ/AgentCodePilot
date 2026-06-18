@@ -72,7 +72,6 @@ defineExpose({ refit })
 }
 
 .terminal-view :deep(.xterm-viewport) {
-  overflow-y: auto !important;
   background-color: var(--content-bg) !important;
 }
 

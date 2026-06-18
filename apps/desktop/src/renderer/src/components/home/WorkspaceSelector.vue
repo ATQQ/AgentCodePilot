@@ -142,7 +142,7 @@ function closeWorkspacePanel(): void {
           />
         </div>
 
-        <div v-if="filteredProjects.length" class="dropdown-list">
+        <div v-if="filteredProjects.length" class="dropdown-list elegant-scroll">
           <button
             v-for="proj in filteredProjects"
             :key="proj.id"
@@ -161,7 +161,7 @@ function closeWorkspacePanel(): void {
 
         <div v-if="filteredWorkspaces.length" class="dropdown-divider"></div>
         <div v-if="filteredWorkspaces.length" class="dropdown-group-title">{{ t('sidebar.workspaces') }}</div>
-        <div v-if="filteredWorkspaces.length" class="dropdown-list">
+        <div v-if="filteredWorkspaces.length" class="dropdown-list elegant-scroll">
           <button
             v-for="ws in filteredWorkspaces"
             :key="ws.id"
@@ -179,7 +179,7 @@ function closeWorkspacePanel(): void {
         <template v-if="workspaceStore.currentWorkspace">
           <div class="dropdown-divider"></div>
           <div class="dropdown-group-title">当前工作空间项目</div>
-          <div class="dropdown-list workspace-projects">
+          <div class="dropdown-list workspace-projects elegant-scroll">
             <div
               v-for="folder in workspaceStore.currentWorkspace.folders"
               :key="folder"

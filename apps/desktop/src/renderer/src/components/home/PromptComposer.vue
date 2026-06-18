@@ -361,7 +361,7 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
     <textarea
       ref="textareaRef"
       v-model="input"
-      class="composer-input"
+      class="composer-input elegant-scroll"
       :placeholder="t('home.placeholder')"
       rows="1"
       @keydown="handleKeydown"

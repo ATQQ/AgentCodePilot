@@ -101,7 +101,7 @@ function onFolderCancel(): void {
     </div>
 
     <template v-else>
-      <div class="tab-bar">
+      <div class="tab-bar elegant-scroll">
         <button
           v-for="tab in terminalStore.currentTabs"
           :key="tab.id"

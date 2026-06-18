@@ -158,7 +158,7 @@ async function handleCopyPlan(): Promise<void> {
       {{ t('plans.empty') }}
     </div>
     <template v-else>
-      <div class="plans-list">
+      <div class="plans-list elegant-scroll">
         <button
           v-for="plan in planStore.plans"
           :key="plan.id"
@@ -183,7 +183,7 @@ async function handleCopyPlan(): Promise<void> {
             {{ t('plans.copy') }}
           </button>
         </div>
-        <div class="plan-preview-content">
+        <div class="plan-preview-content elegant-scroll">
           <MarkdownRender
             mode="docs"
             custom-id="plans"

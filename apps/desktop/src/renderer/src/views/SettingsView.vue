@@ -154,7 +154,7 @@ function goBack(): void {
       </div>
       -->
 
-      <nav class="settings-nav">
+      <nav class="settings-nav elegant-scroll">
         <div v-for="group in navGroups" :key="group.titleKey" class="nav-group">
           <div class="group-title">{{ t(group.titleKey) }}</div>
           <button
@@ -171,7 +171,7 @@ function goBack(): void {
       </nav>
     </aside>
 
-    <main class="settings-content">
+    <main class="settings-content elegant-scroll">
       <div class="settings-content-inner">
         <!-- Appearance Section -->
         <div v-if="activeSection === 'appearance'" class="content-section">

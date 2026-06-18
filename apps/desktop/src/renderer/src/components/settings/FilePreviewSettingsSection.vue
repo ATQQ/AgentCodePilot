@@ -105,7 +105,7 @@ function resetExtensions(): void {
             <span class="ext-count">{{ textCount }}</span>
           </div>
         </div>
-        <div class="ext-chips">
+        <div class="ext-chips elegant-scroll">
           <span v-for="ext in textExtensions" :key="ext" class="ext-chip">
             .{{ ext }}
             <button type="button" class="chip-remove" @click="removeExtension('text', ext)">×</button>
@@ -133,7 +133,7 @@ function resetExtensions(): void {
             <span class="ext-count">{{ imageCount }}</span>
           </div>
         </div>
-        <div class="ext-chips ext-chips--compact">
+        <div class="ext-chips ext-chips--compact elegant-scroll">
           <span v-for="ext in imageExtensions" :key="ext" class="ext-chip">
             .{{ ext }}
             <button type="button" class="chip-remove" @click="removeExtension('image', ext)">×</button>
@@ -239,8 +239,6 @@ function resetExtensions(): void {
   border: 1px solid var(--sidebar-border);
   border-radius: var(--radius-md);
   background: var(--btn-secondary-bg);
-  scrollbar-width: thin;
-  scrollbar-color: var(--sidebar-border) transparent;
 }
 
 .ext-chips--compact {
