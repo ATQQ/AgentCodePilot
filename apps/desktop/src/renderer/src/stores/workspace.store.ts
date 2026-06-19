@@ -61,20 +61,32 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     selectedProjectId.value = id
   }
 
-  async function addProject(): Promise<Project | null> {
-    const path = await window.agentAPI.dialog.selectFolder()
-    if (!path) return null
+  async function ensureProjectForPath(path: string): Promise<Project> {
     const existing = projects.value.find((p) => p.path === path)
     if (existing) return existing
+
+    const restored = await window.agentAPI.projects.restoreByPath(path)
+    if (restored) {
+      const project = { id: restored.id, name: restored.name, path: restored.path }
+      projects.value.push(project)
+      return project
+    }
+
     const name = path.split('/').pop() || path
     const project: Project = {
-      id: `proj-${Date.now()}`,
+      id: `proj-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
       name,
       path
     }
     projects.value.push(project)
     await window.agentAPI.projects.save(project)
     return project
+  }
+
+  async function addProject(): Promise<Project | null> {
+    const path = await window.agentAPI.dialog.selectFolder()
+    if (!path) return null
+    return ensureProjectForPath(path)
   }
 
   async function removeProject(id: string): Promise<void> {
@@ -127,6 +139,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     loadProjects,
     selectProject,
     addProject,
+    ensureProjectForPath,
     removeProject,
     createWorkspace,
     removeWorkspace,

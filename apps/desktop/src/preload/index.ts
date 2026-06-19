@@ -75,7 +75,9 @@ const agentAPI = {
   projects: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_LIST),
     save: (payload: ProjectPayload) => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_SAVE, payload),
-    delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_DELETE, id)
+    delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_DELETE, id),
+    restoreByPath: (path: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_RESTORE_BY_PATH, path)
   },
   workspaces: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACES_LIST),

@@ -26,6 +26,7 @@ export const IPC_CHANNELS = {
   PROJECTS_LIST: 'projects:list',
   PROJECTS_SAVE: 'projects:save',
   PROJECTS_DELETE: 'projects:delete',
+  PROJECTS_RESTORE_BY_PATH: 'projects:restore-by-path',
   WORKSPACES_LIST: 'workspaces:list',
   WORKSPACES_SAVE: 'workspaces:save',
   WORKSPACES_DELETE: 'workspaces:delete',
@@ -454,6 +455,7 @@ export interface AgentAPI {
     list: () => Promise<ProjectPayload[]>
     save: (payload: ProjectPayload) => Promise<void>
     delete: (id: string) => Promise<void>
+    restoreByPath: (path: string) => Promise<ProjectPayload | null>
   }
   workspaces: {
     list: () => Promise<WorkspacePayload[]>

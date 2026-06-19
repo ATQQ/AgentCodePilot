@@ -12,7 +12,6 @@ const props = withDefaults(
   {
     direction: 'horizontal',
     minSize: 200,
-    maxSize: 600,
     invert: false
   }
 )
@@ -32,7 +31,11 @@ function onMouseMove(e: MouseEvent): void {
   if (!dragging.value) return
   const delta = props.direction === 'horizontal' ? e.movementX : e.movementY
   const next = props.invert ? props.size - delta : props.size + delta
-  emit('update:size', Math.min(props.maxSize, Math.max(props.minSize, next)))
+  let clamped = Math.max(props.minSize, next)
+  if (props.maxSize != null) {
+    clamped = Math.min(props.maxSize, clamped)
+  }
+  emit('update:size', clamped)
 }
 
 function onMouseUp(): void {

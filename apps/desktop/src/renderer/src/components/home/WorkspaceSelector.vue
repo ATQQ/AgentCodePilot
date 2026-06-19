@@ -98,13 +98,7 @@ async function saveWorkspace(): Promise<void> {
   if (workspaceName.value.trim() && workspaceFolders.value.length) {
     const wsId = await workspaceStore.createWorkspace(workspaceName.value.trim(), [...workspaceFolders.value])
     for (const folder of workspaceFolders.value) {
-      const existing = workspaceStore.projects.find((p) => p.path === folder)
-      if (!existing) {
-        const name = folder.split('/').pop() || folder
-        const project = { id: `proj-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, name, path: folder }
-        workspaceStore.projects.push(project)
-        await window.agentAPI.projects.save(project)
-      }
+      await workspaceStore.ensureProjectForPath(folder)
     }
     workspaceStore.selectProject(wsId)
   }

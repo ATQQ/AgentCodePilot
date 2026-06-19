@@ -558,6 +558,12 @@ function registerIpcHandlers(): void {
     repo.deleteProject(id)
   })
 
+  ipcMain.handle(IPC_CHANNELS.PROJECTS_RESTORE_BY_PATH, (_e, path: string): ProjectPayload | null => {
+    const restored = repo.restoreProjectByPath(path)
+    if (!restored) return null
+    return { id: restored.id, name: restored.name, path: restored.path }
+  })
+
   // --- Workspaces ---
 
   ipcMain.handle(IPC_CHANNELS.WORKSPACES_LIST, (): WorkspacePayload[] => {

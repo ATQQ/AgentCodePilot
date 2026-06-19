@@ -39,6 +39,7 @@ export interface ProjectRow {
   id: string
   name: string
   path: string
+  deleted_at: string | null
 }
 
 // --- Conversations ---
@@ -329,18 +330,30 @@ export function getAllSettings(): Record<string, string> {
 export function saveProject(proj: { id: string; name: string; path: string }): void {
   const db = getDatabase()
   db.prepare(
-    `INSERT OR REPLACE INTO projects (id, name, path) VALUES (?, ?, ?)`
+    `INSERT OR REPLACE INTO projects (id, name, path, deleted_at) VALUES (?, ?, ?, NULL)`
   ).run(proj.id, proj.name, proj.path)
 }
 
 export function getAllProjects(): ProjectRow[] {
   const db = getDatabase()
-  return db.prepare('SELECT * FROM projects').all() as ProjectRow[]
+  return db
+    .prepare('SELECT * FROM projects WHERE deleted_at IS NULL')
+    .all() as ProjectRow[]
+}
+
+export function restoreProjectByPath(path: string): ProjectRow | null {
+  const db = getDatabase()
+  const row = db
+    .prepare('SELECT * FROM projects WHERE path = ? AND deleted_at IS NOT NULL')
+    .get(path) as ProjectRow | undefined
+  if (!row) return null
+  db.prepare('UPDATE projects SET deleted_at = NULL WHERE id = ?').run(row.id)
+  return { ...row, deleted_at: null }
 }
 
 export function deleteProject(id: string): void {
   const db = getDatabase()
-  db.prepare('DELETE FROM projects WHERE id = ?').run(id)
+  db.prepare(`UPDATE projects SET deleted_at = datetime('now') WHERE id = ?`).run(id)
 }
 
 // --- Workspaces ---

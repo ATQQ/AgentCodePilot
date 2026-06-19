@@ -95,7 +95,6 @@ provide('openSearch', () => uiStore.openSearch())
           invert
           :size="layoutStore.rightPanelWidth"
           :min-size="260"
-          :max-size="700"
           @update:size="layoutStore.rightPanelWidth = $event"
         />
         <div class="extension-wrapper" :style="{ width: `${layoutStore.rightPanelWidth}px` }">
