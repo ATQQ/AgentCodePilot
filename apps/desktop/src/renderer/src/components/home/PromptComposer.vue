@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Top } from '@element-plus/icons-vue'
+import { Plus, Top, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 import type { Attachment, ApprovalLevel, FileAttachment, UrlAttachment, PlanReference } from '@renderer/types'
 import { toLocalFileUrl } from '@renderer/utils/localFile'
 import { useImagePreview } from '@renderer/composables/useImagePreview'
@@ -14,7 +14,10 @@ const composerStore = useComposerStore()
 const input = ref('')
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const composerRootRef = ref<HTMLElement | null>(null)
-const isCompact = ref(false)
+/** 仅 Agent 选择器在窄宽度下收起为图标 */
+const isAgentCompact = ref(false)
+
+const AGENT_COMPACT_WIDTH = 400
 
 const TEXTAREA_MAX_HEIGHT = 200
 
@@ -33,7 +36,7 @@ onMounted(() => {
   nextTick(() => resizeTextarea())
   if (composerRootRef.value) {
     compactObserver = new ResizeObserver(([entry]) => {
-      isCompact.value = entry.contentRect.width < 480
+      isAgentCompact.value = entry.contentRect.width < AGENT_COMPACT_WIDTH
     })
     compactObserver.observe(composerRootRef.value)
   }
@@ -369,7 +372,7 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
       @paste="handlePaste"
       @input="handleInput"
     />
-    <div class="composer-toolbar" :class="{ 'composer-toolbar--compact': isCompact }">
+    <div class="composer-toolbar">
       <div class="toolbar-left">
         <!-- + Button with popup -->
         <div class="dropdown-wrapper">
@@ -409,20 +412,22 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
           :title="planMode ? t('composer.planModeActive') : t('composer.planModeInactive')"
           @click="composerStore.togglePlanMode(props.conversationId)"
         >
-          <span class="plan-mode-icon">&#x2699;</span>
-          <span v-if="!isCompact" class="plan-mode-label">{{ t('composer.planModeBadge') }}</span>
+          <el-icon :size="14" class="plan-mode-state-icon">
+            <CircleCheck v-if="planMode" />
+            <CircleClose v-else />
+          </el-icon>
+          <span class="plan-mode-label">{{ t('composer.planModeBadge') }}</span>
         </button>
 
         <!-- Approval Level -->
         <div class="dropdown-wrapper">
           <button
             class="toolbar-btn"
-            :class="{ 'toolbar-btn--icon': isCompact }"
-            :title="isCompact ? t(approvalOptions[approvalLevel].label) : undefined"
+            :title="t(approvalOptions[approvalLevel].label)"
             @click="showApprovalMenu = !showApprovalMenu"
           >
             <span class="approval-icon">{{ approvalOptions[approvalLevel].icon }}</span>
-            <span v-if="!isCompact" class="approval-label">{{ t(approvalOptions[approvalLevel].label) }}</span>
+            <span class="approval-label">{{ t(approvalOptions[approvalLevel].label) }}</span>
             <span class="chevron">&#x25BE;</span>
           </button>
           <Transition name="fade">
@@ -472,7 +477,7 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
       </div>
 
       <div class="toolbar-right">
-        <slot name="selectors" :compact="isCompact" />
+        <slot name="selectors" :agent-compact="isAgentCompact" />
         <button
           v-if="props.stoppable && !input.trim() && attachments.length === 0 && planRefs.length === 0"
           class="stop-btn"
@@ -769,51 +774,35 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
   overflow-y: hidden;
 }
 
-.composer-toolbar--compact {
-  flex-wrap: wrap;
-  align-items: flex-start;
-}
-
-.composer-toolbar--compact .toolbar-left {
-  flex: 1;
-  min-width: 0;
-}
-
-.composer-toolbar--compact .toolbar-right {
-  width: 100%;
-  justify-content: flex-end;
-  flex-shrink: 0;
-}
-
-.toolbar-btn--icon {
-  gap: 2px;
-  padding: 5px 6px;
-}
-
-.composer-input::placeholder {
-  color: var(--composer-placeholder);
-}
-
 .composer-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: var(--spacing-sm) var(--spacing-md);
-  gap: var(--spacing-sm);
+  gap: 6px var(--spacing-sm);
 }
 
 .toolbar-left {
   display: flex;
   align-items: center;
   gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .toolbar-right {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  flex-shrink: 0;
-  min-width: 0;
+  flex: 0 0 auto;
+  max-width: 100%;
+  margin-left: auto;
+}
+
+.composer-input::placeholder {
+  color: var(--composer-placeholder);
 }
 
 .toolbar-btn {
@@ -828,6 +817,7 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
   font-size: var(--font-size-sm);
   cursor: pointer;
   transition: background 0.15s;
+  flex-shrink: 0;
 }
 
 .toolbar-btn:hover {
@@ -872,9 +862,16 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
   background: color-mix(in srgb, var(--accent-color) 20%, transparent);
 }
 
-.plan-mode-icon {
-  font-size: 13px;
-  line-height: 1;
+.toolbar-btn--plan-inactive .plan-mode-state-icon {
+  color: var(--content-text-tertiary);
+}
+
+.toolbar-btn--plan-active .plan-mode-state-icon {
+  color: var(--accent-color);
+}
+
+.plan-mode-state-icon {
+  flex-shrink: 0;
 }
 
 .plan-mode-label {
@@ -938,9 +935,6 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
 
 .approval-label {
   white-space: nowrap;
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .chevron {

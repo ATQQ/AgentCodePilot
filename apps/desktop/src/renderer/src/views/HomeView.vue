@@ -74,9 +74,9 @@ async function handleSubmit(
       <HomeEmptyState />
       <div class="composer-wrapper">
         <PromptComposer @submit="handleSubmit">
-          <template #selectors="{ compact }">
-            <AgentSelector :compact="compact" />
-            <ModelSelector :compact="compact" />
+          <template #selectors="{ agentCompact }">
+            <AgentSelector :compact="agentCompact" />
+            <ModelSelector />
           </template>
         </PromptComposer>
         <WorkspaceSelector />

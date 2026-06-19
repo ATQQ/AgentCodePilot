@@ -527,9 +527,9 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
             @cancel-queue="handleCancelQueue"
             @approval-change="(level) => chatStore.setConversationApprovalLevel(chatStore.activeConversation!.id, level)"
           >
-            <template #selectors="{ compact }">
-              <AgentSelector :compact="compact" />
-              <ModelSelector :compact="compact" />
+            <template #selectors="{ agentCompact }">
+              <AgentSelector :compact="agentCompact" />
+              <ModelSelector />
             </template>
           </PromptComposer>
         </template>
