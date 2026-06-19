@@ -215,7 +215,9 @@ function getSettingsFromDb(): SettingsInfo {
     theme: (all['theme'] as SettingsInfo['theme']) || 'light',
     approvalLevel: (all['approvalLevel'] as SettingsInfo['approvalLevel']) || 'auto',
     language: all['language'] || 'zh-CN',
+    replyLanguage: (all['replyLanguage'] as SettingsInfo['replyLanguage']) || 'auto',
     permissionNotificationsEnabled: all['permissionNotificationsEnabled'] !== 'false',
+    rememberPanelStatePerConversation: all['rememberPanelStatePerConversation'] !== 'false',
     filePreview: parseFilePreviewSetting(all['filePreview']),
     aiPrompts: parseAiPromptsSetting(all['aiPrompts']),
     externalApps: parseExternalAppsSetting(all['externalApps']),
@@ -617,6 +619,13 @@ function registerIpcHandlers(): void {
     if (payload.theme) repo.setSetting('theme', payload.theme)
     if (payload.approvalLevel) repo.setSetting('approvalLevel', payload.approvalLevel)
     if (payload.language) repo.setSetting('language', payload.language)
+    if (payload.replyLanguage) repo.setSetting('replyLanguage', payload.replyLanguage)
+    if (payload.rememberPanelStatePerConversation !== undefined) {
+      repo.setSetting(
+        'rememberPanelStatePerConversation',
+        payload.rememberPanelStatePerConversation ? 'true' : 'false'
+      )
+    }
     if (payload.permissionNotificationsEnabled !== undefined) {
       repo.setSetting('permissionNotificationsEnabled', payload.permissionNotificationsEnabled ? 'true' : 'false')
     }

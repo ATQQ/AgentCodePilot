@@ -30,10 +30,11 @@ export default {
       attachUrl: '附加外部链接内容',
       planMode: '计划模式',
       referencePlan: '引用计划',
-      pursueGoals: '追求目标',
-      plugins: '插件'
+      pursueGoals: '追求目标'
     },
     urlPlaceholder: '输入 URL 链接...',
+    planModeActive: '计划模式已开启，点击关闭',
+    planModeInactive: '计划模式未开启，点击开启',
     planModeClose: '关闭计划模式',
     planPicker: {
       title: '选择要引用的计划'
@@ -146,6 +147,8 @@ export default {
     archivedConversations: '已归档对话',
     theme: '主题',
     themeDesc: '使用浅色、深色，或匹配系统设置',
+    rememberPanelState: '按对话记忆面板状态',
+    rememberPanelStateDesc: '切换对话时自动恢复右侧和底部面板的打开状态',
     light: '浅色',
     dark: '深色',
     system: '系统',
@@ -189,6 +192,13 @@ export default {
       reset: '恢复自动检测',
       resetSuccess: '已恢复默认配置',
       noConfig: '{agent} 暂无可配置项',
+      replyLanguage: 'AI 回复语言',
+      replyLanguageDesc: '控制 Agent 回复使用的语言，默认与用户提问语言保持一致',
+      replyLanguageAuto: '跟随用户语言',
+      replyLanguageZhCN: '简体中文',
+      replyLanguageEn: 'English',
+      replyLanguageJa: '日本語',
+      replyLanguageKo: '한국어',
       mock: {
         initialDelay: '默认等待时间',
         initialDelayDesc: '开始返回内容前的等待时长（毫秒），用于模拟网络延迟',
@@ -257,6 +267,7 @@ export default {
       readAsSuffix: '格式读取',
       read: '读取',
       addToChat: '添加到对话',
+      addSelectionToChat: '添加到对话',
       edit: '编辑',
       readOnly: '只读',
       save: '保存',

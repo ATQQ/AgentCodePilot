@@ -391,11 +391,6 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
                 <span class="menu-icon">&#x1F4CB;</span>
                 <span>{{ t('composer.addMenu.referencePlan') }}</span>
               </button>
-              <button class="menu-item menu-item--toggle" @click.stop="composerStore.togglePlanMode(props.conversationId)">
-                <span class="menu-icon">&#x2699;</span>
-                <span>{{ t('composer.addMenu.planMode') }}</span>
-                <span class="toggle-indicator" :class="{ active: planMode }"></span>
-              </button>
               <!-- TODO: 目标模式，后续实现
               <button class="menu-item menu-item--toggle" @click.stop="pursueGoals = !pursueGoals">
                 <span class="menu-icon">&#x1F3AF;</span>
@@ -403,27 +398,20 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
                 <span class="toggle-indicator" :class="{ active: pursueGoals }"></span>
               </button>
               -->
-              <div class="menu-divider"></div>
-              <button class="menu-item">
-                <span class="menu-icon">&#x1F9E9;</span>
-                <span>{{ t('composer.addMenu.plugins') }}</span>
-                <span class="menu-arrow">&#8250;</span>
-              </button>
             </div>
           </Transition>
         </div>
 
-        <span v-if="planMode" class="plan-mode-badge">
-          {{ t('composer.planModeBadge') }}
-          <button
-            type="button"
-            class="plan-mode-badge-close"
-            :title="t('composer.planModeClose')"
-            @click.stop="composerStore.setPlanMode(props.conversationId, false)"
-          >
-            &times;
-          </button>
-        </span>
+        <button
+          type="button"
+          class="toolbar-btn toolbar-btn--plan"
+          :class="planMode ? 'toolbar-btn--plan-active' : 'toolbar-btn--plan-inactive'"
+          :title="planMode ? t('composer.planModeActive') : t('composer.planModeInactive')"
+          @click="composerStore.togglePlanMode(props.conversationId)"
+        >
+          <span class="plan-mode-icon">&#x2699;</span>
+          <span v-if="!isCompact" class="plan-mode-label">{{ t('composer.planModeBadge') }}</span>
+        </button>
 
         <!-- Approval Level -->
         <div class="dropdown-wrapper">
@@ -850,42 +838,49 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
   gap: 5px;
 }
 
-.plan-mode-badge {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 6px 4px 10px;
-  border: 1px solid var(--accent-color);
-  border-radius: var(--radius-full);
-  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+.toolbar-btn--plan {
+  gap: 5px;
+  border: 1px solid transparent;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s,
+    opacity 0.15s;
+}
+
+.toolbar-btn--plan-inactive {
+  opacity: 0.55;
+  color: var(--content-text-tertiary);
+  border-color: var(--sidebar-border);
+  border-style: dashed;
+}
+
+.toolbar-btn--plan-inactive:hover {
+  opacity: 0.85;
+  color: var(--content-text-secondary);
+  border-color: var(--content-text-tertiary);
+  background: var(--btn-ghost-hover);
+}
+
+.toolbar-btn--plan-active {
   color: var(--accent-color);
+  border-color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+}
+
+.toolbar-btn--plan-active:hover {
+  background: color-mix(in srgb, var(--accent-color) 20%, transparent);
+}
+
+.plan-mode-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.plan-mode-label {
   font-size: var(--font-size-sm);
   font-weight: 600;
-}
-
-.plan-mode-badge-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-full);
-  background: transparent;
-  color: var(--accent-color);
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.plan-mode-badge-close:hover {
-  background: color-mix(in srgb, var(--accent-color) 25%, transparent);
-}
-
-.plan-mode-badge-close:hover {
-  background: color-mix(in srgb, var(--accent-color) 25%, transparent);
+  white-space: nowrap;
 }
 
 .plan-refs-area {

@@ -198,6 +198,23 @@ function goBack(): void {
             </div>
           </div>
 
+          <div class="setting-card">
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">{{ t('settings.rememberPanelState') }}</div>
+                <div class="setting-desc">{{ t('settings.rememberPanelStateDesc') }}</div>
+              </div>
+              <button
+                type="button"
+                class="toggle-switch"
+                :class="{ active: settingsStore.rememberPanelStatePerConversation }"
+                role="switch"
+                :aria-checked="settingsStore.rememberPanelStatePerConversation"
+                @click="settingsStore.setRememberPanelStatePerConversation(!settingsStore.rememberPanelStatePerConversation)"
+              />
+            </div>
+          </div>
+
           <!-- TODO: 以下外观设置实现后恢复
           <div class="setting-card">
             <div class="setting-row">

@@ -111,11 +111,15 @@ export interface CreateConversationPayload {
   planRefs?: PlanReference[]
 }
 
+export type ReplyLanguage = 'auto' | 'zh-CN' | 'en' | 'ja' | 'ko'
+
 export interface SettingsPayload {
   theme?: 'light' | 'dark' | 'system'
   approvalLevel?: 'request' | 'auto' | 'full'
   language?: string
+  replyLanguage?: ReplyLanguage
   permissionNotificationsEnabled?: boolean
+  rememberPanelStatePerConversation?: boolean
   filePreview?: FilePreviewSettings
   aiPrompts?: AiPromptsSettings
   externalApps?: ExternalAppsSettings
@@ -368,7 +372,9 @@ export interface SettingsInfo {
   theme: 'light' | 'dark' | 'system'
   approvalLevel: 'request' | 'auto' | 'full'
   language: string
+  replyLanguage: ReplyLanguage
   permissionNotificationsEnabled: boolean
+  rememberPanelStatePerConversation: boolean
   filePreview: FilePreviewSettings
   aiPrompts: AiPromptsSettings
   externalApps: ExternalAppsSettings

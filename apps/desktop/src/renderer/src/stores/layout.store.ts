@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, watch, computed } from 'vue'
 import type { PlanOwnerType } from '../../../preload/types'
+import { useChatStore } from './chat.store'
+import { useSettingsStore } from './settings.store'
 
 export type ExtensionTab = 'review' | 'terminal' | 'browser' | 'files' | 'plans'
 export type ReviewScope = 'unstaged' | 'staged'
@@ -13,6 +15,13 @@ interface LayoutPersist {
   rightPanelWidth: number
   bottomPanelHeight: number
   diffViewMode?: DiffViewMode
+}
+
+interface ConversationPanelState {
+  rightPanelVisible: boolean
+  bottomPanelVisible: boolean
+  activeExtensionTab: ExtensionTab
+  reviewScope: ReviewScope
 }
 
 function loadPersist(): LayoutPersist {
@@ -41,6 +50,54 @@ export const useLayoutStore = defineStore('layout', () => {
   const diffViewMode = ref<DiffViewMode>(persisted.diffViewMode ?? 'side-by-side')
   const envInfoVisible = ref(false)
   const homeRouteActive = ref(false)
+
+  const panelStateByConversation = ref<Record<string, ConversationPanelState>>({})
+  let lastConversationId: string | null = null
+
+  function capturePanelState(): ConversationPanelState {
+    return {
+      rightPanelVisible: rightPanelVisible.value,
+      bottomPanelVisible: bottomPanelVisible.value,
+      activeExtensionTab: activeExtensionTab.value,
+      reviewScope: reviewScope.value
+    }
+  }
+
+  function applyPanelState(state: ConversationPanelState): void {
+    rightPanelVisible.value = state.rightPanelVisible
+    bottomPanelVisible.value = state.bottomPanelVisible
+    activeExtensionTab.value = state.activeExtensionTab
+    reviewScope.value = state.reviewScope
+  }
+
+  function handleConversationSwitch(nextId: string | null): void {
+    const settingsStore = useSettingsStore()
+    if (!settingsStore.rememberPanelStatePerConversation) {
+      lastConversationId = nextId
+      return
+    }
+
+    if (lastConversationId) {
+      panelStateByConversation.value = {
+        ...panelStateByConversation.value,
+        [lastConversationId]: capturePanelState()
+      }
+    }
+
+    if (nextId && panelStateByConversation.value[nextId]) {
+      applyPanelState(panelStateByConversation.value[nextId])
+    }
+
+    lastConversationId = nextId
+  }
+
+  watch(
+    () => useChatStore().activeConversationId,
+    (nextId) => {
+      handleConversationSwitch(nextId)
+    },
+    { flush: 'sync' }
+  )
 
   const showBottomTerminal = computed(
     () =>

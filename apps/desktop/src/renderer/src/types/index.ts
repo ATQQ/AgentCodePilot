@@ -18,7 +18,8 @@ export type {
   ExternalAppKind,
   CustomExternalApp,
   OpenPathResult,
-  AgentUtilityPayload
+  AgentUtilityPayload,
+  ReplyLanguage
 } from '../../../preload/types'
 
 export interface AgentConfig {

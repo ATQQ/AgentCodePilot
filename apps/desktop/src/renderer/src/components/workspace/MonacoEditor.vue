@@ -3,6 +3,13 @@ import { ref, onMounted, onUnmounted, watch } from 'vue'
 import type * as Monaco from 'monaco-editor'
 import { loadMonaco, getLanguageFromPath, applyMonacoTheme } from '@renderer/utils/monaco'
 
+export interface EditorSelectionInfo {
+  startLine: number
+  endLine: number
+  bubbleX: number
+  bubbleY: number
+}
+
 const props = defineProps<{
   value: string
   filePath?: string
@@ -12,6 +19,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:value': [v: string]
+  'selection-change': [selection: EditorSelectionInfo | null]
 }>()
 
 const containerRef = ref<HTMLElement | null>(null)
@@ -19,6 +27,8 @@ let monacoModule: typeof Monaco | null = null
 let editorInstance: Monaco.editor.IStandaloneCodeEditor | null = null
 let resizeObserver: ResizeObserver | null = null
 let themeObserver: MutationObserver | null = null
+let selectionDisposable: Monaco.IDisposable | null = null
+let scrollDisposable: Monaco.IDisposable | null = null
 
 function resolveLanguage(): string {
   return props.languageOverride ?? (props.filePath ? getLanguageFromPath(props.filePath) : 'plaintext')
@@ -26,6 +36,63 @@ function resolveLanguage(): string {
 
 function layoutEditor(): void {
   editorInstance?.layout()
+}
+
+function emitSelectionChange(): void {
+  if (!editorInstance) {
+    emit('selection-change', null)
+    return
+  }
+
+  const sel = editorInstance.getSelection()
+  if (!sel || sel.isEmpty()) {
+    emit('selection-change', null)
+    return
+  }
+
+  const domNode = editorInstance.getDomNode()
+  if (!domNode) {
+    emit('selection-change', null)
+    return
+  }
+
+  const startPos = editorInstance.getScrolledVisiblePosition({
+    lineNumber: sel.startLineNumber,
+    column: sel.startColumn
+  })
+  const endPos = editorInstance.getScrolledVisiblePosition({
+    lineNumber: sel.endLineNumber,
+    column: sel.endColumn
+  })
+  if (!startPos || !endPos) {
+    emit('selection-change', null)
+    return
+  }
+
+  const editorRect = domNode.getBoundingClientRect()
+  const topY = Math.min(startPos.top, endPos.top)
+  const centerX = (startPos.left + endPos.left) / 2
+
+  emit('selection-change', {
+    startLine: sel.startLineNumber,
+    endLine: sel.endLineNumber,
+    bubbleX: editorRect.left + centerX,
+    bubbleY: editorRect.top + topY
+  })
+}
+
+function clearSelection(): void {
+  if (!editorInstance) return
+  const pos = editorInstance.getPosition()
+  if (pos) {
+    editorInstance.setSelection({
+      startLineNumber: pos.lineNumber,
+      startColumn: pos.column,
+      endLineNumber: pos.lineNumber,
+      endColumn: pos.column
+    })
+  }
+  emit('selection-change', null)
 }
 
 async function mountEditor(): Promise<void> {
@@ -50,7 +117,17 @@ async function mountEditor(): Promise<void> {
     emit('update:value', editorInstance!.getValue())
   })
 
-  resizeObserver = new ResizeObserver(() => layoutEditor())
+  selectionDisposable = editorInstance.onDidChangeCursorSelection(() => {
+    emitSelectionChange()
+  })
+  scrollDisposable = editorInstance.onDidScrollChange(() => {
+    emitSelectionChange()
+  })
+
+  resizeObserver = new ResizeObserver(() => {
+    layoutEditor()
+    emitSelectionChange()
+  })
   resizeObserver.observe(container)
 
   themeObserver = new MutationObserver(() => {
@@ -63,6 +140,10 @@ async function mountEditor(): Promise<void> {
 }
 
 function destroyEditor(): void {
+  selectionDisposable?.dispose()
+  selectionDisposable = null
+  scrollDisposable?.dispose()
+  scrollDisposable = null
   resizeObserver?.disconnect()
   resizeObserver = null
   themeObserver?.disconnect()
@@ -102,6 +183,8 @@ watch(
     if (model) monacoModule.editor.setModelLanguage(model, resolveLanguage())
   }
 )
+
+defineExpose({ clearSelection })
 </script>
 
 <template>

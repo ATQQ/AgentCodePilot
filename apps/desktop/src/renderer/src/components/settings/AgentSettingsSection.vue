@@ -12,13 +12,22 @@ import {
   clampMaxAgentTurns
 } from '../../../../shared/agent-run-settings'
 import MockAgentSettingsPanel from '@renderer/components/settings/MockAgentSettingsPanel.vue'
-import type { AgentModelOption, ModelCatalogSource } from '@renderer/types'
+import type { AgentModelOption, ModelCatalogSource, ReplyLanguage } from '@renderer/types'
 
 const { t } = useI18n()
 const agentStore = useAgentStore()
 const settingsStore = useSettingsStore()
 
 const draftMaxTurns = ref(DEFAULT_MAX_AGENT_TURNS)
+const draftReplyLanguage = ref<ReplyLanguage>('auto')
+
+const REPLY_LANGUAGE_OPTIONS: { value: ReplyLanguage; labelKey: string }[] = [
+  { value: 'auto', labelKey: 'settings.agentConfig.replyLanguageAuto' },
+  { value: 'zh-CN', labelKey: 'settings.agentConfig.replyLanguageZhCN' },
+  { value: 'en', labelKey: 'settings.agentConfig.replyLanguageEn' },
+  { value: 'ja', labelKey: 'settings.agentConfig.replyLanguageJa' },
+  { value: 'ko', labelKey: 'settings.agentConfig.replyLanguageKo' }
+]
 
 const activeAgentId = ref('')
 const loading = ref(false)
@@ -75,6 +84,7 @@ async function loadAgent(agentId: string): Promise<void> {
 onMounted(async () => {
   await settingsStore.fetchSettings()
   draftMaxTurns.value = settingsStore.maxAgentTurns
+  draftReplyLanguage.value = settingsStore.replyLanguage
   await agentStore.fetchAgents()
   activeAgentId.value = configurableAgents.value[0]?.id ?? 'claude-code'
   if (activeAgentId.value) {
@@ -86,6 +96,10 @@ async function saveMaxTurns(): Promise<void> {
   const next = clampMaxAgentTurns(draftMaxTurns.value)
   draftMaxTurns.value = next
   await settingsStore.setMaxAgentTurns(next)
+}
+
+async function saveReplyLanguage(): Promise<void> {
+  await settingsStore.setReplyLanguage(draftReplyLanguage.value)
 }
 
 watch(activeAgentId, (agentId) => {
@@ -159,6 +173,20 @@ async function resetConfig(): Promise<void> {
   <div class="agent-settings">
     <h1 class="page-title">{{ t('settings.agentConfig.title') }}</h1>
     <p class="page-desc">{{ t('settings.agentConfig.desc') }}</p>
+
+    <div class="setting-card">
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">{{ t('settings.agentConfig.replyLanguage') }}</div>
+          <div class="setting-desc">{{ t('settings.agentConfig.replyLanguageDesc') }}</div>
+        </div>
+        <select v-model="draftReplyLanguage" class="model-select" @change="saveReplyLanguage">
+          <option v-for="opt in REPLY_LANGUAGE_OPTIONS" :key="opt.value" :value="opt.value">
+            {{ t(opt.labelKey) }}
+          </option>
+        </select>
+      </div>
+    </div>
 
     <div class="setting-card">
       <div class="setting-row">

@@ -96,6 +96,29 @@ When intent is ambiguous, ask a brief clarifying question OR stay in edit/review
 ${planDetails ? `Plan file(s):\n${planDetails}\n` : ''}`
 }
 
+const REPLY_LANGUAGE_LABELS: Record<string, string> = {
+  'zh-CN': 'Simplified Chinese (简体中文)',
+  en: 'English',
+  ja: 'Japanese (日本語)',
+  ko: 'Korean (한국어)'
+}
+
+function buildReplyLanguageInstructions(): string {
+  const replyLanguage = repo.getAllSettings()['replyLanguage'] || 'auto'
+  if (replyLanguage === 'auto') {
+    return `[Reply Language]
+Always respond in the same language the user writes in. If the user mixes languages, prefer the language used for the main request. Keep code, file paths, and technical identifiers unchanged.`
+  }
+  const label = REPLY_LANGUAGE_LABELS[replyLanguage] || replyLanguage
+  return `[Reply Language]
+Always respond to the user in ${label}. Keep code, file paths, and technical identifiers unchanged.`
+}
+
+function withReplyLanguageInstructions(prompt: string): string {
+  const instructions = buildReplyLanguageInstructions()
+  return `${instructions}\n\n${prompt}`
+}
+
 export function buildAgentPrompt(options: {
   content: string
   attachments?: AttachmentPayload[]
@@ -112,7 +135,7 @@ export function buildAgentPrompt(options: {
       : getLatestPlanForConversation(conversationId)
     const existingContent = latestPlan ? readPlanFile(latestPlan.file_path) : undefined
     const instructions = buildPlanModeInstructions(existingContent)
-    return `${instructions}\n${withAttachments}`
+    return withReplyLanguageInstructions(`${instructions}\n${withAttachments}`)
   }
 
   if (planRefs?.length) {
@@ -125,8 +148,10 @@ export function buildAgentPrompt(options: {
       return `[Referenced Plan: ${ref.title}]\n${planContent}`
     })
     const planInstructions = buildReferencedPlanInstructions(planRefs)
-    return `${planInstructions}\n\n${blocks.join('\n\n')}\n\n[User Request]\n${withAttachments}`
+    return withReplyLanguageInstructions(
+      `${planInstructions}\n\n${blocks.join('\n\n')}\n\n[User Request]\n${withAttachments}`
+    )
   }
 
-  return withAttachments
+  return withReplyLanguageInstructions(withAttachments)
 }

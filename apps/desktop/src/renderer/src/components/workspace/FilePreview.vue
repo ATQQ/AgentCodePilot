@@ -131,6 +131,10 @@ function addToChat(): void {
   composerStore.addFileReference(props.filePath)
 }
 
+function addSelectionToChat(startLine: number, endLine: number): void {
+  composerStore.addFileReference(props.filePath, startLine, endLine)
+}
+
 async function readAsFormat(): Promise<void> {
   const wasUnsupported = fileKind.value === 'unsupported'
   await fileStore.readFileAsText(props.filePath, selectedLanguage.value)
@@ -261,6 +265,7 @@ onUnmounted(() => {
           :is-dark="isDark"
           :language-override="fileStore.previewLanguageOverride ?? undefined"
           @update:value="(v) => fileStore.dirtyContent = v"
+          @add-selection-to-chat="addSelectionToChat"
         />
         <template #fallback>
           <div class="center-msg">加载编辑器…</div>
