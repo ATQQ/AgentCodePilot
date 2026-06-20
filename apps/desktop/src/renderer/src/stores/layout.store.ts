@@ -3,6 +3,7 @@ import { ref, watch, computed, type Ref, type ComputedRef, type WritableComputed
 import type { PlanOwnerType } from '../../../preload/types'
 import { useChatStore } from './chat.store'
 import { useSettingsStore } from './settings.store'
+import { useUiStore } from './ui.store'
 import { useWorkspaceStore } from './workspace.store'
 
 export type ExtensionTab = 'review' | 'terminal' | 'browser' | 'files' | 'plans'
@@ -15,6 +16,29 @@ const STORAGE_KEY = 'workbench-layout'
 const CHAT_CONTENT_MAX_WIDTH = 820
 const ENV_RAIL_WIDTH = 280
 const CHAT_LAYOUT_GUTTER = 32
+
+/**
+ * 右侧面板宽度自适应
+ *
+ * 可用宽度 available = windowWidth - (侧边栏展开 ? SIDEBAR_WIDTH : 0)
+ *
+ * 展开时初始宽度：
+ *   preferred = floor(available × RIGHT_PANEL_OPEN_RATIO)
+ *   rightPanelWidth = clamp(preferred, RIGHT_PANEL_MIN_WIDTH, maxRight)
+ *
+ * 最大宽度 maxRight = clamp(
+ *   min(floor(available × RIGHT_PANEL_MAX_RATIO), available - CHAT_MIN_WIDTH_WITH_PANEL - RESIZER_WIDTH),
+ *   RIGHT_PANEL_MIN_WIDTH, +∞
+ * )
+ *
+ * 窗口缩放 / 侧边栏切换时仅 clamp 当前宽度，不重新计算 preferred。
+ */
+const SIDEBAR_WIDTH = 220 // 左侧边栏占位，与 --sidebar-width 一致
+const RIGHT_PANEL_MIN_WIDTH = 260 // 右侧面板最小宽度，与 AppShell ResizableSplit min-size 一致
+const RIGHT_PANEL_MAX_RATIO = 0.75 // 右侧面板不超过可用宽度的 75%（拖拽上限）
+const RIGHT_PANEL_OPEN_RATIO = 0.42 // 展开时右侧面板占可用宽度的比例
+const CHAT_MIN_WIDTH_WITH_PANEL = 480 // 右侧面板打开时，中间聊天区至少保留的宽度
+const RESIZER_WIDTH = 6 // 拖拽分隔条占位，与 ResizableSplit 一致
 
 interface LayoutPersist {
   rightPanelWidth: number
@@ -68,6 +92,7 @@ export interface LayoutStoreReturn {
   closeBottomPanel: () => void
   toggleEnvInfo: () => void
   setChatLayoutWidth: (width: number) => void
+  getMaxRightPanelWidth: () => number
   openReviewFromChanges: () => void
   openReviewForCommit: () => void
   openPlansPanel: (
@@ -110,6 +135,8 @@ export const useLayoutStore = defineStore('layout', (): LayoutStoreReturn => {
   const envInfoVisible = ref(false)
   const chatLayoutWidth = ref(0)
   const homeRouteActive = ref(false)
+  // 响应式窗口宽度，供右侧面板宽度计算在 resize 时更新
+  const windowWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 0)
 
   const showWorkbenchControls = computed(() => !homeRouteActive.value)
 
@@ -214,6 +241,58 @@ export const useLayoutStore = defineStore('layout', (): LayoutStoreReturn => {
     if (persistTimer) clearTimeout(persistTimer)
     persistTimer = setTimeout(persistLayout, 300)
   })
+
+  /** 工作台主内容区可用宽度（扣除左侧边栏） */
+  function getWorkbenchAvailableWidth(): number {
+    const sidebarWidth = useUiStore().sidebarCollapsed ? 0 : SIDEBAR_WIDTH
+    return windowWidth.value - sidebarWidth
+  }
+
+  /** 当前窗口下右侧面板允许的最大宽度，保证中间聊天区 ≥ CHAT_MIN_WIDTH_WITH_PANEL */
+  function getMaxRightPanelWidth(): number {
+    const available = getWorkbenchAvailableWidth()
+    const maxByRatio = Math.floor(available * RIGHT_PANEL_MAX_RATIO)
+    const maxByChat = available - CHAT_MIN_WIDTH_WITH_PANEL - RESIZER_WIDTH
+    return Math.max(RIGHT_PANEL_MIN_WIDTH, Math.min(maxByRatio, maxByChat))
+  }
+
+  /** 展开右侧面板时，按 RIGHT_PANEL_OPEN_RATIO 计算初始宽度 */
+  function adaptRightPanelWidthForOpen(): void {
+    const available = getWorkbenchAvailableWidth()
+    const maxRight = getMaxRightPanelWidth()
+    const preferred = Math.floor(available * RIGHT_PANEL_OPEN_RATIO)
+    rightPanelWidth.value = Math.max(RIGHT_PANEL_MIN_WIDTH, Math.min(maxRight, preferred))
+  }
+
+  /** 窗口缩放或侧边栏切换后，将当前宽度限制在 [MIN, maxRight] 内 */
+  function clampRightPanelWidth(): void {
+    const maxRight = getMaxRightPanelWidth()
+    if (rightPanelWidth.value > maxRight) {
+      rightPanelWidth.value = maxRight
+    } else if (rightPanelWidth.value < RIGHT_PANEL_MIN_WIDTH) {
+      rightPanelWidth.value = RIGHT_PANEL_MIN_WIDTH
+    }
+  }
+
+  watch(rightPanelVisible, (visible, wasVisible) => {
+    if (visible && !wasVisible) {
+      adaptRightPanelWidthForOpen()
+    }
+  })
+
+  watch(
+    () => useUiStore().sidebarCollapsed,
+    () => {
+      if (rightPanelVisible.value) clampRightPanelWidth()
+    }
+  )
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', () => {
+      windowWidth.value = window.innerWidth
+      if (rightPanelVisible.value) clampRightPanelWidth()
+    })
+  }
 
   function toggleRightPanel(): void {
     rightPanelVisible.value = !rightPanelVisible.value
@@ -323,6 +402,7 @@ export const useLayoutStore = defineStore('layout', (): LayoutStoreReturn => {
     closeBottomPanel,
     toggleEnvInfo,
     setChatLayoutWidth,
+    getMaxRightPanelWidth,
     openReviewFromChanges,
     openReviewForCommit,
     openPlansPanel,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { provide, defineAsyncComponent, watch, ref, onMounted, onUnmounted, computed } from 'vue'
+import { provide, defineAsyncComponent, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import AppSidebar from './AppSidebar.vue'
 import SearchDialog from './SearchDialog.vue'
@@ -52,19 +52,7 @@ watch(
   { immediate: true }
 )
 
-const maxRightPanelWidth = ref(Math.floor(window.innerWidth * 0.75))
-
-function updateMaxRightPanelWidth(): void {
-  maxRightPanelWidth.value = Math.floor(window.innerWidth * 0.75)
-}
-
-onMounted(() => {
-  window.addEventListener('resize', updateMaxRightPanelWidth)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('resize', updateMaxRightPanelWidth)
-})
+const maxRightPanelWidth = computed(() => layoutStore.getMaxRightPanelWidth())
 
 provide('openSearch', () => uiStore.openSearch())
 </script>
