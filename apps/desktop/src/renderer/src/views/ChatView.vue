@@ -17,6 +17,7 @@ import type { Attachment, Message, PlanReference } from '@renderer/types'
 import { useLayoutStore } from '@renderer/stores/layout.store'
 import { usePlanStore } from '@renderer/stores/plan.store'
 import { useComposerStore } from '@renderer/stores/composer.store'
+import EnvironmentInfoContent from '@renderer/components/environment/EnvironmentInfoContent.vue'
 import { CODE_BLOCK_PROPS } from '@renderer/constants/codeBlockTheme'
 const { t } = useI18n()
 const router = useRouter()
@@ -27,6 +28,7 @@ const layoutStore = useLayoutStore()
 const planStore = usePlanStore()
 const composerStore = useComposerStore()
 const messagesContainer = ref<HTMLElement | null>(null)
+const chatViewRef = ref<HTMLElement | null>(null)
 const composerRef = ref<InstanceType<typeof PromptComposer> | null>(null)
 const streamedMessageIds = ref<Set<string>>(new Set())
 const copiedMessageId = ref<string | null>(null)
@@ -75,11 +77,28 @@ function scheduleScrollToBottom(instant = true): void {
   setTimeout(scroll, 300)
 }
 
+let chatLayoutObserver: ResizeObserver | null = null
+
 onMounted(() => {
   if (chatStore.activeConversation?.messages.length) {
     scheduleScrollToBottom(true)
   }
   void loadAssistantPlanMap()
+
+  const el = chatViewRef.value
+  if (!el) return
+  const updateWidth = () => layoutStore.setChatLayoutWidth(el.clientWidth)
+  updateWidth()
+  chatLayoutObserver = new ResizeObserver(() => updateWidth())
+  chatLayoutObserver.observe(el)
+})
+
+onUnmounted(() => {
+  chatLayoutObserver?.disconnect()
+  chatLayoutObserver = null
+  layoutStore.setChatLayoutWidth(0)
+  if (waitingTimer) clearInterval(waitingTimer)
+  if (scrollRetryTimer) clearTimeout(scrollRetryTimer)
 })
 
 watch(
@@ -176,11 +195,6 @@ watch(
   () => chatStore.pendingApprovalConversationIds.size,
   () => scrollToBottom()
 )
-
-onUnmounted(() => {
-  if (waitingTimer) clearInterval(waitingTimer)
-  if (scrollRetryTimer) clearTimeout(scrollRetryTimer)
-})
 
 function isStreamingMessage(msgId: string): boolean {
   const msgs = chatStore.activeConversation?.messages
@@ -340,8 +354,10 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
 </script>
 
 <template>
-  <div class="chat-view">
+  <div ref="chatViewRef" class="chat-view">
     <template v-if="chatStore.activeConversation">
+      <div class="chat-layout" :class="{ 'chat-layout--pinned-env': layoutStore.envInfoPinned }">
+        <div class="chat-main">
       <div class="chat-header">
         <h3 class="chat-title">{{ chatStore.activeConversation.title }}</h3>
         <button
@@ -534,6 +550,12 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
           </PromptComposer>
         </template>
       </div>
+        </div>
+
+        <aside v-if="layoutStore.envInfoPinned" class="chat-env-rail elegant-scroll">
+          <EnvironmentInfoContent />
+        </aside>
+      </div>
     </template>
 
     <div v-else class="no-conversation">
@@ -549,6 +571,46 @@ function handleApprovalRespond(requestId: string, allowed: boolean, scope: 'once
   height: 100%;
   min-height: 0;
   overflow: hidden;
+}
+
+.chat-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  justify-content: center;
+  gap: var(--chat-layout-gutter);
+  padding: 0 var(--spacing-lg);
+  overflow: hidden;
+}
+
+.chat-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: var(--chat-content-max-width);
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.chat-layout--pinned-env .chat-main {
+  flex: 0 1 var(--chat-content-max-width);
+}
+
+.chat-env-rail {
+  flex: 0 0 var(--env-rail-width);
+  width: var(--env-rail-width);
+  align-self: flex-start;
+  position: sticky;
+  top: var(--spacing-md);
+  max-height: calc(100% - var(--spacing-md) * 2);
+  overflow-y: auto;
+  padding: var(--spacing-md);
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-lg);
+  background: var(--content-bg);
+  margin-top: var(--spacing-md);
 }
 
 .chat-header {

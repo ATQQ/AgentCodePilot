@@ -2,6 +2,9 @@
   /* Layout */
   --sidebar-width: 220px;
   --topbar-height: 36px;
+  --chat-content-max-width: 820px;
+  --env-rail-width: 280px;
+  --chat-layout-gutter: 32px;
 
   /* Sidebar */
   --sidebar-bg: #f9fafb;

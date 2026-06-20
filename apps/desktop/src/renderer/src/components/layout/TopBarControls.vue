@@ -27,8 +27,8 @@ function toggleRight(): void {
       <button
         class="topbar-btn env-btn"
         data-env-trigger
-        :class="{ active: layoutStore.envInfoVisible }"
-        title="环境信息"
+        :class="{ active: layoutStore.envInfoVisible || layoutStore.envInfoPinned }"
+        :title="layoutStore.envInfoPinned ? '环境信息（已常驻）' : '环境信息'"
         @click="toggleEnvInfo"
       >
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">

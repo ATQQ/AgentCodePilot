@@ -12,6 +12,10 @@ export type DiffViewMode = 'side-by-side' | 'inline'
 
 const STORAGE_KEY = 'workbench-layout'
 
+const CHAT_CONTENT_MAX_WIDTH = 820
+const ENV_RAIL_WIDTH = 280
+const CHAT_LAYOUT_GUTTER = 32
+
 interface LayoutPersist {
   rightPanelWidth: number
   bottomPanelHeight: number
@@ -52,7 +56,14 @@ export const useLayoutStore = defineStore('layout', () => {
   const sideTreeWidth = ref(persisted.sideTreeWidth ?? 220)
   const diffViewMode = ref<DiffViewMode>(persisted.diffViewMode ?? 'side-by-side')
   const envInfoVisible = ref(false)
+  const chatLayoutWidth = ref(0)
   const homeRouteActive = ref(false)
+
+  const envInfoPinned = computed(() => {
+    if (!showWorkbenchControls.value || rightPanelVisible.value) return false
+    const minWidth = CHAT_CONTENT_MAX_WIDTH + ENV_RAIL_WIDTH + CHAT_LAYOUT_GUTTER
+    return chatLayoutWidth.value >= minWidth
+  })
 
   const panelStateByConversation = ref<Record<string, ConversationPanelState>>({})
   let lastConversationId: string | null = null
@@ -182,8 +193,17 @@ export const useLayoutStore = defineStore('layout', () => {
   }
 
   function toggleEnvInfo(): void {
+    if (envInfoPinned.value) return
     envInfoVisible.value = !envInfoVisible.value
   }
+
+  function setChatLayoutWidth(width: number): void {
+    chatLayoutWidth.value = width
+  }
+
+  watch(envInfoPinned, (pinned) => {
+    if (pinned) envInfoVisible.value = false
+  })
 
   function openReviewFromChanges(): void {
     openExtensionTab('review', { reviewScope: 'unstaged' })
@@ -224,12 +244,15 @@ export const useLayoutStore = defineStore('layout', () => {
     sideTreeWidth,
     diffViewMode,
     envInfoVisible,
+    envInfoPinned,
+    chatLayoutWidth,
     toggleRightPanel,
     toggleBottomPanel,
     openExtensionTab,
     closeRightPanel,
     closeBottomPanel,
     toggleEnvInfo,
+    setChatLayoutWidth,
     openReviewFromChanges,
     openReviewForCommit,
     openPlansPanel,
