@@ -24,10 +24,29 @@ export const usePanelContextStore = defineStore('panelContext', () => {
     return workspaceStore.workspaces.find((w) => w.id === projectId) ?? null
   })
 
-  const isWorkspaceContext = computed(() => conversationWorkspace.value !== null)
+  const homeSelectedWorkspace = computed(() => {
+    if (!layoutStore.homeRouteActive || !workspaceStore.selectedProjectId) return null
+    return workspaceStore.workspaces.find((w) => w.id === workspaceStore.selectedProjectId) ?? null
+  })
+
+  const homeSelectedProject = computed(() => {
+    if (!layoutStore.homeRouteActive || !workspaceStore.selectedProjectId) return null
+    return workspaceStore.projects.find((p) => p.id === workspaceStore.selectedProjectId) ?? null
+  })
+
+  const isHomePanelContextAvailable = computed(
+    () => layoutStore.homeRouteActive && !!(homeSelectedProject.value || homeSelectedWorkspace.value)
+  )
+
+  const isWorkspaceContext = computed(() => {
+    if (layoutStore.homeRouteActive) {
+      return homeSelectedWorkspace.value !== null
+    }
+    return conversationWorkspace.value !== null
+  })
 
   const availableFolders = computed<PanelFolderOption[]>(() => {
-    const ws = conversationWorkspace.value
+    const ws = layoutStore.homeRouteActive ? homeSelectedWorkspace.value : conversationWorkspace.value
     if (!ws) return []
     return ws.folders.map((path) => {
       const project = workspaceStore.projects.find((p) => p.path === path)
@@ -37,6 +56,17 @@ export const usePanelContextStore = defineStore('panelContext', () => {
   })
 
   function resolveDefaultFolder(): string | null {
+    if (layoutStore.homeRouteActive) {
+      const ws = homeSelectedWorkspace.value
+      if (ws && ws.folders.length > 0) {
+        if (selectedFolderPath.value && ws.folders.includes(selectedFolderPath.value)) {
+          return selectedFolderPath.value
+        }
+        return ws.folders[0]
+      }
+      return homeSelectedProject.value?.path ?? null
+    }
+
     const ws = conversationWorkspace.value
     if (ws && ws.folders.length > 0) {
       const convCwd = activeConversation.value?.cwd
@@ -55,7 +85,14 @@ export const usePanelContextStore = defineStore('panelContext', () => {
   }
 
   const effectivePanelCwd = computed<string | undefined>(() => {
-    if (layoutStore.homeRouteActive) return undefined
+    if (layoutStore.homeRouteActive) {
+      if (!isHomePanelContextAvailable.value) return undefined
+      if (homeSelectedWorkspace.value) {
+        return selectedFolderPath.value ?? availableFolders.value[0]?.path
+      }
+      return homeSelectedProject.value?.path
+    }
+
     if (isWorkspaceContext.value) {
       return selectedFolderPath.value ?? availableFolders.value[0]?.path
     }
@@ -74,7 +111,9 @@ export const usePanelContextStore = defineStore('panelContext', () => {
     () => [
       chatStore.activeConversationId,
       activeConversation.value?.projectId,
-      activeConversation.value?.cwd
+      activeConversation.value?.cwd,
+      layoutStore.homeRouteActive,
+      workspaceStore.selectedProjectId
     ],
     () => {
       resetFolderSelection()
@@ -86,6 +125,7 @@ export const usePanelContextStore = defineStore('panelContext', () => {
     selectedFolderPath,
     effectivePanelCwd,
     isWorkspaceContext,
+    isHomePanelContextAvailable,
     availableFolders,
     selectFolder,
     resetFolderSelection

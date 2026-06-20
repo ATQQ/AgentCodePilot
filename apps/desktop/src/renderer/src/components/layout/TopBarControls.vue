@@ -24,7 +24,6 @@ function toggleRight(): void {
     <template v-if="layoutStore.showWorkbenchControls">
       <EnvironmentInfoPopover />
 
-      <!-- Environment Info trigger -->
       <button
         class="topbar-btn env-btn"
         data-env-trigger
@@ -43,7 +42,6 @@ function toggleRight(): void {
         </span>
       </button>
 
-      <!-- Bottom panel toggle -->
       <button
         class="topbar-btn"
         :class="{ active: layoutStore.showBottomTerminal }"
@@ -55,20 +53,20 @@ function toggleRight(): void {
           <line x1="2" y1="11" x2="14" y2="11" />
         </svg>
       </button>
-
-      <!-- Right panel toggle -->
-      <button
-        class="topbar-btn"
-        :class="{ active: layoutStore.showExtensionPanel }"
-        title="扩展栏 (⌘B)"
-        @click="toggleRight"
-      >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-          <rect x="2" y="2" width="12" height="12" rx="1.5" />
-          <line x1="10" y1="2" x2="10" y2="14" />
-        </svg>
-      </button>
     </template>
+
+    <button
+      v-if="layoutStore.showExtensionPanelControls"
+      class="topbar-btn"
+      :class="{ active: layoutStore.showExtensionPanel }"
+      title="扩展栏 (⌘B)"
+      @click="toggleRight"
+    >
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="2" y="2" width="12" height="12" rx="1.5" />
+        <line x1="10" y1="2" x2="10" y2="14" />
+      </svg>
+    </button>
   </div>
 </template>
 

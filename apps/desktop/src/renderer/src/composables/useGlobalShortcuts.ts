@@ -5,6 +5,7 @@ import { useChatStore } from '@renderer/stores/chat.store'
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
 import { useLayoutStore } from '@renderer/stores/layout.store'
 import { useFileExplorerStore } from '@renderer/stores/fileExplorer.store'
+import { usePanelContextStore } from '@renderer/stores/panelContext.store'
 
 export function useGlobalShortcuts(): void {
   const router = useRouter()
@@ -14,6 +15,7 @@ export function useGlobalShortcuts(): void {
   const workspaceStore = useWorkspaceStore()
   const layoutStore = useLayoutStore()
   const fileExplorerStore = useFileExplorerStore()
+  const panelContext = usePanelContextStore()
 
   function startNewChat(): void {
     if (route.path === '/chat' && chatStore.activeConversation) {
@@ -33,6 +35,26 @@ export function useGlobalShortcuts(): void {
     const key = e.key.toLowerCase()
 
     if (layoutStore.homeRouteActive) {
+      const panelAvailable = panelContext.isHomePanelContextAvailable
+
+      if (key === 'b' && !e.shiftKey && panelAvailable) {
+        e.preventDefault()
+        layoutStore.toggleRightPanel()
+        return
+      }
+
+      if (key === 'p' && panelAvailable) {
+        e.preventDefault()
+        layoutStore.openExtensionTab('files')
+        return
+      }
+
+      if (key === 'g' && e.shiftKey && panelAvailable) {
+        e.preventDefault()
+        layoutStore.openExtensionTab('review')
+        return
+      }
+
       if (key === 'g' && !e.shiftKey) {
         e.preventDefault()
         uiStore.toggleSearch()

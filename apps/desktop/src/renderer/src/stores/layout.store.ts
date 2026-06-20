@@ -3,6 +3,7 @@ import { ref, watch, computed } from 'vue'
 import type { PlanOwnerType } from '../../../preload/types'
 import { useChatStore } from './chat.store'
 import { useSettingsStore } from './settings.store'
+import { usePanelContextStore } from './panelContext.store'
 
 export type ExtensionTab = 'review' | 'terminal' | 'browser' | 'files' | 'plans'
 export type ReviewScope = 'unstaged' | 'staged'
@@ -108,9 +109,16 @@ export const useLayoutStore = defineStore('layout', () => {
       !(rightPanelVisible.value && activeExtensionTab.value === 'terminal')
   )
 
-  const showExtensionPanel = computed(
-    () => rightPanelVisible.value && !homeRouteActive.value
-  )
+  const showExtensionPanel = computed(() => {
+    if (!rightPanelVisible.value) return false
+    if (!homeRouteActive.value) return true
+    return usePanelContextStore().isHomePanelContextAvailable
+  })
+
+  const showExtensionPanelControls = computed(() => {
+    if (!homeRouteActive.value) return true
+    return usePanelContextStore().isHomePanelContextAvailable
+  })
 
   const showWorkbenchControls = computed(() => !homeRouteActive.value)
 
@@ -189,6 +197,7 @@ export const useLayoutStore = defineStore('layout', () => {
     homeRouteActive.value = active
     if (active) {
       envInfoVisible.value = false
+      closeRightPanel()
     }
   }
 
@@ -201,6 +210,7 @@ export const useLayoutStore = defineStore('layout', () => {
     bottomPanelVisible,
     showBottomTerminal,
     showExtensionPanel,
+    showExtensionPanelControls,
     showWorkbenchControls,
     homeRouteActive,
     activeExtensionTab,
