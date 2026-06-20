@@ -34,7 +34,7 @@ function addSelectionToChat(): void {
 
 function handleKeydown(e: KeyboardEvent): void {
   if (!selection.value) return
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'u') {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'l') {
     e.preventDefault()
     e.stopPropagation()
     addSelectionToChat()

@@ -5,6 +5,7 @@ import { Minus, Plus, RefreshLeft } from '@element-plus/icons-vue'
 import { useGitStore } from '@renderer/stores/git.store'
 import { useLayoutStore } from '@renderer/stores/layout.store'
 import { usePanelContextStore } from '@renderer/stores/panelContext.store'
+import { useComposerStore } from '@renderer/stores/composer.store'
 import type { GitDiffScope } from '@renderer/types'
 import EditorFileTabs from './EditorFileTabs.vue'
 import SideTreePanel from './SideTreePanel.vue'
@@ -20,7 +21,10 @@ const GitCommitBar = defineAsyncComponent(
 const gitStore = useGitStore()
 const layoutStore = useLayoutStore()
 const panelContext = usePanelContextStore()
+const composerStore = useComposerStore()
 const { t } = useI18n()
+
+const diffEditorRef = ref<InstanceType<typeof MonacoDiffEditor> | null>(null)
 
 const treeCollapsed = ref(false)
 const treeFilter = ref('')
@@ -59,6 +63,18 @@ const bulkActionsDisabled = computed(
 const activeFileMeta = computed(() =>
   gitStore.changedFiles.find((f) => f.path === gitStore.selectedFile)
 )
+
+const diffModifiedEditable = computed(() => layoutStore.reviewScope === 'unstaged')
+
+function addSelectionToChat(startLine: number, endLine: number): void {
+  if (!gitStore.selectedFile) return
+  composerStore.addFileReference(gitStore.selectedFile, startLine, endLine)
+  diffEditorRef.value?.clearSelection()
+}
+
+function onDiffModifiedChange(content: string): void {
+  gitStore.onDiffModifiedEdit(content)
+}
 
 function onScopeChange(scope: GitDiffScope): void {
   layoutStore.reviewScope = scope as import('@renderer/stores/layout.store').ReviewScope
@@ -259,11 +275,15 @@ watch(
             <template v-else-if="gitStore.selectedFile">
               <div class="diff-editor-host">
                 <MonacoDiffEditor
+                  ref="diffEditorRef"
                   :key="`${layoutStore.reviewScope}:${gitStore.selectedFile}`"
                   :original="gitStore.diffOriginal"
                   :modified="gitStore.diffModified"
                   :file-path="gitStore.selectedFile"
                   :side-by-side="layoutStore.diffViewMode === 'side-by-side'"
+                  :modified-editable="diffModifiedEditable"
+                  @update:modified="onDiffModifiedChange"
+                  @add-selection-to-chat="addSelectionToChat"
                 />
               </div>
               <div v-if="gitStore.diffRefreshing" class="diff-refresh-hint">更新中…</div>

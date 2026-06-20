@@ -14,6 +14,12 @@ function diffCacheKey(scope: GitDiffScope, file: string): string {
   return `${scope}:${file}`
 }
 
+function joinRepoPath(cwd: string, relativePath: string): string {
+  const base = cwd.replace(/[/\\]+$/, '')
+  const relative = relativePath.replace(/^[/\\]+/, '')
+  return `${base}/${relative}`
+}
+
 export const useGitStore = defineStore('git', () => {
   const status = ref<GitStatusResult | null>(null)
   const changedFiles = ref<GitChangedFile[]>([])
@@ -37,6 +43,8 @@ export const useGitStore = defineStore('git', () => {
   const loadFilesRequestId = emptyScopeRecord(0)
   let loadDiffRequestId = 0
   let pollTimer: ReturnType<typeof setInterval> | null = null
+  const pendingSaveTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  const pendingSaveContent = new Map<string, string>()
 
   const panelContext = usePanelContextStore()
   const layoutStore = useLayoutStore()
@@ -127,7 +135,10 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
-  async function loadChangedFiles(scope: GitDiffScope): Promise<void> {
+  async function loadChangedFiles(
+    scope: GitDiffScope,
+    options?: { reloadCurrentDiff?: boolean }
+  ): Promise<void> {
     const cwd = panelContext.effectivePanelCwd
     if (!cwd) {
       resetScopeCaches()
@@ -175,7 +186,11 @@ export const useGitStore = defineStore('git', () => {
         }
       }
 
-      if (layoutStore.reviewScope === scope && nextSelected) {
+      if (
+        (options?.reloadCurrentDiff ?? true) &&
+        layoutStore.reviewScope === scope &&
+        nextSelected
+      ) {
         await loadDiffForSelection()
       }
     } finally {
@@ -282,6 +297,7 @@ export const useGitStore = defineStore('git', () => {
 
   function closeFileTab(path: string): void {
     const scope = layoutStore.reviewScope
+    if (scope === 'unstaged') flushPendingSave(path)
     const tabs = openTabsByScope.value[scope].filter((p) => p !== path)
     openTabsByScope.value[scope] = tabs
     if (selectedFile.value === path) {
@@ -313,8 +329,72 @@ export const useGitStore = defineStore('git', () => {
   }
 
   function selectFile(path: string): void {
+    const prev = selectedFile.value
+    if (prev && prev !== path && layoutStore.reviewScope === 'unstaged') {
+      flushPendingSave(prev)
+    }
     selectedFile.value = path
     selectedFileByScope.value[layoutStore.reviewScope] = path
+  }
+
+  function updateDiffModified(content: string): void {
+    diffModified.value = content
+    const file = selectedFile.value
+    if (!file) return
+
+    const key = diffCacheKey('unstaged', file)
+    const cached = diffCache.get(key)
+    if (cached) {
+      diffCache.set(key, { ...cached, modified: content })
+    } else {
+      diffCache.set(key, { original: diffOriginal.value, modified: content })
+    }
+  }
+
+  async function persistUnstagedFileContent(file: string, content: string): Promise<void> {
+    const cwd = panelContext.effectivePanelCwd
+    if (!cwd) return
+
+    const fullPath = joinRepoPath(cwd, file)
+    await window.agentAPI.file.write(fullPath, content, [cwd])
+    await loadChangedFiles('unstaged', { reloadCurrentDiff: false })
+  }
+
+  function flushPendingSave(file: string): void {
+    const timer = pendingSaveTimers.get(file)
+    if (timer) clearTimeout(timer)
+    pendingSaveTimers.delete(file)
+
+    const content =
+      pendingSaveContent.get(file) ??
+      diffCache.get(diffCacheKey('unstaged', file))?.modified
+    pendingSaveContent.delete(file)
+
+    if (content !== undefined) {
+      void persistUnstagedFileContent(file, content)
+    }
+  }
+
+  function scheduleUnstagedSave(file: string, content: string): void {
+    pendingSaveContent.set(file, content)
+    const existing = pendingSaveTimers.get(file)
+    if (existing) clearTimeout(existing)
+
+    pendingSaveTimers.set(
+      file,
+      setTimeout(() => {
+        pendingSaveTimers.delete(file)
+        pendingSaveContent.delete(file)
+        void persistUnstagedFileContent(file, content)
+      }, 400)
+    )
+  }
+
+  function onDiffModifiedEdit(content: string): void {
+    if (layoutStore.reviewScope !== 'unstaged') return
+    updateDiffModified(content)
+    const file = selectedFile.value
+    if (file) scheduleUnstagedSave(file, content)
   }
 
   async function stageFiles(paths: string[]): Promise<void> {
@@ -444,6 +524,7 @@ export const useGitStore = defineStore('git', () => {
     closeOtherTabs,
     closeAllTabs,
     selectFile,
+    onDiffModifiedEdit,
     stageFiles,
     unstageFiles,
     discardFiles,

@@ -34,7 +34,7 @@ function onAddToChat(): void {
     >
       <button class="bubble-btn" @click="onAddToChat">
         {{ t('workspace.filePreview.addSelectionToChat') }}
-        <kbd class="bubble-kbd">⌘U</kbd>
+        <kbd class="bubble-kbd">⌘L</kbd>
       </button>
     </div>
   </Teleport>
