@@ -1,5 +1,6 @@
 import { logInfo, logError } from '../logger'
 import { agentRegistry } from './registry'
+import { ensureAgentRegistry } from './agent-registry-init'
 import type { AgentAdapter, AgentRunInput } from './types'
 import type { AgentEvent } from '../../preload/types'
 
@@ -34,21 +35,23 @@ export function supervisedRun(
   input: AgentRunInput,
   emit: (event: AgentEvent) => void
 ): void {
-  const adapter = agentRegistry.get(input.agentId)
-  if (!adapter) {
-    emit({
-      type: 'message.error',
-      conversationId: input.conversationId,
-      messageId: input.messageId,
-      error: `Agent "${input.agentId}" not found`
-    })
-    return
-  }
+  void ensureAgentRegistry().then(() => {
+    const adapter = agentRegistry.get(input.agentId)
+    if (!adapter) {
+      emit({
+        type: 'message.error',
+        conversationId: input.conversationId,
+        messageId: input.messageId,
+        error: `Agent "${input.agentId}" not found`
+      })
+      return
+    }
 
-  activeRuns.set(input.conversationId, { adapter, retries: 0, messageId: input.messageId })
-  logInfo('Supervisor', `Starting run: ${formatRunContext(input)}`)
+    activeRuns.set(input.conversationId, { adapter, retries: 0, messageId: input.messageId })
+    logInfo('Supervisor', `Starting run: ${formatRunContext(input)}`)
 
-  runWithRetry(adapter, input, emit, 0)
+    runWithRetry(adapter, input, emit, 0)
+  })
 }
 
 function runWithRetry(

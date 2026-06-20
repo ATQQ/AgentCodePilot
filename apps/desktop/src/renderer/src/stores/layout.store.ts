@@ -1,9 +1,9 @@
 import { defineStore } from 'pinia'
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, type Ref, type ComputedRef, type WritableComputedRef } from 'vue'
 import type { PlanOwnerType } from '../../../preload/types'
 import { useChatStore } from './chat.store'
 import { useSettingsStore } from './settings.store'
-import { usePanelContextStore } from './panelContext.store'
+import { useWorkspaceStore } from './workspace.store'
 
 export type ExtensionTab = 'review' | 'terminal' | 'browser' | 'files' | 'plans'
 export type ReviewScope = 'unstaged' | 'staged'
@@ -40,7 +40,59 @@ function loadPersist(): LayoutPersist {
   return { rightPanelWidth: 380, bottomPanelHeight: 260, sideTreeWidth: 220, diffViewMode: 'side-by-side' }
 }
 
-export const useLayoutStore = defineStore('layout', () => {
+export interface LayoutStoreReturn {
+  rightPanelVisible: Ref<boolean>
+  bottomPanelVisible: Ref<boolean>
+  showBottomTerminal: ComputedRef<boolean>
+  showExtensionPanel: ComputedRef<boolean>
+  showExtensionPanelControls: ComputedRef<boolean>
+  showWorkbenchControls: ComputedRef<boolean>
+  homeRouteActive: Ref<boolean>
+  activeExtensionTab: Ref<ExtensionTab>
+  reviewScope: Ref<ReviewScope>
+  activePlanId: Ref<string | null>
+  plansScope: Ref<PlansScope>
+  plansOwnerType: Ref<PlanOwnerType | null>
+  plansOwnerId: Ref<string | null>
+  rightPanelWidth: Ref<number>
+  bottomPanelHeight: Ref<number>
+  sideTreeWidth: Ref<number>
+  diffViewMode: Ref<DiffViewMode>
+  envInfoVisible: Ref<boolean>
+  envInfoPinned: ComputedRef<boolean>
+  chatLayoutWidth: Ref<number>
+  toggleRightPanel: () => void
+  toggleBottomPanel: () => void
+  openExtensionTab: (tab: ExtensionTab, options?: { reviewScope?: ReviewScope }) => void
+  closeRightPanel: () => void
+  closeBottomPanel: () => void
+  toggleEnvInfo: () => void
+  setChatLayoutWidth: (width: number) => void
+  openReviewFromChanges: () => void
+  openReviewForCommit: () => void
+  openPlansPanel: (
+    planId?: string,
+    options?: {
+      scope?: PlansScope
+      ownerType?: PlanOwnerType
+      ownerId?: string
+    }
+  ) => void
+  setDiffViewMode: (mode: DiffViewMode) => void
+  setHomeRouteActive: (active: boolean) => void
+}
+
+type UnwrapStoreRefs<T> = {
+  [K in keyof T]: T[K] extends Ref<infer V>
+    ? V
+    : T[K] extends ComputedRef<infer V> | WritableComputedRef<infer V>
+      ? V
+      : T[K]
+}
+
+export type LayoutStore = UnwrapStoreRefs<LayoutStoreReturn>
+
+export const useLayoutStore = defineStore('layout', (): LayoutStoreReturn => {
   const persisted = loadPersist()
 
   const rightPanelVisible = ref(false)
@@ -58,6 +110,19 @@ export const useLayoutStore = defineStore('layout', () => {
   const envInfoVisible = ref(false)
   const chatLayoutWidth = ref(0)
   const homeRouteActive = ref(false)
+
+  const showWorkbenchControls = computed(() => !homeRouteActive.value)
+
+  function isHomePanelContextAvailable(): boolean {
+    if (!homeRouteActive.value) return false
+    const workspaceStore = useWorkspaceStore()
+    const selectedId = workspaceStore.selectedProjectId
+    if (!selectedId) return false
+    return (
+      workspaceStore.workspaces.some((w) => w.id === selectedId) ||
+      workspaceStore.projects.some((p) => p.id === selectedId)
+    )
+  }
 
   const envInfoPinned = computed(() => {
     if (!showWorkbenchControls.value || rightPanelVisible.value) return false
@@ -123,17 +188,17 @@ export const useLayoutStore = defineStore('layout', () => {
   const showExtensionPanel = computed(() => {
     if (!rightPanelVisible.value) return false
     if (!homeRouteActive.value) return true
-    return usePanelContextStore().isHomePanelContextAvailable
+    return isHomePanelContextAvailable()
   })
 
   const showExtensionPanelControls = computed(() => {
     if (!homeRouteActive.value) return true
-    return usePanelContextStore().isHomePanelContextAvailable
+    return isHomePanelContextAvailable()
   })
 
-  const showWorkbenchControls = computed(() => !homeRouteActive.value)
+  let persistTimer: ReturnType<typeof setTimeout> | null = null
 
-  watch([rightPanelWidth, bottomPanelHeight, sideTreeWidth, diffViewMode], () => {
+  function persistLayout(): void {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
@@ -143,6 +208,11 @@ export const useLayoutStore = defineStore('layout', () => {
         diffViewMode: diffViewMode.value
       })
     )
+  }
+
+  watch([rightPanelWidth, bottomPanelHeight, sideTreeWidth, diffViewMode], () => {
+    if (persistTimer) clearTimeout(persistTimer)
+    persistTimer = setTimeout(persistLayout, 300)
   })
 
   function toggleRightPanel(): void {
@@ -259,4 +329,4 @@ export const useLayoutStore = defineStore('layout', () => {
     setDiffViewMode,
     setHomeRouteActive
   }
-})
+}) as unknown as () => LayoutStore

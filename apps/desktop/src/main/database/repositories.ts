@@ -292,6 +292,20 @@ export function getMessagesByConversation(conversationId: string): MessageRow[] 
     .all(conversationId) as MessageRow[]
 }
 
+export function getRecentMessagesByConversation(
+  conversationId: string,
+  limit: number
+): MessageRow[] {
+  if (limit <= 0) return getMessagesByConversation(conversationId)
+  const db = getDatabase()
+  const rows = db
+    .prepare(
+      'SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT ?'
+    )
+    .all(conversationId, limit) as MessageRow[]
+  return rows.reverse()
+}
+
 export function updateMessageContent(id: string, content: string): void {
   const db = getDatabase()
   db.prepare('UPDATE messages SET content = ? WHERE id = ?').run(content, id)

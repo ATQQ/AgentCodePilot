@@ -27,6 +27,24 @@ export const useChatStore = defineStore('chat', () => {
   const activeAssistantMessageIds = ref<Map<string, string>>(new Map())
   const thinkingStartedAtByConversation = ref<Map<string, number>>(new Map())
   const toolUseIdAliases = ref<Map<string, string>>(new Map())
+  const streamedMessageIds = ref<Set<string>>(new Set())
+
+  function markMessageStreamed(messageId: string): void {
+    if (streamedMessageIds.value.has(messageId)) return
+    const next = new Set(streamedMessageIds.value)
+    next.add(messageId)
+    streamedMessageIds.value = next
+  }
+
+  function isMessageStreaming(messageId: string): boolean {
+    const convId = activeConversationId.value
+    if (!convId || !isConversationStreaming(convId)) return false
+    return isActiveAssistantMessage(convId, messageId)
+  }
+
+  function wasMessageStreamed(messageId: string): boolean {
+    return streamedMessageIds.value.has(messageId)
+  }
 
   function touchConversationSet(setRef: typeof streamingConversationIds, mutate: (set: Set<string>) => void): void {
     mutate(setRef.value)
@@ -147,6 +165,40 @@ export const useChatStore = defineStore('chat', () => {
     [...conversations.value].sort((a, b) => (a.updatedAt > b.updatedAt ? -1 : 1))
   )
 
+  function sortSidebarConversations(list: Conversation[]): Conversation[] {
+    return [...list].sort((a, b) => {
+      if (a.pinned && !b.pinned) return -1
+      if (!a.pinned && b.pinned) return 1
+      return a.updatedAt > b.updatedAt ? -1 : 1
+    })
+  }
+
+  const conversationsByProject = computed(() => {
+    const map = new Map<string, Conversation[]>()
+    for (const c of conversations.value) {
+      if (c.archived || !c.projectId) continue
+      const list = map.get(c.projectId)
+      if (list) list.push(c)
+      else map.set(c.projectId, [c])
+    }
+    for (const [key, list] of map) {
+      map.set(key, sortSidebarConversations(list))
+    }
+    return map
+  })
+
+  const orphanConversations = computed(() =>
+    sortSidebarConversations(
+      conversations.value.filter((c) => !c.projectId && !c.archived)
+    )
+  )
+
+  const archivedConversationsList = computed(() =>
+    conversations.value
+      .filter((c) => c.archived)
+      .sort((a, b) => (a.updatedAt > b.updatedAt ? -1 : 1))
+  )
+
   const isWaiting = computed(
     () =>
       activeConversationId.value !== null &&
@@ -254,29 +306,15 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function getConversationsByProject(projectId: string): Conversation[] {
-    return conversations.value
-      .filter((c) => c.projectId === projectId && !c.archived)
-      .sort((a, b) => {
-        if (a.pinned && !b.pinned) return -1
-        if (!a.pinned && b.pinned) return 1
-        return a.updatedAt > b.updatedAt ? -1 : 1
-      })
+    return conversationsByProject.value.get(projectId) ?? []
   }
 
   function getOrphanConversations(): Conversation[] {
-    return conversations.value
-      .filter((c) => !c.projectId && !c.archived)
-      .sort((a, b) => {
-        if (a.pinned && !b.pinned) return -1
-        if (!a.pinned && b.pinned) return 1
-        return a.updatedAt > b.updatedAt ? -1 : 1
-      })
+    return orphanConversations.value
   }
 
   function getArchivedConversations(): Conversation[] {
-    return conversations.value
-      .filter((c) => c.archived)
-      .sort((a, b) => (a.updatedAt > b.updatedAt ? -1 : 1))
+    return archivedConversationsList.value
   }
 
   function mergeConversationItem(item: {
@@ -575,6 +613,7 @@ export const useChatStore = defineStore('chat', () => {
       }
       case 'message.delta': {
         if (!isActiveAssistantMessage(event.conversationId, event.messageId)) return
+        markMessageStreamed(event.messageId)
         const conv = conversations.value.find((c) => c.id === event.conversationId)
         if (!conv) return
         removeWaitingConversation(event.conversationId)
@@ -902,6 +941,9 @@ export const useChatStore = defineStore('chat', () => {
     isConversationStreaming,
     currentQueuedMessages,
     conversationList,
+    conversationsByProject,
+    orphanConversations,
+    archivedConversationsList,
     getConversationsByProject,
     getOrphanConversations,
     getArchivedConversations,
@@ -930,6 +972,8 @@ export const useChatStore = defineStore('chat', () => {
     getPendingAgent,
     getActiveAssistantMessageId,
     getThinkingElapsedSeconds,
-    isConversationThinking
+    isConversationThinking,
+    isMessageStreaming,
+    wasMessageStreamed
   }
 })

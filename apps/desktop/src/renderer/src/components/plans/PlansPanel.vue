@@ -10,6 +10,7 @@ import { useWorkspaceStore } from '@renderer/stores/workspace.store'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import { ownerScopeLabelKey, resolvePlanOwnerFromProjectId } from '@renderer/utils/planOwner'
 import { CODE_BLOCK_PROPS } from '@renderer/constants/codeBlockTheme'
+import { ensureMarkstreamPeers } from '@renderer/markstream-setup'
 
 const { t } = useI18n()
 const planStore = usePlanStore()
@@ -65,6 +66,7 @@ async function refreshPlans(): Promise<void> {
 }
 
 onMounted(() => {
+  void ensureMarkstreamPeers()
   void refreshPlans()
 })
 

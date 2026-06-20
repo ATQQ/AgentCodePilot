@@ -51,11 +51,14 @@ export function getMonacoThemeName(isDark = isMonacoDarkTheme()): string {
 
 export function loadMonaco(): Promise<typeof Monaco> {
   if (!monacoPromise) {
-    monacoPromise = import('monaco-editor').then(async (monaco) => {
-      ensureMonacoThemes(monaco)
-      await registerMonacoThemes(CODE_BLOCK_MONACO_THEMES, [...MONACO_LANGUAGES]).catch(() => undefined)
-      return monaco
-    })
+    monacoPromise = import('./monacoBootstrap')
+      .then(({ ensureMonacoBootstrap }) => ensureMonacoBootstrap())
+      .then(() => import('monaco-editor'))
+      .then(async (monaco) => {
+        ensureMonacoThemes(monaco)
+        await registerMonacoThemes(CODE_BLOCK_MONACO_THEMES, [...MONACO_LANGUAGES]).catch(() => undefined)
+        return monaco
+      })
   }
   return monacoPromise
 }

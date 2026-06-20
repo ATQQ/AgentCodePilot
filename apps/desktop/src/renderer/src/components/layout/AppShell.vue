@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { provide, defineAsyncComponent, watch, ref, onMounted, onUnmounted } from 'vue'
+import { provide, defineAsyncComponent, watch, ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import AppSidebar from './AppSidebar.vue'
 import SearchDialog from './SearchDialog.vue'
@@ -17,6 +17,7 @@ const router = useRouter()
 const route = useRoute()
 const uiStore = useUiStore()
 const layoutStore = useLayoutStore()
+const gitStore = useGitStore()
 
 watch(
   () => route.name,
@@ -26,9 +27,30 @@ watch(
   { immediate: true }
 )
 
-// Start git polling for environment info
-const gitStore = useGitStore()
-gitStore.startPolling()
+const needsGitPolling = computed(() => {
+  if (layoutStore.homeRouteActive) return false
+  return (
+    layoutStore.showBottomTerminal ||
+    (layoutStore.showExtensionPanel && layoutStore.activeExtensionTab === 'review')
+  )
+})
+
+watch(
+  needsGitPolling,
+  (needs) => {
+    if (needs) gitStore.startPolling()
+    else gitStore.stopPolling()
+  },
+  { immediate: true }
+)
+
+watch(
+  () => layoutStore.homeRouteActive,
+  (home) => {
+    if (!home) void gitStore.refreshStatus()
+  },
+  { immediate: true }
+)
 
 const maxRightPanelWidth = ref(Math.floor(window.innerWidth * 0.75))
 

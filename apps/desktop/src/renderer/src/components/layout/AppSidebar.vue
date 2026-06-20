@@ -425,9 +425,9 @@ onUnmounted(() => {
                 <span class="ws-sub-project-name">{{ proj.name }}</span>
               </div>
             </div>
-            <template v-if="chatStore.getConversationsByProject(ws.id).length">
+            <template v-if="chatStore.conversationsByProject.get(ws.id)?.length">
               <div
-                v-for="conv in chatStore.getConversationsByProject(ws.id)"
+                v-for="conv in chatStore.conversationsByProject.get(ws.id)"
                 :key="conv.id"
                 class="conv-item"
                 :class="{ active: chatStore.activeConversationId === conv.id }"
@@ -529,9 +529,9 @@ onUnmounted(() => {
           </div>
 
           <div v-if="!isProjectCollapsed(proj.id)" class="project-conversations">
-            <template v-if="chatStore.getConversationsByProject(proj.id).length">
+            <template v-if="chatStore.conversationsByProject.get(proj.id)?.length">
               <div
-                v-for="conv in chatStore.getConversationsByProject(proj.id)"
+                v-for="conv in chatStore.conversationsByProject.get(proj.id)"
                 :key="conv.id"
                 class="conv-item"
                 :class="{ active: chatStore.activeConversationId === conv.id }"
@@ -587,9 +587,9 @@ onUnmounted(() => {
           </div>
         </div>
         <div v-if="!isSectionCollapsed('conversations')" class="project-conversations">
-          <template v-if="chatStore.getOrphanConversations().length">
+          <template v-if="chatStore.orphanConversations.length">
             <div
-              v-for="conv in chatStore.getOrphanConversations()"
+              v-for="conv in chatStore.orphanConversations"
               :key="conv.id"
               class="conv-item"
               :class="{ active: chatStore.activeConversationId === conv.id }"

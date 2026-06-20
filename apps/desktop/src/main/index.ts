@@ -24,7 +24,7 @@ import type {
   OpenPathPayload,
   OpenPathResult
 } from '../preload/types'
-import { agentRegistry, initializeAgentRegistry } from './runtime'
+import { agentRegistry, ensureAgentRegistry } from './runtime'
 import { supervisedRun, supervisedStop } from './runtime/supervisor'
 import { cloneForIpc } from '../shared/ipc-clone'
 import { parseMaxAgentTurnsSetting, clampMaxAgentTurns } from '../shared/agent-run-settings'
@@ -123,12 +123,46 @@ function resolveConversationWorkspaceFolders(
   return repo.resolveWorkspaceFoldersForProjectId(conv.project_id)
 }
 
+const AGENT_HISTORY_LIMIT = 50
+const DELTA_BATCH_MS = 16
+
+interface DeltaBatchEntry {
+  conversationId: string
+  messageId: string
+  deltas: string[]
+}
+
+const deltaBatch = new Map<string, DeltaBatchEntry>()
+let deltaFlushTimer: ReturnType<typeof setTimeout> | null = null
+
+function flushDeltaBatch(): void {
+  if (deltaFlushTimer) {
+    clearTimeout(deltaFlushTimer)
+    deltaFlushTimer = null
+  }
+  for (const batch of deltaBatch.values()) {
+    if (batch.deltas.length === 0) continue
+    mainWindow?.webContents.send(IPC_CHANNELS.AGENT_EVENT, {
+      type: 'message.delta',
+      conversationId: batch.conversationId,
+      messageId: batch.messageId,
+      delta: batch.deltas.join('')
+    })
+  }
+  deltaBatch.clear()
+}
+
+function scheduleDeltaFlush(): void {
+  if (deltaFlushTimer) return
+  deltaFlushTimer = setTimeout(flushDeltaBatch, DELTA_BATCH_MS)
+}
+
 function getConversationRunContext(conversationId: string): {
   agentSessionId: string | null
   conversationHistory: { role: 'user' | 'assistant'; content: string }[]
 } {
   const conv = repo.getConversationById(conversationId)
-  const messages = repo.getMessagesByConversation(conversationId)
+  const messages = repo.getRecentMessagesByConversation(conversationId, AGENT_HISTORY_LIMIT)
 
   return {
     agentSessionId: conv?.agent_session_id ?? null,
@@ -202,6 +236,22 @@ function emitAgentEvent(event: AgentEvent): void {
     repo.setConversationSessionId(event.conversationId, null)
   }
 
+  if (event.type === 'message.delta') {
+    let batch = deltaBatch.get(event.messageId)
+    if (!batch) {
+      batch = {
+        conversationId: event.conversationId,
+        messageId: event.messageId,
+        deltas: []
+      }
+      deltaBatch.set(event.messageId, batch)
+    }
+    batch.deltas.push(event.delta)
+    scheduleDeltaFlush()
+    return
+  }
+
+  flushDeltaBatch()
   mainWindow?.webContents.send(IPC_CHANNELS.AGENT_EVENT, cloneForIpc(event))
 }
 
@@ -249,7 +299,8 @@ function mapConversationRow(r: repo.ConversationRow): ConversationListItem {
 }
 
 function registerIpcHandlers(): void {
-  ipcMain.handle(IPC_CHANNELS.AGENTS_LIST, (): AgentInfo[] => {
+  ipcMain.handle(IPC_CHANNELS.AGENTS_LIST, async (): Promise<AgentInfo[]> => {
+    await ensureAgentRegistry()
     return agentRegistry.list().map((a) => ({
       id: a.id,
       name: a.name,
@@ -892,16 +943,15 @@ app.whenReady().then(() => {
 
   logInfo('App', `Starting AgentCodePilot v${app.getVersion()}`)
   cleanOldLogs()
+  createWindow()
   getDatabase()
-  initializeAgentRegistry()
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
 
   registerIpcHandlers()
-
-  createWindow()
+  void ensureAgentRegistry()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
