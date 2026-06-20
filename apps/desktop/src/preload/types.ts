@@ -120,6 +120,7 @@ export interface SettingsPayload {
   replyLanguage?: ReplyLanguage
   permissionNotificationsEnabled?: boolean
   rememberPanelStatePerConversation?: boolean
+  browserAutoExtractLinks?: boolean
   filePreview?: FilePreviewSettings
   aiPrompts?: AiPromptsSettings
   externalApps?: ExternalAppsSettings
@@ -375,6 +376,7 @@ export interface SettingsInfo {
   replyLanguage: ReplyLanguage
   permissionNotificationsEnabled: boolean
   rememberPanelStatePerConversation: boolean
+  browserAutoExtractLinks: boolean
   filePreview: FilePreviewSettings
   aiPrompts: AiPromptsSettings
   externalApps: ExternalAppsSettings

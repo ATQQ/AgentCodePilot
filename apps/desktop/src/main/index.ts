@@ -218,6 +218,7 @@ function getSettingsFromDb(): SettingsInfo {
     replyLanguage: (all['replyLanguage'] as SettingsInfo['replyLanguage']) || 'auto',
     permissionNotificationsEnabled: all['permissionNotificationsEnabled'] !== 'false',
     rememberPanelStatePerConversation: all['rememberPanelStatePerConversation'] !== 'false',
+    browserAutoExtractLinks: all['browserAutoExtractLinks'] !== 'false',
     filePreview: parseFilePreviewSetting(all['filePreview']),
     aiPrompts: parseAiPromptsSetting(all['aiPrompts']),
     externalApps: parseExternalAppsSetting(all['externalApps']),
@@ -624,6 +625,12 @@ function registerIpcHandlers(): void {
       repo.setSetting(
         'rememberPanelStatePerConversation',
         payload.rememberPanelStatePerConversation ? 'true' : 'false'
+      )
+    }
+    if (payload.browserAutoExtractLinks !== undefined) {
+      repo.setSetting(
+        'browserAutoExtractLinks',
+        payload.browserAutoExtractLinks ? 'true' : 'false'
       )
     }
     if (payload.permissionNotificationsEnabled !== undefined) {

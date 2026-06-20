@@ -215,6 +215,23 @@ function goBack(): void {
             </div>
           </div>
 
+          <div class="setting-card">
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">{{ t('settings.browserAutoExtractLinks') }}</div>
+                <div class="setting-desc">{{ t('settings.browserAutoExtractLinksDesc') }}</div>
+              </div>
+              <button
+                type="button"
+                class="toggle-switch"
+                :class="{ active: settingsStore.browserAutoExtractLinks }"
+                role="switch"
+                :aria-checked="settingsStore.browserAutoExtractLinks"
+                @click="settingsStore.setBrowserAutoExtractLinks(!settingsStore.browserAutoExtractLinks)"
+              />
+            </div>
+          </div>
+
           <!-- TODO: 以下外观设置实现后恢复
           <div class="setting-card">
             <div class="setting-row">

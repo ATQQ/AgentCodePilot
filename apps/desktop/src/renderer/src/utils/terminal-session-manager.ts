@@ -1,5 +1,8 @@
+import { ref } from 'vue'
 import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+
+export const terminalOutputRevision = ref(0)
 
 interface TerminalSession {
   terminalId: string
@@ -141,7 +144,10 @@ function createSession(terminalId: string): TerminalSession {
   })
 
   const removeDataListener = window.agentAPI.terminal.onData(({ terminalId: id, data }) => {
-    if (id === terminalId) term.write(data)
+    if (id === terminalId) {
+      term.write(data)
+      terminalOutputRevision.value++
+    }
   })
 
   return {
@@ -198,6 +204,30 @@ function resetViewportScroll(viewport: HTMLElement): void {
   void viewport.offsetHeight
   viewport.style.removeProperty('overflow-y')
   viewport.scrollTop = scrollTop
+}
+
+function getSessionText(session: TerminalSession): string {
+  const buffer = session.term.buffer.active
+  const lines: string[] = []
+  for (let i = 0; i < buffer.length; i++) {
+    const line = buffer.getLine(i)
+    if (line) lines.push(line.translateToString(true))
+  }
+  return lines.join('\n')
+}
+
+export function getTerminalText(terminalId: string): string {
+  const session = sessions.get(terminalId)
+  if (!session) return ''
+  return getSessionText(session)
+}
+
+export function getAllTerminalTexts(): string[] {
+  const texts: string[] = []
+  for (const session of sessions.values()) {
+    texts.push(getSessionText(session))
+  }
+  return texts
 }
 
 export function applyThemeToAllTerminalSessions(): void {

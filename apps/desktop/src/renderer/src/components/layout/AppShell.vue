@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { provide, defineAsyncComponent, watch } from 'vue'
+import { provide, defineAsyncComponent, watch, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import AppSidebar from './AppSidebar.vue'
 import SearchDialog from './SearchDialog.vue'
@@ -29,6 +29,20 @@ watch(
 // Start git polling for environment info
 const gitStore = useGitStore()
 gitStore.startPolling()
+
+const maxRightPanelWidth = ref(Math.floor(window.innerWidth * 0.75))
+
+function updateMaxRightPanelWidth(): void {
+  maxRightPanelWidth.value = Math.floor(window.innerWidth * 0.75)
+}
+
+onMounted(() => {
+  window.addEventListener('resize', updateMaxRightPanelWidth)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateMaxRightPanelWidth)
+})
 
 provide('openSearch', () => uiStore.openSearch())
 </script>
@@ -95,6 +109,7 @@ provide('openSearch', () => uiStore.openSearch())
           invert
           :size="layoutStore.rightPanelWidth"
           :min-size="260"
+          :max-size="maxRightPanelWidth"
           @update:size="layoutStore.rightPanelWidth = $event"
         />
         <div class="extension-wrapper" :style="{ width: `${layoutStore.rightPanelWidth}px` }">

@@ -46,6 +46,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const replyLanguage = ref<ReplyLanguage>('auto')
   const permissionNotificationsEnabled = ref(true)
   const rememberPanelStatePerConversation = ref(true)
+  const browserAutoExtractLinks = ref(true)
   const filePreview = ref<FilePreviewSettings>({ ...DEFAULT_FILE_PREVIEW })
   const aiPrompts = ref<AiPromptsSettings>({ ...DEFAULT_AI_PROMPTS })
   const externalApps = ref<ExternalAppsSettings>({ ...DEFAULT_EXTERNAL_APPS_SETTINGS })
@@ -71,6 +72,7 @@ export const useSettingsStore = defineStore('settings', () => {
     replyLanguage.value = settings.replyLanguage
     permissionNotificationsEnabled.value = settings.permissionNotificationsEnabled
     rememberPanelStatePerConversation.value = settings.rememberPanelStatePerConversation
+    browserAutoExtractLinks.value = settings.browserAutoExtractLinks
     filePreview.value = settings.filePreview
     aiPrompts.value = settings.aiPrompts
     externalApps.value = settings.externalApps
@@ -96,6 +98,11 @@ export const useSettingsStore = defineStore('settings', () => {
   async function setRememberPanelStatePerConversation(enabled: boolean): Promise<void> {
     rememberPanelStatePerConversation.value = enabled
     await window.agentAPI.settings.update({ rememberPanelStatePerConversation: enabled })
+  }
+
+  async function setBrowserAutoExtractLinks(enabled: boolean): Promise<void> {
+    browserAutoExtractLinks.value = enabled
+    await window.agentAPI.settings.update({ browserAutoExtractLinks: enabled })
   }
 
   async function setPermissionNotificationsEnabled(enabled: boolean): Promise<void> {
@@ -239,6 +246,7 @@ export const useSettingsStore = defineStore('settings', () => {
     replyLanguage,
     permissionNotificationsEnabled,
     rememberPanelStatePerConversation,
+    browserAutoExtractLinks,
     filePreview,
     aiPrompts,
     externalApps,
@@ -248,6 +256,7 @@ export const useSettingsStore = defineStore('settings', () => {
     setApprovalLevel,
     setReplyLanguage,
     setRememberPanelStatePerConversation,
+    setBrowserAutoExtractLinks,
     setPermissionNotificationsEnabled,
     setFilePreview,
     setAiPrompts,

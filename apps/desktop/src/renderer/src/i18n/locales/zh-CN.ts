@@ -120,6 +120,14 @@ export default {
     unstageAll: '取消暂存所有更改',
     discardAllConfirm: '确定放弃全部 {count} 个文件的更改？此操作不可撤销。'
   },
+  browser: {
+    urlPlaceholder: '输入 URL',
+    startBrowsing: '开始浏览',
+    enterUrlHint: '输入 URL 以打开页面',
+    detectedLinks: '检测到的链接',
+    recentPages: '最近访问',
+    suggestedLinks: '推荐链接'
+  },
   settings: {
     title: '设置',
     searchPlaceholder: '搜索设置...',
@@ -149,6 +157,8 @@ export default {
     themeDesc: '使用浅色、深色，或匹配系统设置',
     rememberPanelState: '按对话记忆面板状态',
     rememberPanelStateDesc: '切换对话时自动恢复右侧和底部面板的打开状态',
+    browserAutoExtractLinks: '自动提取链接',
+    browserAutoExtractLinksDesc: '从终端输出和对话内容中自动识别 HTTP 链接，在浏览器中提供快捷入口',
     light: '浅色',
     dark: '深色',
     system: '系统',
