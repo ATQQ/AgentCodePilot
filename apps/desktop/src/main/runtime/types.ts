@@ -18,6 +18,7 @@ export interface AgentRunInput {
   attachmentDirectories?: string[]
   approvalLevel?: 'request' | 'auto' | 'full'
   planMode?: boolean
+  maxTurns?: number
 }
 
 export interface AgentAdapter {

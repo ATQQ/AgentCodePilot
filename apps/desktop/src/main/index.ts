@@ -8,7 +8,6 @@ import type {
   AgentEvent,
   AgentConfigSettings,
   AgentInfo,
-  AttachmentPayload,
   ConversationInfo,
   ConversationListItem,
   CreateConversationPayload,
@@ -19,11 +18,16 @@ import type {
   ProviderConfigPayload,
   WorkspacePayload,
   SendMessagePayload,
+  SendMessageResult,
   SettingsInfo,
-  SettingsPayload
+  SettingsPayload,
+  OpenPathPayload,
+  OpenPathResult
 } from '../preload/types'
-import { agentRegistry, initializeAgentRegistry } from './runtime'
+import { agentRegistry, ensureAgentRegistry } from './runtime'
 import { supervisedRun, supervisedStop } from './runtime/supervisor'
+import { cloneForIpc } from '../shared/ipc-clone'
+import { parseMaxAgentTurnsSetting, clampMaxAgentTurns } from '../shared/agent-run-settings'
 import {
   getAgentConfig,
   getModelCatalog,
@@ -37,17 +41,59 @@ import { getDatabase, closeDatabase } from './database'
 import * as repo from './database/repositories'
 import { persistAttachments, deleteConversationAttachments } from './file/attachments'
 import {
-  buildPromptWithAttachments,
   collectAttachmentDirectories,
   formatMessageContentWithAttachments
 } from './file/prompt-attachments'
+import { buildAgentPrompt } from './file/plan-prompt'
+import { savePlanFromAssistantMessage } from './file/plan-service'
+import { readPlanFile } from './file/plans'
+import type { PlanDetail, PlanInfo, PlansListPayload } from '../preload/types'
 import { registerLocalFileProtocol, registerLocalFileScheme } from './file/local-file-protocol'
+import {
+  getGitStatus,
+  getChangedFiles,
+  getGitDiff,
+  stageFiles,
+  unstageFiles,
+  discardFileChanges,
+  commitChanges,
+  pushChanges,
+  getStagedDiff,
+  getRecentLog
+} from './git/git-service'
+import { runUtilityAgent } from './runtime/utility-agent'
+import {
+  parseFilePreviewSetting,
+  parseAiPromptsSetting,
+  parseExternalAppsSetting
+} from './settings/defaults'
+import { openPathWithApp } from './shell/open-external-app'
+import type { GitDiffScope } from '../preload/types'
+import {
+  listDirectory,
+  readWorkspaceFile,
+  writeWorkspaceFile,
+  deleteWorkspaceFile,
+  copyWorkspaceFile
+} from './file/workspace-file-service'
+import {
+  createTerminal,
+  writeTerminal,
+  resizeTerminal,
+  killTerminal,
+  listTerminals,
+  cleanupScopeTerminals,
+  setTerminalWindow
+} from './terminal/pty-manager'
 
 registerLocalFileScheme()
 
 let mainWindow: BrowserWindow | null = null
 
-const streamingMessages = new Map<string, { conversationId: string; content: string; rawInput: string }>()
+const streamingMessages = new Map<
+  string,
+  { conversationId: string; content: string; rawInput: string; agentId?: string }
+>()
 
 function resolveConversationCwd(conversationId: string, payloadCwd?: string): string {
   const conv = repo.getConversationById(conversationId)
@@ -77,12 +123,46 @@ function resolveConversationWorkspaceFolders(
   return repo.resolveWorkspaceFoldersForProjectId(conv.project_id)
 }
 
+const AGENT_HISTORY_LIMIT = 50
+const DELTA_BATCH_MS = 16
+
+interface DeltaBatchEntry {
+  conversationId: string
+  messageId: string
+  deltas: string[]
+}
+
+const deltaBatch = new Map<string, DeltaBatchEntry>()
+let deltaFlushTimer: ReturnType<typeof setTimeout> | null = null
+
+function flushDeltaBatch(): void {
+  if (deltaFlushTimer) {
+    clearTimeout(deltaFlushTimer)
+    deltaFlushTimer = null
+  }
+  for (const batch of deltaBatch.values()) {
+    if (batch.deltas.length === 0) continue
+    mainWindow?.webContents.send(IPC_CHANNELS.AGENT_EVENT, {
+      type: 'message.delta',
+      conversationId: batch.conversationId,
+      messageId: batch.messageId,
+      delta: batch.deltas.join('')
+    })
+  }
+  deltaBatch.clear()
+}
+
+function scheduleDeltaFlush(): void {
+  if (deltaFlushTimer) return
+  deltaFlushTimer = setTimeout(flushDeltaBatch, DELTA_BATCH_MS)
+}
+
 function getConversationRunContext(conversationId: string): {
   agentSessionId: string | null
   conversationHistory: { role: 'user' | 'assistant'; content: string }[]
 } {
   const conv = repo.getConversationById(conversationId)
-  const messages = repo.getMessagesByConversation(conversationId)
+  const messages = repo.getRecentMessagesByConversation(conversationId, AGENT_HISTORY_LIMIT)
 
   return {
     agentSessionId: conv?.agent_session_id ?? null,
@@ -93,6 +173,19 @@ function getConversationRunContext(conversationId: string): {
           ? formatMessageContentWithAttachments(m.content, m.attachments)
           : m.content
     }))
+  }
+}
+
+function mapPlanRow(r: repo.PlanRow): PlanInfo {
+  return {
+    id: r.id,
+    conversationId: r.conversation_id,
+    ownerType: r.owner_type as PlanInfo['ownerType'],
+    ownerId: r.owner_id,
+    userMessageId: r.user_message_id,
+    assistantMessageId: r.assistant_message_id,
+    title: r.title,
+    createdAt: r.created_at
   }
 }
 
@@ -114,6 +207,7 @@ function emitAgentEvent(event: AgentEvent): void {
           role: 'assistant',
           content: entry.content,
           createdAt: new Date().toISOString(),
+          agentId: entry.agentId ?? null,
           inputTokens: event.usage?.inputTokens ?? null,
           outputTokens: event.usage?.outputTokens ?? null,
           cacheReadTokens: event.usage?.cacheReadTokens ?? null,
@@ -123,6 +217,7 @@ function emitAgentEvent(event: AgentEvent): void {
           debugInput: event.debugInput || null,
           debugOutput: event.debugOutput || null
         })
+        savePlanFromAssistantMessage(entry.conversationId, event.messageId, entry.content)
       } catch (e) {
         console.error('[emitAgentEvent] Failed to save message to db:', e)
       }
@@ -141,7 +236,27 @@ function emitAgentEvent(event: AgentEvent): void {
     repo.setConversationSessionId(event.conversationId, null)
   }
 
-  mainWindow?.webContents.send(IPC_CHANNELS.AGENT_EVENT, event)
+  if (event.type === 'message.delta') {
+    let batch = deltaBatch.get(event.messageId)
+    if (!batch) {
+      batch = {
+        conversationId: event.conversationId,
+        messageId: event.messageId,
+        deltas: []
+      }
+      deltaBatch.set(event.messageId, batch)
+    }
+    batch.deltas.push(event.delta)
+    scheduleDeltaFlush()
+    return
+  }
+
+  flushDeltaBatch()
+  mainWindow?.webContents.send(IPC_CHANNELS.AGENT_EVENT, cloneForIpc(event))
+}
+
+function getMaxAgentTurns(): number {
+  return parseMaxAgentTurnsSetting(repo.getAllSettings()['maxAgentTurns'])
 }
 
 function getSettingsFromDb(): SettingsInfo {
@@ -150,7 +265,14 @@ function getSettingsFromDb(): SettingsInfo {
     theme: (all['theme'] as SettingsInfo['theme']) || 'light',
     approvalLevel: (all['approvalLevel'] as SettingsInfo['approvalLevel']) || 'auto',
     language: all['language'] || 'zh-CN',
-    permissionNotificationsEnabled: all['permissionNotificationsEnabled'] !== 'false'
+    replyLanguage: (all['replyLanguage'] as SettingsInfo['replyLanguage']) || 'auto',
+    permissionNotificationsEnabled: all['permissionNotificationsEnabled'] !== 'false',
+    rememberPanelStatePerConversation: all['rememberPanelStatePerConversation'] !== 'false',
+    browserAutoExtractLinks: all['browserAutoExtractLinks'] !== 'false',
+    filePreview: parseFilePreviewSetting(all['filePreview']),
+    aiPrompts: parseAiPromptsSetting(all['aiPrompts']),
+    externalApps: parseExternalAppsSetting(all['externalApps']),
+    maxAgentTurns: parseMaxAgentTurnsSetting(all['maxAgentTurns'])
   }
 }
 
@@ -177,7 +299,8 @@ function mapConversationRow(r: repo.ConversationRow): ConversationListItem {
 }
 
 function registerIpcHandlers(): void {
-  ipcMain.handle(IPC_CHANNELS.AGENTS_LIST, (): AgentInfo[] => {
+  ipcMain.handle(IPC_CHANNELS.AGENTS_LIST, async (): Promise<AgentInfo[]> => {
+    await ensureAgentRegistry()
     return agentRegistry.list().map((a) => ({
       id: a.id,
       name: a.name,
@@ -204,8 +327,12 @@ function registerIpcHandlers(): void {
     IPC_CHANNELS.CHAT_CREATE,
     (_e, payload: CreateConversationPayload): ConversationInfo => {
       const id = `conv-${Date.now()}`
+      const titleSource =
+        payload.firstMessage.trim() ||
+        payload.planRefs?.[0]?.title ||
+        '新对话'
       const title =
-        payload.firstMessage.slice(0, 30) + (payload.firstMessage.length > 30 ? '...' : '')
+        titleSource.slice(0, 30) + (titleSource.length > 30 ? '...' : '')
       const now = new Date().toISOString()
 
       let cwd: string | null = null
@@ -239,7 +366,8 @@ function registerIpcHandlers(): void {
         content: payload.firstMessage,
         createdAt: now,
         attachments: persistedAttachments ? JSON.stringify(persistedAttachments) : null,
-        planMode: payload.planMode ?? false
+        planMode: payload.planMode ?? false,
+        planRefs: payload.planRefs?.length ? JSON.stringify(payload.planRefs) : null
       })
 
       return { id, title, cwd, attachments: persistedAttachments }
@@ -248,11 +376,18 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.CHAT_SEND_FIRST, (_e, payload: SendMessagePayload): void => {
     const assistantMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-a`
-    const prompt = buildPromptWithAttachments(payload.content, payload.attachments)
+    const prompt = buildAgentPrompt({
+      content: payload.content,
+      attachments: payload.attachments,
+      planRefs: payload.planRefs,
+      planMode: payload.planMode,
+      conversationId: payload.conversationId
+    })
     streamingMessages.set(assistantMsgId, {
       conversationId: payload.conversationId,
       content: '',
-      rawInput: prompt
+      rawInput: prompt,
+      agentId: payload.agentId
     })
     const runContext = getConversationRunContext(payload.conversationId)
     const approvalLevel = getRunApprovalLevel(payload.conversationId)
@@ -271,7 +406,8 @@ function registerIpcHandlers(): void {
       conversationHistory: runContext.conversationHistory,
       attachmentDirectories: collectAttachmentDirectories(payload.attachments),
       approvalLevel,
-      planMode: payload.planMode ?? false
+      planMode: payload.planMode ?? false,
+      maxTurns: getMaxAgentTurns()
     }
 
     supervisedRun(runInput, emitAgentEvent)
@@ -279,7 +415,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     IPC_CHANNELS.CHAT_SEND,
-    (_e, payload: SendMessagePayload): AttachmentPayload[] | undefined => {
+    (_e, payload: SendMessagePayload): SendMessageResult => {
     const userMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
     const assistantMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-a`
     const now = new Date().toISOString()
@@ -296,14 +432,22 @@ function registerIpcHandlers(): void {
       content: payload.content,
       createdAt: now,
       attachments: persistedAttachments ? JSON.stringify(persistedAttachments) : null,
-      planMode: payload.planMode ?? false
+      planMode: payload.planMode ?? false,
+      planRefs: payload.planRefs?.length ? JSON.stringify(payload.planRefs) : null
     })
 
-    const prompt = buildPromptWithAttachments(payload.content, persistedAttachments ?? payload.attachments)
+    const prompt = buildAgentPrompt({
+      content: payload.content,
+      attachments: persistedAttachments ?? payload.attachments,
+      planRefs: payload.planRefs,
+      planMode: payload.planMode,
+      conversationId: payload.conversationId
+    })
     streamingMessages.set(assistantMsgId, {
       conversationId: payload.conversationId,
       content: '',
-      rawInput: prompt
+      rawInput: prompt,
+      agentId: payload.agentId
     })
     const runContext = getConversationRunContext(payload.conversationId)
     const approvalLevel = getRunApprovalLevel(payload.conversationId)
@@ -324,11 +468,15 @@ function registerIpcHandlers(): void {
         persistedAttachments ?? payload.attachments
       ),
       approvalLevel,
-      planMode: payload.planMode ?? false
+      planMode: payload.planMode ?? false,
+      maxTurns: getMaxAgentTurns()
     }
 
     supervisedRun(runInput, emitAgentEvent)
-    return persistedAttachments
+    return cloneForIpc({
+      assistantMessageId: assistantMsgId,
+      attachments: persistedAttachments
+    })
   })
 
   ipcMain.handle(IPC_CHANNELS.CHAT_STOP, (_e, conversationId: string): void => {
@@ -388,6 +536,13 @@ function registerIpcHandlers(): void {
         if (r.plan_mode === 1) {
           msg.planMode = true
         }
+        if (r.plan_refs) {
+          try {
+            msg.planRefs = JSON.parse(r.plan_refs)
+          } catch {
+            /* ignore */
+          }
+        }
         if (r.attachments) {
           try { msg.attachments = JSON.parse(r.attachments) } catch {}
         }
@@ -405,6 +560,9 @@ function registerIpcHandlers(): void {
         }
         if (r.debug_output) {
           msg.debugOutput = r.debug_output
+        }
+        if (r.agent_id) {
+          msg.agentId = r.agent_id
         }
         return msg
       })
@@ -426,6 +584,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.CONVERSATIONS_DELETE, (_e, conversationId: string): void => {
     deleteConversationAttachments(conversationId)
+    cleanupScopeTerminals(`conv:${conversationId}`)
     repo.deleteConversation(conversationId)
   })
 
@@ -433,6 +592,7 @@ function registerIpcHandlers(): void {
     const archived = repo.getArchivedConversations()
     for (const conv of archived) {
       deleteConversationAttachments(conv.id)
+      cleanupScopeTerminals(`conv:${conv.id}`)
     }
     repo.deleteAllArchivedConversations()
   })
@@ -448,7 +608,14 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC_CHANNELS.PROJECTS_DELETE, (_e, id: string): void => {
+    cleanupScopeTerminals(`shared:${id}`)
     repo.deleteProject(id)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROJECTS_RESTORE_BY_PATH, (_e, path: string): ProjectPayload | null => {
+    const restored = repo.restoreProjectByPath(path)
+    if (!restored) return null
+    return { id: restored.id, name: restored.name, path: restored.path }
   })
 
   // --- Workspaces ---
@@ -466,6 +633,7 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IPC_CHANNELS.WORKSPACES_DELETE, (_e, id: string): void => {
+    cleanupScopeTerminals(`shared:${id}`)
     repo.deleteWorkspace(id)
   })
 
@@ -503,9 +671,43 @@ function registerIpcHandlers(): void {
     if (payload.theme) repo.setSetting('theme', payload.theme)
     if (payload.approvalLevel) repo.setSetting('approvalLevel', payload.approvalLevel)
     if (payload.language) repo.setSetting('language', payload.language)
+    if (payload.replyLanguage) repo.setSetting('replyLanguage', payload.replyLanguage)
+    if (payload.rememberPanelStatePerConversation !== undefined) {
+      repo.setSetting(
+        'rememberPanelStatePerConversation',
+        payload.rememberPanelStatePerConversation ? 'true' : 'false'
+      )
+    }
+    if (payload.browserAutoExtractLinks !== undefined) {
+      repo.setSetting(
+        'browserAutoExtractLinks',
+        payload.browserAutoExtractLinks ? 'true' : 'false'
+      )
+    }
     if (payload.permissionNotificationsEnabled !== undefined) {
       repo.setSetting('permissionNotificationsEnabled', payload.permissionNotificationsEnabled ? 'true' : 'false')
     }
+    if (payload.filePreview) {
+      repo.setSetting('filePreview', JSON.stringify(payload.filePreview))
+    }
+    if (payload.aiPrompts) {
+      repo.setSetting('aiPrompts', JSON.stringify(payload.aiPrompts))
+    }
+    if (payload.externalApps) {
+      repo.setSetting('externalApps', JSON.stringify(payload.externalApps))
+    }
+    if (payload.maxAgentTurns !== undefined) {
+      repo.setSetting('maxAgentTurns', String(clampMaxAgentTurns(payload.maxAgentTurns)))
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.SHELL_OPEN_PATH, async (_e, payload: OpenPathPayload): Promise<OpenPathResult> => {
+    return openPathWithApp({
+      path: payload.path,
+      kind: payload.kind,
+      protocol: payload.protocol,
+      appName: payload.appName
+    })
   })
 
   // --- Gateway ---
@@ -575,6 +777,123 @@ function registerIpcHandlers(): void {
       return image.toDataURL()
     }
   )
+
+  // --- Git ---
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STATUS, (_e, cwd: string) => getGitStatus(cwd))
+
+  ipcMain.handle(IPC_CHANNELS.GIT_CHANGED_FILES, (_e, cwd: string, scope: GitDiffScope) =>
+    getChangedFiles(cwd, scope)
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.GIT_DIFF,
+    (_e, cwd: string, file: string, staged?: boolean) =>
+      getGitDiff(cwd, { file, staged: staged ?? false })
+  )
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STAGE, (_e, cwd: string, paths: string[]) =>
+    stageFiles(cwd, paths)
+  )
+
+  ipcMain.handle(IPC_CHANNELS.GIT_UNSTAGE, (_e, cwd: string, paths: string[]) =>
+    unstageFiles(cwd, paths)
+  )
+
+  ipcMain.handle(IPC_CHANNELS.GIT_DISCARD, (_e, cwd: string, paths: string[]) =>
+    discardFileChanges(cwd, paths)
+  )
+
+  ipcMain.handle(IPC_CHANNELS.GIT_COMMIT, (_e, cwd: string, message: string) =>
+    commitChanges(cwd, message)
+  )
+
+  ipcMain.handle(IPC_CHANNELS.GIT_PUSH, (_e, cwd: string) => pushChanges(cwd))
+
+  ipcMain.handle(IPC_CHANNELS.GIT_STAGED_DIFF, (_e, cwd: string) => getStagedDiff(cwd))
+
+  ipcMain.handle(IPC_CHANNELS.GIT_RECENT_LOG, (_e, cwd: string, limit?: number) =>
+    getRecentLog(cwd, limit ?? 10)
+  )
+
+  ipcMain.handle(IPC_CHANNELS.AGENT_RUN_UTILITY, (_e, payload) => runUtilityAgent(payload))
+
+  // --- Workspace files ---
+
+  ipcMain.handle(IPC_CHANNELS.FILE_LIST, (_e, dirPath: string, roots: string[]) =>
+    listDirectory(dirPath, roots)
+  )
+
+  ipcMain.handle(IPC_CHANNELS.FILE_READ, (_e, filePath: string, roots: string[]) =>
+    readWorkspaceFile(filePath, roots)
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.FILE_WRITE,
+    (_e, filePath: string, content: string, roots: string[]) =>
+      writeWorkspaceFile(filePath, content, roots)
+  )
+
+  ipcMain.handle(IPC_CHANNELS.FILE_DELETE, (_e, filePath: string, roots: string[]) =>
+    deleteWorkspaceFile(filePath, roots)
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.FILE_COPY,
+    (_e, srcPath: string, destPath: string, roots: string[]) =>
+      copyWorkspaceFile(srcPath, destPath, roots)
+  )
+
+  // --- Terminal ---
+
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_CREATE, (_e, scopeKey: string, cwd: string, title?: string) =>
+    createTerminal(scopeKey, cwd, title)
+  )
+
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_WRITE, (_e, terminalId: string, data: string) => {
+    writeTerminal(terminalId, data)
+  })
+
+  ipcMain.handle(
+    IPC_CHANNELS.TERMINAL_RESIZE,
+    (_e, terminalId: string, cols: number, rows: number) => {
+      resizeTerminal(terminalId, cols, rows)
+    }
+  )
+
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_KILL, (_e, terminalId: string) => {
+    killTerminal(terminalId)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_LIST, (_e, scopeKey: string) =>
+    listTerminals(scopeKey)
+  )
+
+  // --- Plans ---
+
+  ipcMain.handle(
+    IPC_CHANNELS.PLANS_LIST,
+    (_e, payload: PlansListPayload): PlanInfo[] => {
+      if (payload.ownerType && payload.ownerId) {
+        return repo.listPlansByOwner(payload.ownerType, payload.ownerId).map(mapPlanRow)
+      }
+      if (payload.conversationId) {
+        return repo.listPlansByConversation(payload.conversationId).map(mapPlanRow)
+      }
+      return []
+    }
+  )
+
+  ipcMain.handle(IPC_CHANNELS.PLANS_GET, (_e, planId: string): PlanDetail | null => {
+    const row = repo.getPlanById(planId)
+    if (!row) return null
+    try {
+      const content = readPlanFile(row.file_path)
+      return { meta: mapPlanRow(row), content }
+    } catch {
+      return null
+    }
+  })
 }
 
 function createWindow(): void {
@@ -591,12 +910,14 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      webviewTag: true
     }
   })
 
   mainWindow.on('ready-to-show', () => {
     mainWindow!.show()
+    setTerminalWindow(mainWindow)
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -611,6 +932,7 @@ function createWindow(): void {
   }
 
   mainWindow.on('closed', () => {
+    setTerminalWindow(null)
     mainWindow = null
   })
 }
@@ -621,16 +943,15 @@ app.whenReady().then(() => {
 
   logInfo('App', `Starting AgentCodePilot v${app.getVersion()}`)
   cleanOldLogs()
+  createWindow()
   getDatabase()
-  initializeAgentRegistry()
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
 
   registerIpcHandlers()
-
-  createWindow()
+  void ensureAgentRegistry()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

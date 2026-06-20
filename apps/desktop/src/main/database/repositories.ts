@@ -31,12 +31,15 @@ export interface MessageRow {
   debug_input: string | null
   debug_output: string | null
   plan_mode: number | null
+  plan_refs: string | null
+  agent_id: string | null
 }
 
 export interface ProjectRow {
   id: string
   name: string
   path: string
+  deleted_at: string | null
 }
 
 // --- Conversations ---
@@ -240,11 +243,13 @@ export function addMessage(msg: {
   debugInput?: string | null
   debugOutput?: string | null
   planMode?: boolean | null
+  planRefs?: string | null
+  agentId?: string | null
 }): void {
   const db = getDatabase()
   db.prepare(
-    `INSERT INTO messages (id, conversation_id, role, content, created_at, attachments, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, raw_input, debug_input, debug_output, plan_mode)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO messages (id, conversation_id, role, content, created_at, attachments, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, raw_input, debug_input, debug_output, plan_mode, plan_refs, agent_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     msg.id,
     msg.conversationId,
@@ -260,7 +265,9 @@ export function addMessage(msg: {
     msg.rawInput ?? null,
     msg.debugInput ?? null,
     msg.debugOutput ?? null,
-    msg.planMode ? 1 : 0
+    msg.planMode ? 1 : 0,
+    msg.planRefs ?? null,
+    msg.agentId ?? null
   )
 
   db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(
@@ -283,6 +290,20 @@ export function getMessagesByConversation(conversationId: string): MessageRow[] 
   return db
     .prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC')
     .all(conversationId) as MessageRow[]
+}
+
+export function getRecentMessagesByConversation(
+  conversationId: string,
+  limit: number
+): MessageRow[] {
+  if (limit <= 0) return getMessagesByConversation(conversationId)
+  const db = getDatabase()
+  const rows = db
+    .prepare(
+      'SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT ?'
+    )
+    .all(conversationId, limit) as MessageRow[]
+  return rows.reverse()
 }
 
 export function updateMessageContent(id: string, content: string): void {
@@ -323,18 +344,30 @@ export function getAllSettings(): Record<string, string> {
 export function saveProject(proj: { id: string; name: string; path: string }): void {
   const db = getDatabase()
   db.prepare(
-    `INSERT OR REPLACE INTO projects (id, name, path) VALUES (?, ?, ?)`
+    `INSERT OR REPLACE INTO projects (id, name, path, deleted_at) VALUES (?, ?, ?, NULL)`
   ).run(proj.id, proj.name, proj.path)
 }
 
 export function getAllProjects(): ProjectRow[] {
   const db = getDatabase()
-  return db.prepare('SELECT * FROM projects').all() as ProjectRow[]
+  return db
+    .prepare('SELECT * FROM projects WHERE deleted_at IS NULL')
+    .all() as ProjectRow[]
+}
+
+export function restoreProjectByPath(path: string): ProjectRow | null {
+  const db = getDatabase()
+  const row = db
+    .prepare('SELECT * FROM projects WHERE path = ? AND deleted_at IS NOT NULL')
+    .get(path) as ProjectRow | undefined
+  if (!row) return null
+  db.prepare('UPDATE projects SET deleted_at = NULL WHERE id = ?').run(row.id)
+  return { ...row, deleted_at: null }
 }
 
 export function deleteProject(id: string): void {
   const db = getDatabase()
-  db.prepare('DELETE FROM projects WHERE id = ?').run(id)
+  db.prepare(`UPDATE projects SET deleted_at = datetime('now') WHERE id = ?`).run(id)
 }
 
 // --- Workspaces ---
@@ -360,6 +393,11 @@ export function getAllWorkspaces(): WorkspaceRow[] {
 export function deleteWorkspace(id: string): void {
   const db = getDatabase()
   db.prepare('DELETE FROM workspaces WHERE id = ?').run(id)
+}
+
+export function getWorkspaceById(id: string): WorkspaceRow | undefined {
+  const db = getDatabase()
+  return db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id) as WorkspaceRow | undefined
 }
 
 // --- Provider Configs ---
@@ -399,3 +437,122 @@ export function deleteProviderConfig(id: string): void {
   const db = getDatabase()
   db.prepare('DELETE FROM provider_configs WHERE id = ?').run(id)
 }
+
+// --- Plans ---
+
+export interface PlanRow {
+  id: string
+  conversation_id: string
+  owner_type: string
+  owner_id: string
+  user_message_id: string
+  assistant_message_id: string
+  title: string
+  file_path: string
+  created_at: string
+}
+
+export function getPlanByAssistantMessageId(assistantMessageId: string): PlanRow | undefined {
+  const db = getDatabase()
+  return db
+    .prepare('SELECT * FROM plans WHERE assistant_message_id = ?')
+    .get(assistantMessageId) as PlanRow | undefined
+}
+
+export function getPlanById(planId: string): PlanRow | undefined {
+  const db = getDatabase()
+  return db.prepare('SELECT * FROM plans WHERE id = ?').get(planId) as PlanRow | undefined
+}
+
+export function createPlan(plan: {
+  id: string
+  conversationId: string
+  ownerType: string
+  ownerId: string
+  userMessageId: string
+  assistantMessageId: string
+  title: string
+  filePath: string
+  createdAt: string
+}): void {
+  const db = getDatabase()
+  db.prepare(
+    `INSERT INTO plans (id, conversation_id, owner_type, owner_id, user_message_id, assistant_message_id, title, file_path, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    plan.id,
+    plan.conversationId,
+    plan.ownerType,
+    plan.ownerId,
+    plan.userMessageId,
+    plan.assistantMessageId,
+    plan.title,
+    plan.filePath,
+    plan.createdAt
+  )
+}
+
+export function updatePlan(
+  planId: string,
+  updates: {
+    assistantMessageId?: string
+    userMessageId?: string
+    title?: string
+  }
+): void {
+  const db = getDatabase()
+  const fields: string[] = []
+  const values: unknown[] = []
+
+  if (updates.assistantMessageId !== undefined) {
+    fields.push('assistant_message_id = ?')
+    values.push(updates.assistantMessageId)
+  }
+  if (updates.userMessageId !== undefined) {
+    fields.push('user_message_id = ?')
+    values.push(updates.userMessageId)
+  }
+  if (updates.title !== undefined) {
+    fields.push('title = ?')
+    values.push(updates.title)
+  }
+  if (fields.length === 0) return
+
+  values.push(planId)
+  db.prepare(`UPDATE plans SET ${fields.join(', ')} WHERE id = ?`).run(...values)
+}
+
+export function listPlansByOwner(ownerType: string, ownerId: string): PlanRow[] {
+  const db = getDatabase()
+  return db
+    .prepare(
+      `SELECT * FROM plans
+       WHERE owner_type = ? AND owner_id = ?
+       ORDER BY created_at DESC`
+    )
+    .all(ownerType, ownerId) as PlanRow[]
+}
+
+export function listPlansByConversation(conversationId: string): PlanRow[] {
+  const db = getDatabase()
+  return db
+    .prepare('SELECT * FROM plans WHERE conversation_id = ? ORDER BY created_at DESC')
+    .all(conversationId) as PlanRow[]
+}
+
+export function getPlanByAssistantMessageIds(messageIds: string[]): Map<string, PlanRow> {
+  const result = new Map<string, PlanRow>()
+  if (messageIds.length === 0) return result
+
+  const db = getDatabase()
+  const placeholders = messageIds.map(() => '?').join(', ')
+  const rows = db
+    .prepare(`SELECT * FROM plans WHERE assistant_message_id IN (${placeholders})`)
+    .all(...messageIds) as PlanRow[]
+
+  for (const row of rows) {
+    result.set(row.assistant_message_id, row)
+  }
+  return result
+}
+

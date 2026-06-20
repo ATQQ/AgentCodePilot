@@ -9,18 +9,42 @@ import { useChatStore } from '@renderer/stores/chat.store'
 import { useAgentStore } from '@renderer/stores/agent.store'
 import { useModelStore } from '@renderer/stores/model.store'
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
-import type { Attachment } from '@renderer/types'
+import { useComposerStore } from '@renderer/stores/composer.store'
+import type { Attachment, PlanReference } from '@renderer/types'
 
 const router = useRouter()
 const chatStore = useChatStore()
 const agentStore = useAgentStore()
 const modelStore = useModelStore()
 const workspaceStore = useWorkspaceStore()
+const composerStore = useComposerStore()
 
-async function handleSubmit(text: string, attachments: Attachment[], planMode: boolean): Promise<void> {
+function toPlainPlanRefs(planRefs: PlanReference[]): PlanReference[] | undefined {
+  if (!planRefs.length) return undefined
+  return planRefs.map((ref) => ({ id: ref.id, title: ref.title }))
+}
+
+async function handleSubmit(
+  text: string,
+  attachments: Attachment[],
+  planMode: boolean,
+  planRefs: PlanReference[]
+): Promise<void> {
   const agentId = agentStore.selectedAgentId
   const projectId = workspaceStore.selectedProjectId
-  const convId = await chatStore.createConversation(agentId, text, projectId, attachments, planMode)
+  const plainPlanRefs = toPlainPlanRefs(planRefs)
+  const effectivePlanMode = plainPlanRefs?.length ? false : planMode
+  const convId = await chatStore.createConversation(
+    agentId,
+    text,
+    projectId,
+    attachments,
+    effectivePlanMode,
+    undefined,
+    plainPlanRefs
+  )
+  composerStore.transferHomePlanModeToConversation(convId)
+  if (effectivePlanMode) composerStore.setPlanMode(convId, true)
   router.push('/chat')
   const conv = chatStore.activeConversation
   const cwd = conv?.cwd || workspaceStore.currentCwd
@@ -38,19 +62,20 @@ async function handleSubmit(text: string, attachments: Attachment[], planMode: b
     cwd,
     workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
     attachments: attachmentPayloads && attachmentPayloads.length > 0 ? attachmentPayloads : undefined,
-    planMode
+    planMode: effectivePlanMode,
+    planRefs: plainPlanRefs
   })
 }
 </script>
 
 <template>
-  <div class="home-view">
+  <div class="home-view elegant-scroll">
     <div class="home-center">
       <HomeEmptyState />
       <div class="composer-wrapper">
         <PromptComposer @submit="handleSubmit">
-          <template #selectors>
-            <AgentSelector />
+          <template #selectors="{ agentCompact }">
+            <AgentSelector :compact="agentCompact" />
             <ModelSelector />
           </template>
         </PromptComposer>

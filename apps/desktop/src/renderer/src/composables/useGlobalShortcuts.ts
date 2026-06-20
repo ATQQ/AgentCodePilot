@@ -3,6 +3,9 @@ import { useRouter, useRoute } from 'vue-router'
 import { useUiStore } from '@renderer/stores/ui.store'
 import { useChatStore } from '@renderer/stores/chat.store'
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
+import { useLayoutStore } from '@renderer/stores/layout.store'
+import { useFileExplorerStore } from '@renderer/stores/fileExplorer.store'
+import { usePanelContextStore } from '@renderer/stores/panelContext.store'
 
 export function useGlobalShortcuts(): void {
   const router = useRouter()
@@ -10,6 +13,9 @@ export function useGlobalShortcuts(): void {
   const uiStore = useUiStore()
   const chatStore = useChatStore()
   const workspaceStore = useWorkspaceStore()
+  const layoutStore = useLayoutStore()
+  const fileExplorerStore = useFileExplorerStore()
+  const panelContext = usePanelContextStore()
 
   function startNewChat(): void {
     if (route.path === '/chat' && chatStore.activeConversation) {
@@ -28,13 +34,94 @@ export function useGlobalShortcuts(): void {
 
     const key = e.key.toLowerCase()
 
-    if (key === 'g') {
+    if (layoutStore.homeRouteActive) {
+      const panelAvailable = panelContext.isHomePanelContextAvailable
+
+      if (key === 'b' && !e.shiftKey && panelAvailable) {
+        e.preventDefault()
+        layoutStore.toggleRightPanel()
+        return
+      }
+
+      if (key === 'p' && panelAvailable) {
+        e.preventDefault()
+        layoutStore.openExtensionTab('files')
+        return
+      }
+
+      if (key === 'g' && e.shiftKey && panelAvailable) {
+        e.preventDefault()
+        layoutStore.openExtensionTab('review')
+        return
+      }
+
+      if (key === 'g' && !e.shiftKey) {
+        e.preventDefault()
+        uiStore.toggleSearch()
+      }
+      if (key === 's') {
+        e.preventDefault()
+        if (route.meta.fullscreen !== true) {
+          uiStore.toggleSidebar()
+        }
+      }
+      if (key === 'n') {
+        e.preventDefault()
+        startNewChat()
+      }
+      return
+    }
+
+    // Backtick ` → toggle terminal
+    if (key === '`') {
+      e.preventDefault()
+      layoutStore.toggleBottomPanel()
+      return
+    }
+
+    // Cmd+B → toggle extension panel
+    if (key === 'b' && !e.shiftKey) {
+      e.preventDefault()
+      layoutStore.toggleRightPanel()
+      return
+    }
+
+    // Cmd+Shift+G → review tab
+    if (key === 'g' && e.shiftKey) {
+      e.preventDefault()
+      layoutStore.openExtensionTab('review')
+      return
+    }
+
+    if (key === 'g' && !e.shiftKey) {
       e.preventDefault()
       uiStore.toggleSearch()
       return
     }
 
+    // Cmd+P → files tab
+    if (key === 'p') {
+      e.preventDefault()
+      layoutStore.openExtensionTab('files')
+      return
+    }
+
+    // Cmd+T → browser tab
+    if (key === 't') {
+      e.preventDefault()
+      layoutStore.openExtensionTab('browser')
+      return
+    }
+
     if (key === 's') {
+      if (
+        layoutStore.activeExtensionTab === 'files' &&
+        layoutStore.rightPanelVisible &&
+        fileExplorerStore.editMode &&
+        fileExplorerStore.openFilePath
+      ) {
+        return
+      }
       e.preventDefault()
       if (route.meta.fullscreen !== true) {
         uiStore.toggleSidebar()

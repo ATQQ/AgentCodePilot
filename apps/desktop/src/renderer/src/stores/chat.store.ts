@@ -1,12 +1,20 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Attachment, ApprovalRequest, Conversation, Message } from '@renderer/types'
-import type { AgentEvent, AttachmentPayload } from '../../../preload/types'
+import type { AgentEvent, AttachmentPayload, PlanReference } from '../../../preload/types'
 import type { ApprovalLevel } from '@renderer/types'
 import { useWorkspaceStore } from './workspace.store'
 import { useModelStore } from './model.store'
+import { useAgentStore } from './agent.store'
 import { getToolCallFingerprint } from '@renderer/utils/toolCall'
 import { attachmentFromPayload, enrichAttachment } from '@renderer/utils/localFile'
+
+function formatAgentErrorMessage(error: string): string {
+  if (/maximum number of turns|max_turns|回合上限/i.test(error)) {
+    return '已达到单次 Agent 回合上限。如需继续，请发送「继续」或把任务拆小后重试。'
+  }
+  return error
+}
 
 export const useChatStore = defineStore('chat', () => {
   const conversations = ref<Conversation[]>([])
@@ -14,8 +22,124 @@ export const useChatStore = defineStore('chat', () => {
   const streamingConversationIds = ref<Set<string>>(new Set())
   const waitingConversationIds = ref<Set<string>>(new Set())
   const pendingApprovals = ref<Map<string, ApprovalRequest>>(new Map())
-  const queuedMessages = ref<{ conversationId: string; content: string; agentId: string; modelId?: string; planMode?: boolean }[]>([])
+  const queuedMessages = ref<{ conversationId: string; content: string; agentId: string; modelId?: string; planMode?: boolean; planRefs?: PlanReference[] }[]>([])
+  const pendingAgentByConversation = ref<Map<string, string>>(new Map())
+  const activeAssistantMessageIds = ref<Map<string, string>>(new Map())
+  const thinkingStartedAtByConversation = ref<Map<string, number>>(new Map())
   const toolUseIdAliases = ref<Map<string, string>>(new Map())
+  const streamedMessageIds = ref<Set<string>>(new Set())
+
+  function markMessageStreamed(messageId: string): void {
+    if (streamedMessageIds.value.has(messageId)) return
+    const next = new Set(streamedMessageIds.value)
+    next.add(messageId)
+    streamedMessageIds.value = next
+  }
+
+  function isMessageStreaming(messageId: string): boolean {
+    const convId = activeConversationId.value
+    if (!convId || !isConversationStreaming(convId)) return false
+    return isActiveAssistantMessage(convId, messageId)
+  }
+
+  function wasMessageStreamed(messageId: string): boolean {
+    return streamedMessageIds.value.has(messageId)
+  }
+
+  function touchConversationSet(setRef: typeof streamingConversationIds, mutate: (set: Set<string>) => void): void {
+    mutate(setRef.value)
+    setRef.value = new Set(setRef.value)
+  }
+
+  function addWaitingConversation(conversationId: string): void {
+    touchConversationSet(waitingConversationIds, (set) => set.add(conversationId))
+  }
+
+  function removeWaitingConversation(conversationId: string): void {
+    touchConversationSet(waitingConversationIds, (set) => set.delete(conversationId))
+  }
+
+  function addStreamingConversation(conversationId: string): void {
+    touchConversationSet(streamingConversationIds, (set) => set.add(conversationId))
+  }
+
+  function removeStreamingConversation(conversationId: string): void {
+    touchConversationSet(streamingConversationIds, (set) => set.delete(conversationId))
+  }
+
+  function clearActiveAssistantMessage(conversationId: string): void {
+    const next = new Map(activeAssistantMessageIds.value)
+    next.delete(conversationId)
+    activeAssistantMessageIds.value = next
+  }
+
+  function setActiveAssistantMessage(conversationId: string, messageId: string): void {
+    const next = new Map(activeAssistantMessageIds.value)
+    next.set(conversationId, messageId)
+    activeAssistantMessageIds.value = next
+  }
+
+  function isActiveAssistantMessage(conversationId: string, messageId: string): boolean {
+    return activeAssistantMessageIds.value.get(conversationId) === messageId
+  }
+
+  function isConversationBusy(conversationId: string): boolean {
+    return (
+      streamingConversationIds.value.has(conversationId) ||
+      waitingConversationIds.value.has(conversationId)
+    )
+  }
+
+  function markThinkingStarted(conversationId: string): void {
+    const next = new Map(thinkingStartedAtByConversation.value)
+    if (!next.has(conversationId)) {
+      next.set(conversationId, Date.now())
+    }
+    thinkingStartedAtByConversation.value = next
+  }
+
+  function clearThinkingStarted(conversationId: string): void {
+    if (!thinkingStartedAtByConversation.value.has(conversationId)) return
+    const next = new Map(thinkingStartedAtByConversation.value)
+    next.delete(conversationId)
+    thinkingStartedAtByConversation.value = next
+  }
+
+  function getThinkingElapsedSeconds(conversationId: string): number {
+    const startedAt = thinkingStartedAtByConversation.value.get(conversationId)
+    if (!startedAt) return 0
+    return Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
+  }
+
+  function isConversationThinking(conversationId: string): boolean {
+    if (isConversationBusy(conversationId)) return true
+    const activeId = activeAssistantMessageIds.value.get(conversationId)
+    if (!activeId) return false
+    const conv = conversations.value.find((c) => c.id === conversationId)
+    const msg = conv?.messages.find((m) => m.id === activeId)
+    return (
+      msg?.role === 'assistant' &&
+      !msg.content.trim() &&
+      !msg.toolCalls?.length &&
+      !msg.stopped
+    )
+  }
+
+  function reportSendFailure(conversationId: string, error: unknown): void {
+    removeWaitingConversation(conversationId)
+    removeStreamingConversation(conversationId)
+    clearActiveAssistantMessage(conversationId)
+    clearThinkingStarted(conversationId)
+    const conv = conversations.value.find((c) => c.id === conversationId)
+    if (!conv) return
+    const pendingAgent = getPendingAgent(conversationId)
+    const errMsg = formatAgentErrorMessage(error instanceof Error ? error.message : String(error))
+    addMessage(conversationId, 'assistant', `[Error] ${errMsg}`)
+    const lastMsg = conv.messages[conv.messages.length - 1]
+    if (lastMsg?.role === 'assistant' && pendingAgent) {
+      lastMsg.agentId = pendingAgent
+    }
+  }
 
   const activeConversation = computed(
     () => conversations.value.find((c) => c.id === activeConversationId.value) ?? null
@@ -41,10 +165,48 @@ export const useChatStore = defineStore('chat', () => {
     [...conversations.value].sort((a, b) => (a.updatedAt > b.updatedAt ? -1 : 1))
   )
 
+  function sortSidebarConversations(list: Conversation[]): Conversation[] {
+    return [...list].sort((a, b) => {
+      if (a.pinned && !b.pinned) return -1
+      if (!a.pinned && b.pinned) return 1
+      return a.updatedAt > b.updatedAt ? -1 : 1
+    })
+  }
+
+  const conversationsByProject = computed(() => {
+    const map = new Map<string, Conversation[]>()
+    for (const c of conversations.value) {
+      if (c.archived || !c.projectId) continue
+      const list = map.get(c.projectId)
+      if (list) list.push(c)
+      else map.set(c.projectId, [c])
+    }
+    for (const [key, list] of map) {
+      map.set(key, sortSidebarConversations(list))
+    }
+    return map
+  })
+
+  const orphanConversations = computed(() =>
+    sortSidebarConversations(
+      conversations.value.filter((c) => !c.projectId && !c.archived)
+    )
+  )
+
+  const archivedConversationsList = computed(() =>
+    conversations.value
+      .filter((c) => c.archived)
+      .sort((a, b) => (a.updatedAt > b.updatedAt ? -1 : 1))
+  )
+
   const isWaiting = computed(
     () =>
       activeConversationId.value !== null &&
       waitingConversationIds.value.has(activeConversationId.value)
+  )
+
+  const isStoppable = computed(
+    () => isStreaming.value || isWaiting.value
   )
 
   const pendingApprovalConversationIds = computed(() => {
@@ -64,6 +226,45 @@ export const useChatStore = defineStore('chat', () => {
 
   function hasPendingApproval(conversationId: string): boolean {
     return pendingApprovalConversationIds.value.has(conversationId)
+  }
+
+  function setPendingAgent(conversationId: string, agentId: string): void {
+    const next = new Map(pendingAgentByConversation.value)
+    next.set(conversationId, agentId)
+    pendingAgentByConversation.value = next
+  }
+
+  function getPendingAgent(conversationId: string): string | undefined {
+    return pendingAgentByConversation.value.get(conversationId)
+  }
+
+  function assignAgentToAssistantMessage(conversationId: string, message: Message): void {
+    if (message.role !== 'assistant' || message.agentId) return
+    const pendingAgent = getPendingAgent(conversationId)
+    if (pendingAgent) {
+      message.agentId = pendingAgent
+    }
+  }
+
+  function getActiveAssistantMessageId(conversationId: string): string | undefined {
+    return activeAssistantMessageIds.value.get(conversationId)
+  }
+
+  function ensureAssistantPlaceholder(conversationId: string, messageId: string): Message | undefined {
+    const conv = conversations.value.find((c) => c.id === conversationId)
+    if (!conv) return undefined
+    let msg = conv.messages.find((m) => m.id === messageId)
+    if (!msg) {
+      msg = {
+        id: messageId,
+        role: 'assistant',
+        content: '',
+        createdAt: new Date().toISOString()
+      }
+      assignAgentToAssistantMessage(conversationId, msg)
+      conv.messages.push(msg)
+    }
+    return msg
   }
 
   function resolveToolUseId(messageId: string, toolUseId: string): string {
@@ -105,29 +306,15 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function getConversationsByProject(projectId: string): Conversation[] {
-    return conversations.value
-      .filter((c) => c.projectId === projectId && !c.archived)
-      .sort((a, b) => {
-        if (a.pinned && !b.pinned) return -1
-        if (!a.pinned && b.pinned) return 1
-        return a.updatedAt > b.updatedAt ? -1 : 1
-      })
+    return conversationsByProject.value.get(projectId) ?? []
   }
 
   function getOrphanConversations(): Conversation[] {
-    return conversations.value
-      .filter((c) => !c.projectId && !c.archived)
-      .sort((a, b) => {
-        if (a.pinned && !b.pinned) return -1
-        if (!a.pinned && b.pinned) return 1
-        return a.updatedAt > b.updatedAt ? -1 : 1
-      })
+    return orphanConversations.value
   }
 
   function getArchivedConversations(): Conversation[] {
-    return conversations.value
-      .filter((c) => c.archived)
-      .sort((a, b) => (a.updatedAt > b.updatedAt ? -1 : 1))
+    return archivedConversationsList.value
   }
 
   function mergeConversationItem(item: {
@@ -193,7 +380,9 @@ export const useChatStore = defineStore('chat', () => {
       role: m.role,
       content: m.content,
       createdAt: m.createdAt,
+      agentId: m.agentId,
       planMode: m.planMode,
+      planRefs: m.planRefs,
       attachments: m.attachments?.map((att) => enrichAttachment(att as Attachment)),
       usage: m.usage,
       debugInput: m.debugInput,
@@ -203,7 +392,15 @@ export const useChatStore = defineStore('chat', () => {
 
   function setActive(id: string | null): void {
     activeConversationId.value = id
-    if (id) loadMessages(id)
+    if (id) {
+      loadMessages(id)
+      const conv = conversations.value.find((c) => c.id === id)
+      if (conv) {
+        const agentStore = useAgentStore()
+        agentStore.selectAgent(conv.agentId)
+        setPendingAgent(id, conv.agentId)
+      }
+    }
   }
 
   async function createConversation(
@@ -212,17 +409,21 @@ export const useChatStore = defineStore('chat', () => {
     projectId?: string | null,
     attachments?: Attachment[],
     planMode?: boolean,
-    modelId?: string
+    modelId?: string,
+    planRefs?: PlanReference[]
   ): Promise<string> {
     const modelStore = useModelStore()
     const resolvedModelId = modelId ?? modelStore.getEffectiveModelId()
+    const plainPlanRefs = toPlainPlanRefs(planRefs)
+    const effectivePlanMode = plainPlanRefs?.length ? false : (planMode ?? false)
     const result = await window.agentAPI.chat.createConversation({
       agentId,
       modelId: resolvedModelId,
       firstMessage,
       projectId,
       attachments: toAttachmentPayloads(attachments),
-      planMode: planMode ?? false
+      planMode: effectivePlanMode,
+      planRefs: plainPlanRefs
     })
 
     const persistedAttachments =
@@ -235,7 +436,8 @@ export const useChatStore = defineStore('chat', () => {
       role: 'user',
       content: firstMessage,
       createdAt: now,
-      ...(planMode ? { planMode: true } : {}),
+      ...(effectivePlanMode ? { planMode: true } : {}),
+      ...(plainPlanRefs?.length ? { planRefs: plainPlanRefs } : {}),
       attachments: persistedAttachments
     }
     conversations.value.unshift({
@@ -251,7 +453,10 @@ export const useChatStore = defineStore('chat', () => {
       updatedAt: now
     })
     activeConversationId.value = result.id
-    waitingConversationIds.value.add(result.id)
+    clearActiveAssistantMessage(result.id)
+    markThinkingStarted(result.id)
+    addWaitingConversation(result.id)
+    setPendingAgent(result.id, agentId)
     return result.id
   }
 
@@ -260,7 +465,8 @@ export const useChatStore = defineStore('chat', () => {
     role: 'user' | 'assistant',
     content: string,
     attachments?: Attachment[],
-    planMode?: boolean
+    planMode?: boolean,
+    planRefs?: PlanReference[]
   ): void {
     const conv = conversations.value.find((c) => c.id === conversationId)
     if (!conv) return
@@ -271,9 +477,15 @@ export const useChatStore = defineStore('chat', () => {
       content,
       createdAt: now,
       ...(planMode ? { planMode: true } : {}),
+      ...(planRefs?.length ? { planRefs } : {}),
       attachments: attachments && attachments.length > 0 ? attachments : undefined
     })
     conv.updatedAt = now
+  }
+
+  function toPlainPlanRefs(planRefs?: PlanReference[]): PlanReference[] | undefined {
+    if (!planRefs?.length) return undefined
+    return planRefs.map((ref) => ({ id: ref.id, title: ref.title }))
   }
 
   function toAttachmentPayloads(attachments?: Attachment[]): AttachmentPayload[] | undefined {
@@ -289,34 +501,53 @@ export const useChatStore = defineStore('chat', () => {
     content: string,
     agentId: string,
     attachments?: Attachment[],
-    planMode?: boolean
+    planMode?: boolean,
+    planRefs?: PlanReference[]
   ): Promise<void> {
     const conv = conversations.value.find((c) => c.id === conversationId)
     const modelStore = useModelStore()
     const modelId = modelStore.getEffectiveModelId(conv?.modelId)
-    if (isConversationStreaming(conversationId)) {
-      queuedMessages.value.push({ conversationId, content, agentId, modelId, planMode: planMode ?? false })
+    const effectivePlanMode = planRefs?.length ? false : (planMode ?? false)
+    if (isConversationBusy(conversationId)) {
+      queuedMessages.value.push({
+        conversationId,
+        content,
+        agentId,
+        modelId,
+        planMode: effectivePlanMode,
+        planRefs: toPlainPlanRefs(planRefs)
+      })
       return
     }
-    addMessage(conversationId, 'user', content, attachments, planMode)
-    waitingConversationIds.value.add(conversationId)
+    setPendingAgent(conversationId, agentId)
+    clearActiveAssistantMessage(conversationId)
+    addMessage(conversationId, 'user', content, attachments, effectivePlanMode, toPlainPlanRefs(planRefs))
+    markThinkingStarted(conversationId)
+    addWaitingConversation(conversationId)
     const workspaceStore = useWorkspaceStore()
     const wsFolders = workspaceStore.currentWorkspace?.folders
-    const persistedAttachments = await window.agentAPI.chat.sendMessage({
-      conversationId,
-      content,
-      agentId,
-      modelId,
-      cwd: conv?.cwd || workspaceStore.currentCwd,
-      workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
-      attachments: toAttachmentPayloads(attachments),
-      planMode: planMode ?? false
-    })
-    if (persistedAttachments?.length && conv) {
-      const lastUserMessage = [...conv.messages].reverse().find((m) => m.role === 'user')
-      if (lastUserMessage) {
-        lastUserMessage.attachments = persistedAttachments.map((att) => attachmentFromPayload(att))
+    try {
+      const result = await window.agentAPI.chat.sendMessage({
+        conversationId,
+        content,
+        agentId,
+        modelId,
+        cwd: conv?.cwd || workspaceStore.currentCwd,
+        workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
+        attachments: toAttachmentPayloads(attachments),
+        planMode: effectivePlanMode,
+        planRefs: toPlainPlanRefs(planRefs)
+      })
+      setActiveAssistantMessage(conversationId, result.assistantMessageId)
+      ensureAssistantPlaceholder(conversationId, result.assistantMessageId)
+      if (result.attachments?.length && conv) {
+        const lastUserMessage = [...conv.messages].reverse().find((m) => m.role === 'user')
+        if (lastUserMessage) {
+          lastUserMessage.attachments = result.attachments.map((att) => attachmentFromPayload(att))
+        }
       }
+    } catch (error) {
+      reportSendFailure(conversationId, error)
     }
   }
 
@@ -331,65 +562,97 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function stopConversation(conversationId: string): Promise<void> {
+    removeWaitingConversation(conversationId)
+    removeStreamingConversation(conversationId)
+    clearActiveAssistantMessage(conversationId)
+    clearThinkingStarted(conversationId)
     await window.agentAPI.chat.stop(conversationId)
-    streamingConversationIds.value.delete(conversationId)
-    flushQueueForConversation(conversationId)
   }
 
   function flushQueueForConversation(conversationId: string): void {
     const idx = queuedMessages.value.findIndex((m) => m.conversationId === conversationId)
     if (idx === -1) return
     const next = queuedMessages.value.splice(idx, 1)[0]
-    addMessage(next.conversationId, 'user', next.content, undefined, next.planMode)
-    waitingConversationIds.value.add(next.conversationId)
+    setPendingAgent(next.conversationId, next.agentId)
+    addMessage(next.conversationId, 'user', next.content, undefined, next.planMode, next.planRefs)
+    clearActiveAssistantMessage(next.conversationId)
+    markThinkingStarted(next.conversationId)
+    addWaitingConversation(next.conversationId)
     const conv = conversations.value.find((c) => c.id === next.conversationId)
     const workspaceStore = useWorkspaceStore()
     const modelStore = useModelStore()
     const wsFolders = workspaceStore.currentWorkspace?.folders
-    window.agentAPI.chat.sendMessage({
-      conversationId: next.conversationId,
-      content: next.content,
-      agentId: next.agentId,
-      modelId: next.modelId ?? modelStore.getEffectiveModelId(conv?.modelId),
-      cwd: conv?.cwd || workspaceStore.currentCwd,
-      workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
-      planMode: next.planMode ?? false
-    })
+    window.agentAPI.chat
+      .sendMessage({
+        conversationId: next.conversationId,
+        content: next.content,
+        agentId: next.agentId,
+        modelId: next.modelId ?? modelStore.getEffectiveModelId(conv?.modelId),
+        cwd: conv?.cwd || workspaceStore.currentCwd,
+        workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
+        planMode: next.planMode ?? false,
+        planRefs: toPlainPlanRefs(next.planRefs)
+      })
+      .then((result) => {
+        setActiveAssistantMessage(next.conversationId, result.assistantMessageId)
+        ensureAssistantPlaceholder(next.conversationId, result.assistantMessageId)
+      })
+      .catch((error) => {
+        reportSendFailure(next.conversationId, error)
+      })
   }
 
   function handleAgentEvent(event: AgentEvent): void {
     switch (event.type) {
       case 'message.started': {
-        streamingConversationIds.value.add(event.conversationId)
+        setActiveAssistantMessage(event.conversationId, event.messageId)
+        ensureAssistantPlaceholder(event.conversationId, event.messageId)
+        addStreamingConversation(event.conversationId)
+        removeWaitingConversation(event.conversationId)
         break
       }
       case 'message.delta': {
+        if (!isActiveAssistantMessage(event.conversationId, event.messageId)) return
+        markMessageStreamed(event.messageId)
         const conv = conversations.value.find((c) => c.id === event.conversationId)
         if (!conv) return
-        waitingConversationIds.value.delete(event.conversationId)
-        let msg = conv.messages.find((m) => m.id === event.messageId)
-        if (!msg) {
-          msg = {
-            id: event.messageId,
-            role: 'assistant',
-            content: '',
-            createdAt: new Date().toISOString()
-          }
-          conv.messages.push(msg)
-        }
+        removeWaitingConversation(event.conversationId)
+        const msg = ensureAssistantPlaceholder(event.conversationId, event.messageId)
+        if (!msg) return
         msg.content += event.delta
         break
       }
       case 'message.completed': {
+        const isCurrentRun = isActiveAssistantMessage(event.conversationId, event.messageId)
         const conv = conversations.value.find((c) => c.id === event.conversationId)
         if (conv) {
           conv.updatedAt = new Date().toISOString()
-          const msg = conv.messages.find((m) => m.id === event.messageId)
+          let msg = conv.messages.find((m) => m.id === event.messageId)
+          if (event.stopped) {
+            const stoppedText = '已手动终止 AI 回复'
+            if (!msg) {
+              msg = {
+                id: event.messageId,
+                role: 'assistant',
+                content: stoppedText,
+                createdAt: new Date().toISOString(),
+                stopped: true
+              }
+              assignAgentToAssistantMessage(event.conversationId, msg)
+              conv.messages.push(msg)
+            } else {
+              if (!msg.content.trim()) {
+                msg.content = stoppedText
+              }
+              msg.stopped = true
+            }
+          }
           if (msg) {
+            assignAgentToAssistantMessage(event.conversationId, msg)
             if (event.usage) msg.usage = event.usage
             if (event.debugInput) msg.debugInput = event.debugInput
             if (event.debugOutput) msg.debugOutput = event.debugOutput
-            if (msg.toolCalls) {
+            if (!event.stopped && msg.toolCalls) {
               for (const tc of msg.toolCalls) {
                 if (tc.status === 'pending' || tc.status === 'running') {
                   tc.status = 'completed'
@@ -398,17 +661,33 @@ export const useChatStore = defineStore('chat', () => {
             }
           }
         }
-        streamingConversationIds.value.delete(event.conversationId)
+        if (!isCurrentRun) break
+        removeWaitingConversation(event.conversationId)
+        removeStreamingConversation(event.conversationId)
+        clearActiveAssistantMessage(event.conversationId)
+        clearThinkingStarted(event.conversationId)
         flushQueueForConversation(event.conversationId)
         break
       }
       case 'message.error': {
+        const hasActiveId = activeAssistantMessageIds.value.has(event.conversationId)
+        const isCurrentRun =
+          isActiveAssistantMessage(event.conversationId, event.messageId) ||
+          (waitingConversationIds.value.has(event.conversationId) && !hasActiveId)
+        if (!isCurrentRun) break
         const conv = conversations.value.find((c) => c.id === event.conversationId)
         if (conv) {
-          addMessage(event.conversationId, 'assistant', `[Error] ${event.error}`)
+          const pendingAgent = getPendingAgent(event.conversationId)
+          addMessage(event.conversationId, 'assistant', `[Error] ${formatAgentErrorMessage(event.error)}`)
+          const lastMsg = conv.messages[conv.messages.length - 1]
+          if (lastMsg?.role === 'assistant' && pendingAgent) {
+            lastMsg.agentId = pendingAgent
+          }
         }
-        waitingConversationIds.value.delete(event.conversationId)
-        streamingConversationIds.value.delete(event.conversationId)
+        removeWaitingConversation(event.conversationId)
+        removeStreamingConversation(event.conversationId)
+        clearActiveAssistantMessage(event.conversationId)
+        clearThinkingStarted(event.conversationId)
         flushQueueForConversation(event.conversationId)
         break
       }
@@ -423,6 +702,7 @@ export const useChatStore = defineStore('chat', () => {
             content: '',
             createdAt: new Date().toISOString()
           }
+          assignAgentToAssistantMessage(event.conversationId, msg)
           conv.messages.push(msg)
         }
         if (!msg.toolCalls) msg.toolCalls = []
@@ -520,7 +800,7 @@ export const useChatStore = defineStore('chat', () => {
           status: 'pending'
         })
         pendingApprovals.value = next
-        waitingConversationIds.value.delete(event.conversationId)
+        removeWaitingConversation(event.conversationId)
         break
       }
       case 'approval.resolved': {
@@ -653,6 +933,7 @@ export const useChatStore = defineStore('chat', () => {
     streamingConversationIds,
     isStreaming,
     isWaiting,
+    isStoppable,
     hasPendingApproval,
     pendingApprovalConversationIds,
     getPendingApprovalForMessage,
@@ -660,6 +941,9 @@ export const useChatStore = defineStore('chat', () => {
     isConversationStreaming,
     currentQueuedMessages,
     conversationList,
+    conversationsByProject,
+    orphanConversations,
+    archivedConversationsList,
     getConversationsByProject,
     getOrphanConversations,
     getArchivedConversations,
@@ -684,6 +968,12 @@ export const useChatStore = defineStore('chat', () => {
     setConversationApprovalLevel,
     setConversationModelId,
     initAgentEventListener,
-    initApprovalNavigateListener
+    initApprovalNavigateListener,
+    getPendingAgent,
+    getActiveAssistantMessageId,
+    getThinkingElapsedSeconds,
+    isConversationThinking,
+    isMessageStreaming,
+    wasMessageStreamed
   }
 })

@@ -1,10 +1,9 @@
 import './assets/main.css'
-import 'element-plus/dist/index.css'
+import '@renderer/utils/monacoWorkers'
 
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import ElementPlus from 'element-plus'
-import { setupMarkstream } from './markstream-setup'
+import { setupMarkstreamCore } from './markstream-setup'
 import App from './App.vue'
 import router from './router'
 import i18n from './i18n'
@@ -16,7 +15,7 @@ import { useChatStore } from './stores/chat.store'
 const pinia = createPinia()
 const app = createApp(App)
 
-app.use(pinia).use(router).use(ElementPlus).use(i18n)
+app.use(pinia).use(router).use(i18n)
 
 const settingsStore = useSettingsStore()
 const agentStore = useAgentStore()
@@ -34,6 +33,6 @@ workspaceStore.loadProjects().then(() => {
 })
 chatStore.initAgentEventListener()
 chatStore.initApprovalNavigateListener()
-setupMarkstream()
+setupMarkstreamCore()
 
 app.mount('#app')

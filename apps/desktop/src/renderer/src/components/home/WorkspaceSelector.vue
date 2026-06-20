@@ -98,13 +98,7 @@ async function saveWorkspace(): Promise<void> {
   if (workspaceName.value.trim() && workspaceFolders.value.length) {
     const wsId = await workspaceStore.createWorkspace(workspaceName.value.trim(), [...workspaceFolders.value])
     for (const folder of workspaceFolders.value) {
-      const existing = workspaceStore.projects.find((p) => p.path === folder)
-      if (!existing) {
-        const name = folder.split('/').pop() || folder
-        const project = { id: `proj-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`, name, path: folder }
-        workspaceStore.projects.push(project)
-        await window.agentAPI.projects.save(project)
-      }
+      await workspaceStore.ensureProjectForPath(folder)
     }
     workspaceStore.selectProject(wsId)
   }
@@ -142,7 +136,7 @@ function closeWorkspacePanel(): void {
           />
         </div>
 
-        <div v-if="filteredProjects.length" class="dropdown-list">
+        <div v-if="filteredProjects.length" class="dropdown-list elegant-scroll">
           <button
             v-for="proj in filteredProjects"
             :key="proj.id"
@@ -161,7 +155,7 @@ function closeWorkspacePanel(): void {
 
         <div v-if="filteredWorkspaces.length" class="dropdown-divider"></div>
         <div v-if="filteredWorkspaces.length" class="dropdown-group-title">{{ t('sidebar.workspaces') }}</div>
-        <div v-if="filteredWorkspaces.length" class="dropdown-list">
+        <div v-if="filteredWorkspaces.length" class="dropdown-list elegant-scroll">
           <button
             v-for="ws in filteredWorkspaces"
             :key="ws.id"
@@ -179,7 +173,7 @@ function closeWorkspacePanel(): void {
         <template v-if="workspaceStore.currentWorkspace">
           <div class="dropdown-divider"></div>
           <div class="dropdown-group-title">当前工作空间项目</div>
-          <div class="dropdown-list workspace-projects">
+          <div class="dropdown-list workspace-projects elegant-scroll">
             <div
               v-for="folder in workspaceStore.currentWorkspace.folders"
               :key="folder"

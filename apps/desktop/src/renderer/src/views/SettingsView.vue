@@ -4,9 +4,12 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import type { ThemeMode } from '@renderer/types'
-import { ArrowLeft, Bell, Brush, Document, Cpu } from '@element-plus/icons-vue'
+import { ArrowLeft, Bell, Brush, Document, Cpu, MagicStick, FolderOpened, Files } from '@element-plus/icons-vue'
 import ArchivedConversationsSection from '@renderer/components/settings/ArchivedConversationsSection.vue'
 import AgentSettingsSection from '@renderer/components/settings/AgentSettingsSection.vue'
+import AiPromptsSettingsSection from '@renderer/components/settings/AiPromptsSettingsSection.vue'
+import FilePreviewSettingsSection from '@renderer/components/settings/FilePreviewSettingsSection.vue'
+import ExternalAppsSettingsSection from '@renderer/components/settings/ExternalAppsSettingsSection.vue'
 // TODO: 恢复未实现设置项时取消注释
 // import {
 //   Setting,
@@ -32,7 +35,7 @@ const activeSection = ref('appearance')
 watch(
   () => route.query.section,
   (section) => {
-    if (typeof section === 'string' && (section === 'appearance' || section === 'notifications' || section === 'archived' || section === 'agents')) {
+    if (typeof section === 'string' && (section === 'appearance' || section === 'notifications' || section === 'archived' || section === 'agents' || section === 'aiFeatures' || section === 'filePreview' || section === 'externalApps')) {
       activeSection.value = section
     }
   },
@@ -65,7 +68,12 @@ const navGroups: NavGroup[] = [
   },
   {
     titleKey: 'settings.integration',
-    items: [{ key: 'agents', labelKey: 'settings.agentConfig.title', icon: Cpu }]
+    items: [
+      { key: 'agents', labelKey: 'settings.agentConfig.title', icon: Cpu },
+      { key: 'aiFeatures', labelKey: 'settings.aiFeatures.title', icon: MagicStick },
+      { key: 'filePreview', labelKey: 'settings.filePreview.title', icon: Files },
+      { key: 'externalApps', labelKey: 'settings.externalApps.title', icon: FolderOpened }
+    ]
   },
   {
     titleKey: 'settings.archived',
@@ -119,7 +127,11 @@ const themeOptions: { value: ThemeMode; labelKey: string; icon: string }[] = [
 ]
 
 function goBack(): void {
-  router.push('/')
+  if (window.history.state?.back != null) {
+    router.back()
+  } else {
+    router.push('/')
+  }
 }
 </script>
 
@@ -142,7 +154,7 @@ function goBack(): void {
       </div>
       -->
 
-      <nav class="settings-nav">
+      <nav class="settings-nav elegant-scroll">
         <div v-for="group in navGroups" :key="group.titleKey" class="nav-group">
           <div class="group-title">{{ t(group.titleKey) }}</div>
           <button
@@ -159,7 +171,7 @@ function goBack(): void {
       </nav>
     </aside>
 
-    <main class="settings-content">
+    <main class="settings-content elegant-scroll">
       <div class="settings-content-inner">
         <!-- Appearance Section -->
         <div v-if="activeSection === 'appearance'" class="content-section">
@@ -183,6 +195,40 @@ function goBack(): void {
                   <span>{{ t(opt.labelKey) }}</span>
                 </button>
               </div>
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">{{ t('settings.rememberPanelState') }}</div>
+                <div class="setting-desc">{{ t('settings.rememberPanelStateDesc') }}</div>
+              </div>
+              <button
+                type="button"
+                class="toggle-switch"
+                :class="{ active: settingsStore.rememberPanelStatePerConversation }"
+                role="switch"
+                :aria-checked="settingsStore.rememberPanelStatePerConversation"
+                @click="settingsStore.setRememberPanelStatePerConversation(!settingsStore.rememberPanelStatePerConversation)"
+              />
+            </div>
+          </div>
+
+          <div class="setting-card">
+            <div class="setting-row">
+              <div>
+                <div class="setting-label">{{ t('settings.browserAutoExtractLinks') }}</div>
+                <div class="setting-desc">{{ t('settings.browserAutoExtractLinksDesc') }}</div>
+              </div>
+              <button
+                type="button"
+                class="toggle-switch"
+                :class="{ active: settingsStore.browserAutoExtractLinks }"
+                role="switch"
+                :aria-checked="settingsStore.browserAutoExtractLinks"
+                @click="settingsStore.setBrowserAutoExtractLinks(!settingsStore.browserAutoExtractLinks)"
+              />
             </div>
           </div>
 
@@ -236,9 +282,13 @@ function goBack(): void {
                 <div class="setting-label">{{ t('settings.permissionNotifications') }}</div>
                 <div class="setting-desc">{{ t('settings.permissionNotificationsDesc') }}</div>
               </div>
-              <el-switch
-                :model-value="settingsStore.permissionNotificationsEnabled"
-                @change="settingsStore.setPermissionNotificationsEnabled($event as boolean)"
+              <button
+                type="button"
+                class="toggle-switch"
+                :class="{ active: settingsStore.permissionNotificationsEnabled }"
+                role="switch"
+                :aria-checked="settingsStore.permissionNotificationsEnabled"
+                @click="settingsStore.setPermissionNotificationsEnabled(!settingsStore.permissionNotificationsEnabled)"
               />
             </div>
           </div>
@@ -247,6 +297,12 @@ function goBack(): void {
         <div v-else-if="activeSection === 'agents'" class="content-section">
           <AgentSettingsSection />
         </div>
+
+        <AiPromptsSettingsSection v-else-if="activeSection === 'aiFeatures'" />
+
+        <FilePreviewSettingsSection v-else-if="activeSection === 'filePreview'" />
+
+        <ExternalAppsSettingsSection v-else-if="activeSection === 'externalApps'" />
 
         <ArchivedConversationsSection v-else-if="activeSection === 'archived'" />
 
@@ -461,6 +517,39 @@ function goBack(): void {
   font-size: var(--font-size-sm);
   color: var(--content-text-secondary);
   margin-top: 2px;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 11px;
+  background: var(--sidebar-border);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--content-bg);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s;
+}
+
+.toggle-switch.active {
+  background: var(--accent-color);
+}
+
+.toggle-switch.active::after {
+  transform: translateX(18px);
 }
 
 /* TODO: 未实现设置项 UI 恢复时取消注释

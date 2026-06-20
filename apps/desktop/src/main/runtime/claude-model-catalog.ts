@@ -1,6 +1,7 @@
 import { homedir } from 'os'
 import { app } from 'electron'
-import { query, resolveSettings, type ModelInfo } from '@anthropic-ai/claude-agent-sdk'
+import type { ModelInfo } from '@anthropic-ai/claude-agent-sdk'
+import { loadClaudeAgentSdk } from './claude-sdk-loader'
 import * as repo from '../database/repositories'
 import {
   type AgentConfigSettings,
@@ -83,6 +84,7 @@ async function fetchSdkModels(): Promise<AgentModelOption[] | null> {
   const timeout = setTimeout(() => controller.abort(), 15000)
 
   try {
+    const { query } = await loadClaudeAgentSdk()
     const q = query({
       prompt: '',
       options: {
@@ -120,6 +122,7 @@ async function fetchModelsFromClaudeSettings(): Promise<{
   defaultModelId: string | null
 }> {
   try {
+    const { resolveSettings } = await loadClaudeAgentSdk()
     const resolved = await resolveSettings({
       cwd: app.getPath('home') || homedir()
     })

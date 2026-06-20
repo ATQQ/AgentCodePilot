@@ -1,4 +1,26 @@
-export type { AgentModelOption, AgentConfigSettings, ModelCatalogSource, ModelCatalogResult } from '../../../preload/types'
+export type { AgentModelOption, AgentConfigSettings, MockAgentConfig, ModelCatalogSource, ModelCatalogResult } from '../../../preload/types'
+export type {
+  GitChangedFile,
+  GitStatusResult,
+  GitDiffScope,
+  GitDiffResult,
+  FileEntry,
+  TerminalInfo,
+  TerminalDataEvent,
+  TerminalExitEvent,
+  PlanReference,
+  PlanInfo,
+  PlanOwnerType,
+  FilePreviewSettings,
+  AiPromptsSettings,
+  ExternalAppsSettings,
+  ExternalAppDefinition,
+  ExternalAppKind,
+  CustomExternalApp,
+  OpenPathResult,
+  AgentUtilityPayload,
+  ReplyLanguage
+} from '../../../preload/types'
 
 export interface AgentConfig {
   id: string
@@ -38,12 +60,15 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   createdAt: string
+  agentId?: string
   planMode?: boolean
+  planRefs?: import('../../../preload/types').PlanReference[]
   usage?: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number; costUSD: number }
   attachments?: Attachment[]
   toolCalls?: ToolCall[]
   debugInput?: string
   debugOutput?: string
+  stopped?: boolean
 }
 
 export interface ApprovalRequest {
@@ -81,6 +106,14 @@ export interface FileAttachment {
   name: string
   path: string
   previewUrl?: string
+}
+
+export interface FileReference {
+  id: string
+  path: string
+  name: string
+  startLine?: number
+  endLine?: number
 }
 
 export interface UrlAttachment {

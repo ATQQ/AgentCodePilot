@@ -3,7 +3,12 @@ import { computed } from 'vue'
 import { useAgentStore } from '@renderer/stores/agent.store'
 import claudeIcon from '@renderer/assets/claude-icon.svg'
 import codexIcon from '@renderer/assets/codex-icon.svg'
-import cursorIcon from '@renderer/assets/cursor-icon.svg'
+import cursorIcon from '@renderer/assets/external-apps/cursor.svg'
+
+const props = withDefaults(
+  defineProps<{ compact?: boolean }>(),
+  { compact: false }
+)
 
 const agentStore = useAgentStore()
 
@@ -23,10 +28,10 @@ function getAgentIcon(id: string): string {
 <template>
   <div class="agent-selector">
     <el-dropdown trigger="click" @command="(v: string) => agentStore.selectAgent(v)">
-      <button class="agent-btn">
+      <button class="agent-btn" :title="agentStore.currentAgent?.name">
         <img :src="currentIcon" class="agent-icon" width="16" height="16" alt="" />
-        <span>{{ agentStore.currentAgent?.name }}</span>
-        <span class="chevron">&#x25BE;</span>
+        <span v-if="!props.compact">{{ agentStore.currentAgent?.name }}</span>
+        <span v-if="!props.compact" class="chevron">&#x25BE;</span>
       </button>
       <template #dropdown>
         <el-dropdown-menu>
@@ -59,6 +64,7 @@ function getAgentIcon(id: string): string {
   cursor: pointer;
   transition: background 0.15s;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .agent-btn:hover {

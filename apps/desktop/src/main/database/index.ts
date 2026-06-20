@@ -12,6 +12,10 @@ function getDbDir(): string {
   return join(home, dirName)
 }
 
+export function getAppDataDir(): string {
+  return getDbDir()
+}
+
 export function getDatabase(): Database.Database {
   if (db) return db
 
@@ -131,7 +135,47 @@ function runMigrations(database: Database.Database): void {
     database.exec("ALTER TABLE conversations ADD COLUMN approval_level TEXT DEFAULT 'auto'")
   }
   if (!convCols2.find((c) => c.name === 'model_id')) {
-    database.exec("ALTER TABLE conversations ADD COLUMN model_id TEXT")
+    database.exec('ALTER TABLE conversations ADD COLUMN model_id TEXT')
+  }
+
+  const planCols = database.pragma('table_info(plans)') as { name: string }[]
+  const hasLegacyPlansTable = planCols.length > 0 && !planCols.find((c) => c.name === 'owner_type')
+  if (hasLegacyPlansTable) {
+    database.exec('DROP TABLE plans')
+  }
+
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS plans (
+      id TEXT PRIMARY KEY,
+      conversation_id TEXT NOT NULL,
+      owner_type TEXT NOT NULL,
+      owner_id TEXT NOT NULL,
+      user_message_id TEXT NOT NULL,
+      assistant_message_id TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_plans_conversation
+      ON plans(conversation_id, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_plans_owner
+      ON plans(owner_type, owner_id, created_at DESC);
+  `)
+
+  const msgCols3 = database.pragma('table_info(messages)') as { name: string }[]
+  if (!msgCols3.find((c) => c.name === 'plan_refs')) {
+    database.exec('ALTER TABLE messages ADD COLUMN plan_refs TEXT')
+  }
+  if (!msgCols3.find((c) => c.name === 'agent_id')) {
+    database.exec('ALTER TABLE messages ADD COLUMN agent_id TEXT')
+  }
+
+  const projectCols = database.pragma('table_info(projects)') as { name: string }[]
+  if (!projectCols.find((c) => c.name === 'deleted_at')) {
+    database.exec('ALTER TABLE projects ADD COLUMN deleted_at TEXT')
   }
 }
 

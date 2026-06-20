@@ -8,9 +8,7 @@ const modelStore = useModelStore()
 const agentStore = useAgentStore()
 const chatStore = useChatStore()
 
-const activeAgentId = computed(
-  () => chatStore.activeConversation?.agentId ?? agentStore.selectedAgentId
-)
+const activeAgentId = computed(() => agentStore.selectedAgentId)
 
 const showSelector = computed(() => activeAgentId.value === 'claude-code')
 
@@ -32,8 +30,8 @@ function handleSelect(modelId: string): void {
 <template>
   <div v-if="showSelector" class="model-selector">
     <el-dropdown trigger="click" @command="handleSelect">
-      <button class="model-btn">
-        <span>{{ currentModelName }}</span>
+      <button class="model-btn" :title="currentModelName">
+        <span class="model-name">{{ currentModelName }}</span>
         <span class="chevron">&#x25BE;</span>
       </button>
       <template #dropdown>
@@ -69,6 +67,13 @@ function handleSelect(modelId: string): void {
   cursor: pointer;
   transition: background 0.15s;
   white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 180px;
+}
+
+.model-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .model-btn:hover {
@@ -78,6 +83,7 @@ function handleSelect(modelId: string): void {
 .chevron {
   font-size: 10px;
   opacity: 0.5;
+  flex-shrink: 0;
 }
 
 .model-option {

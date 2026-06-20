@@ -1,17 +1,71 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Plus, Top } from '@element-plus/icons-vue'
-import type { Attachment, ApprovalLevel, FileAttachment, UrlAttachment } from '@renderer/types'
+import { Plus, Top, CircleCheck, CircleClose } from '@element-plus/icons-vue'
+import type { Attachment, ApprovalLevel, FileAttachment, UrlAttachment, PlanReference } from '@renderer/types'
 import { toLocalFileUrl } from '@renderer/utils/localFile'
 import { useImagePreview } from '@renderer/composables/useImagePreview'
+import { useComposerStore } from '@renderer/stores/composer.store'
+import PlanPicker from '@renderer/components/plans/PlanPicker.vue'
+import ComposerInlineInput from './ComposerInlineInput.vue'
 
 const { t } = useI18n()
 const { openImagePreview } = useImagePreview()
-const input = ref('')
+const composerStore = useComposerStore()
+const inlineInputRef = ref<InstanceType<typeof ComposerInlineInput> | null>(null)
+const inlineHasContent = ref(false)
+const composerRootRef = ref<HTMLElement | null>(null)
+/** 仅 Agent 选择器在窄宽度下收起为图标 */
+const isAgentCompact = ref(false)
+
+const AGENT_COMPACT_WIDTH = 400
+
+function syncInlineContentState(): void {
+  inlineHasContent.value = !inlineInputRef.value?.isContentEmpty()
+}
+
+let compactObserver: ResizeObserver | null = null
+
+onMounted(() => {
+  nextTick(() => {
+    inlineInputRef.value?.resizeEditor()
+    syncInlineContentState()
+  })
+  if (composerRootRef.value) {
+    compactObserver = new ResizeObserver(([entry]) => {
+      isAgentCompact.value = entry.contentRect.width < AGENT_COMPACT_WIDTH
+    })
+    compactObserver.observe(composerRootRef.value)
+  }
+})
+
+onUnmounted(() => {
+  compactObserver?.disconnect()
+})
+
+watch(
+  () => composerStore.pendingInsert,
+  (req) => {
+    if (!req) return
+    const consumed = composerStore.consumeInsert()
+    if (!consumed) return
+    if (consumed.text) {
+      inlineInputRef.value?.insertText(consumed.text)
+      syncInlineContentState()
+    } else if (consumed.attachment) {
+      attachments.value.push(consumed.attachment)
+    } else if (consumed.planRef) {
+      addPlanRef(consumed.planRef)
+    } else if (consumed.fileRef) {
+      inlineInputRef.value?.insertFileRef(consumed.fileRef)
+      syncInlineContentState()
+    }
+  }
+)
 const showAddMenu = ref(false)
 const showApprovalMenu = ref(false)
-const planMode = ref(false)
+const showPlanPicker = ref(false)
+const planRefs = ref<PlanReference[]>([])
 // const pursueGoals = ref(false) // TODO: 目标模式，后续实现
 const attachments = ref<Attachment[]>([])
 const showUrlInput = ref(false)
@@ -19,14 +73,21 @@ const urlInputValue = ref('')
 
 const props = defineProps<{
   streaming?: boolean
+  stoppable?: boolean
   queuedMessages?: { content: string }[]
   approvalLevel?: ApprovalLevel
+  conversationId?: string | null
 }>()
+
+const planMode = computed({
+  get: () => composerStore.isPlanMode(props.conversationId),
+  set: (value: boolean) => composerStore.setPlanMode(props.conversationId, value)
+})
 
 const approvalLevel = computed(() => props.approvalLevel ?? 'auto')
 
 const emit = defineEmits<{
-  submit: [text: string, attachments: Attachment[], planMode: boolean]
+  submit: [text: string, attachments: Attachment[], planMode: boolean, planRefs: PlanReference[]]
   stop: []
   cancelQueue: [index: number]
   approvalChange: [level: ApprovalLevel]
@@ -44,19 +105,50 @@ function getFileName(path: string): string {
   return path.split('/').pop() || path.split('\\').pop() || path
 }
 
+const hasComposerContent = computed(
+  () =>
+    inlineHasContent.value ||
+    attachments.value.length > 0 ||
+    planRefs.value.length > 0
+)
+
 function handleSubmit(): void {
-  const text = input.value.trim()
-  if (!text && attachments.value.length === 0) return
-  emit('submit', text, [...attachments.value], planMode.value)
-  input.value = ''
+  const text = inlineInputRef.value?.getContent() ?? ''
+  if (!text && attachments.value.length === 0 && planRefs.value.length === 0) return
+  const refs = [...planRefs.value]
+  const effectivePlanMode = refs.length > 0 ? false : planMode.value
+  emit('submit', text, [...attachments.value], effectivePlanMode, refs)
+  inlineInputRef.value?.clear()
+  inlineHasContent.value = false
   attachments.value = []
+  planRefs.value = []
+  nextTick(() => inlineInputRef.value?.resizeEditor())
+  if (refs.length > 0) {
+    composerStore.setPlanMode(props.conversationId, false)
+  }
 }
 
-function handleKeydown(e: KeyboardEvent): void {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault()
-    handleSubmit()
-  }
+function addPlanRef(plan: PlanReference): void {
+  if (planRefs.value.some((p) => p.id === plan.id)) return
+  planRefs.value.push(plan)
+  composerStore.setPlanMode(props.conversationId, false)
+}
+
+function removePlanRef(id: string): void {
+  planRefs.value = planRefs.value.filter((p) => p.id !== id)
+}
+
+function openPlanPicker(): void {
+  showAddMenu.value = false
+  showPlanPicker.value = true
+}
+
+function handlePlanPickerSelect(plan: PlanReference): void {
+  addPlanRef(plan)
+}
+
+function onInlineInput(): void {
+  syncInlineContentState()
 }
 
 function isUrl(text: string): boolean {
@@ -69,9 +161,9 @@ async function handlePaste(e: ClipboardEvent): Promise<void> {
 
   const text = e.clipboardData?.getData('text/plain') || ''
 
-  // Check if pasted text is a URL
   if (text && isUrl(text)) {
     e.preventDefault()
+    e.stopPropagation()
     attachments.value.push({
       id: generateId(),
       type: 'url',
@@ -83,6 +175,7 @@ async function handlePaste(e: ClipboardEvent): Promise<void> {
   for (const item of items) {
     if (item.type.startsWith('image/')) {
       e.preventDefault()
+      e.stopPropagation()
       const file = item.getAsFile()
       if (!file) continue
 
@@ -100,6 +193,7 @@ async function handlePaste(e: ClipboardEvent): Promise<void> {
       })
     }
   }
+  nextTick(() => inlineInputRef.value?.resizeEditor())
 }
 
 async function handleSelectFiles(): Promise<void> {
@@ -198,17 +292,31 @@ function previewComposerImage(att: FileAttachment): void {
   })
 }
 
-defineExpose({ setInput: (text: string) => { input.value = text } })
+defineExpose({
+  setInput: (text: string) => {
+    inlineInputRef.value?.setText(text)
+    syncInlineContentState()
+  }
+})
 </script>
 
 <template>
-  <div class="composer" :class="{ 'composer--plan': planMode }">
+  <div ref="composerRootRef" class="composer" :class="{ 'composer--plan': planMode }">
     <!-- Queued messages -->
     <div v-if="props.queuedMessages?.length" class="queued-area">
       <div v-for="(msg, idx) in props.queuedMessages" :key="idx" class="queued-banner">
         <span class="queued-badge">{{ idx + 1 }}</span>
         <span class="queued-text">{{ msg.content }}</span>
         <button class="queued-cancel" @click="handleCancelQueue(idx)">&times;</button>
+      </div>
+    </div>
+
+    <!-- Plan references -->
+    <div v-if="planRefs.length > 0" class="plan-refs-area">
+      <div v-for="plan in planRefs" :key="plan.id" class="plan-ref-chip">
+        <span class="plan-ref-icon">&#x1F4CB;</span>
+        <span class="plan-ref-title">{{ plan.title }}</span>
+        <button type="button" class="plan-ref-remove" @click="removePlanRef(plan.id)">&times;</button>
       </div>
     </div>
 
@@ -257,14 +365,15 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
       </button>
     </div>
 
-    <textarea
-      v-model="input"
-      class="composer-input"
-      :placeholder="t('home.placeholder')"
-      rows="1"
-      @keydown="handleKeydown"
-      @paste="handlePaste"
-    />
+    <div class="composer-input-area" @paste.capture="handlePaste">
+      <ComposerInlineInput
+        ref="inlineInputRef"
+        :placeholder="t('home.placeholder')"
+        @submit="handleSubmit"
+        @plan-trigger="showPlanPicker = true"
+        @input="onInlineInput"
+      />
+    </div>
     <div class="composer-toolbar">
       <div class="toolbar-left">
         <!-- + Button with popup -->
@@ -283,10 +392,9 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
                 <span>{{ t('composer.addMenu.attachUrl') }}</span>
               </button>
               <div class="menu-divider"></div>
-              <button class="menu-item menu-item--toggle" @click.stop="planMode = !planMode">
-                <span class="menu-icon">&#x2699;</span>
-                <span>{{ t('composer.addMenu.planMode') }}</span>
-                <span class="toggle-indicator" :class="{ active: planMode }"></span>
+              <button class="menu-item" @click="openPlanPicker">
+                <span class="menu-icon">&#x1F4CB;</span>
+                <span>{{ t('composer.addMenu.referencePlan') }}</span>
               </button>
               <!-- TODO: 目标模式，后续实现
               <button class="menu-item menu-item--toggle" @click.stop="pursueGoals = !pursueGoals">
@@ -295,36 +403,39 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
                 <span class="toggle-indicator" :class="{ active: pursueGoals }"></span>
               </button>
               -->
-              <div class="menu-divider"></div>
-              <button class="menu-item">
-                <span class="menu-icon">&#x1F9E9;</span>
-                <span>{{ t('composer.addMenu.plugins') }}</span>
-                <span class="menu-arrow">&#8250;</span>
-              </button>
             </div>
           </Transition>
         </div>
 
         <button
-          v-if="planMode"
-          class="plan-mode-badge"
-          @click="planMode = false"
+          type="button"
+          class="toolbar-btn toolbar-btn--plan"
+          :class="planMode ? 'toolbar-btn--plan-active' : 'toolbar-btn--plan-inactive'"
+          :title="planMode ? t('composer.planModeActive') : t('composer.planModeInactive')"
+          @click="composerStore.togglePlanMode(props.conversationId)"
         >
-          {{ t('composer.planModeBadge') }}
+          <el-icon :size="14" class="plan-mode-state-icon">
+            <CircleCheck v-if="planMode" />
+            <CircleClose v-else />
+          </el-icon>
+          <span class="plan-mode-label">{{ t('composer.planModeBadge') }}</span>
         </button>
 
         <!-- Approval Level -->
         <div class="dropdown-wrapper">
-          <button class="toolbar-btn toolbar-btn--label" @click="showApprovalMenu = !showApprovalMenu">
+          <button
+            class="toolbar-btn"
+            :title="t(approvalOptions[approvalLevel].label)"
+            @click="showApprovalMenu = !showApprovalMenu"
+          >
             <span class="approval-icon">{{ approvalOptions[approvalLevel].icon }}</span>
-            <span>{{ t(approvalOptions[approvalLevel].label) }}</span>
+            <span class="approval-label">{{ t(approvalOptions[approvalLevel].label) }}</span>
             <span class="chevron">&#x25BE;</span>
           </button>
           <Transition name="fade">
             <div v-if="showApprovalMenu" class="dropdown-menu dropdown-menu--wide" @mouseleave="showApprovalMenu = false">
               <div class="menu-header">
                 <span>{{ t('composer.approval.title') }}</span>
-                <a class="menu-link">{{ t('composer.approval.learnMore') }}</a>
               </div>
               <button
                 class="menu-item menu-item--desc"
@@ -368,9 +479,9 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
       </div>
 
       <div class="toolbar-right">
-        <slot name="selectors" />
+        <slot name="selectors" :agent-compact="isAgentCompact" />
         <button
-          v-if="props.streaming && !input.trim()"
+          v-if="props.stoppable && !hasComposerContent"
           class="stop-btn"
           @click="handleStop"
           :title="t('chat.stop')"
@@ -380,13 +491,19 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
         <button
           v-else
           class="send-btn"
-          :disabled="!input.trim() && attachments.length === 0"
+          :disabled="!hasComposerContent"
           @click="handleSubmit"
         >
           <el-icon :size="14"><Top /></el-icon>
         </button>
       </div>
     </div>
+
+    <PlanPicker
+      :visible="showPlanPicker"
+      @close="showPlanPicker = false"
+      @select="handlePlanPickerSelect"
+    />
   </div>
 </template>
 
@@ -643,43 +760,37 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
   background: var(--btn-ghost-hover);
 }
 
-.composer-input {
-  width: 100%;
-  padding: var(--spacing-lg) var(--spacing-lg) var(--spacing-sm);
-  border: none;
-  background: transparent;
-  color: var(--content-text);
-  font-size: var(--font-size-base);
-  font-family: inherit;
-  resize: none;
-  outline: none;
-  line-height: 1.5;
-  min-height: 40px;
-  max-height: 120px;
-}
-
-.composer-input::placeholder {
-  color: var(--composer-placeholder);
+.composer-input-area {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .composer-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: var(--spacing-sm) var(--spacing-md);
-  gap: var(--spacing-sm);
+  gap: 6px var(--spacing-sm);
 }
 
 .toolbar-left {
   display: flex;
   align-items: center;
   gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .toolbar-right {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+  flex: 0 0 auto;
+  max-width: 100%;
+  margin-left: auto;
 }
 
 .toolbar-btn {
@@ -694,6 +805,7 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
   font-size: var(--font-size-sm);
   cursor: pointer;
   transition: background 0.15s;
+  flex-shrink: 0;
 }
 
 .toolbar-btn:hover {
@@ -704,27 +816,113 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
   gap: 5px;
 }
 
-.plan-mode-badge {
-  display: flex;
-  align-items: center;
-  padding: 4px 10px;
-  border: 1px solid var(--accent-color);
-  border-radius: var(--radius-full);
-  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
-  color: var(--accent-color);
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s, opacity 0.15s;
+.toolbar-btn--plan {
+  gap: 5px;
+  border: 1px solid transparent;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s,
+    opacity 0.15s;
 }
 
-.plan-mode-badge:hover {
+.toolbar-btn--plan-inactive {
+  opacity: 0.55;
+  color: var(--content-text-tertiary);
+  border-color: var(--sidebar-border);
+  border-style: dashed;
+}
+
+.toolbar-btn--plan-inactive:hover {
+  opacity: 0.85;
+  color: var(--content-text-secondary);
+  border-color: var(--content-text-tertiary);
+  background: var(--btn-ghost-hover);
+}
+
+.toolbar-btn--plan-active {
+  color: var(--accent-color);
+  border-color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+}
+
+.toolbar-btn--plan-active:hover {
   background: color-mix(in srgb, var(--accent-color) 20%, transparent);
-  opacity: 0.9;
+}
+
+.toolbar-btn--plan-inactive .plan-mode-state-icon {
+  color: var(--content-text-tertiary);
+}
+
+.toolbar-btn--plan-active .plan-mode-state-icon {
+  color: var(--accent-color);
+}
+
+.plan-mode-state-icon {
+  flex-shrink: 0;
+}
+
+.plan-mode-label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.plan-refs-area {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px 0;
+}
+
+.plan-ref-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 10px;
+  border: 1px solid var(--accent-color);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+  font-size: var(--font-size-sm);
+  color: var(--accent-color);
+}
+
+.plan-ref-icon {
+  font-size: 12px;
+}
+
+.plan-ref-title {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-ref-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--accent-color);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.plan-ref-remove:hover {
+  background: color-mix(in srgb, var(--accent-color) 25%, transparent);
 }
 
 .approval-icon {
   font-size: 13px;
+}
+
+.approval-label {
+  white-space: nowrap;
 }
 
 .chevron {
@@ -735,6 +933,7 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
 .send-btn {
   width: 28px;
   height: 28px;
+  flex-shrink: 0;
   border-radius: var(--radius-full);
   border: none;
   background: var(--btn-primary-bg);
@@ -758,6 +957,7 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
 .stop-btn {
   width: 28px;
   height: 28px;
+  flex-shrink: 0;
   border-radius: var(--radius-full);
   border: 2px solid var(--content-text);
   background: transparent;

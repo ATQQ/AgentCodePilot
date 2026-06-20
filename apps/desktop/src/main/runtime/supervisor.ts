@@ -1,10 +1,11 @@
 import { logInfo, logError } from '../logger'
 import { agentRegistry } from './registry'
+import { ensureAgentRegistry } from './agent-registry-init'
 import type { AgentAdapter, AgentRunInput } from './types'
 import type { AgentEvent } from '../../preload/types'
 
 const MAX_RETRIES = 2
-const activeRuns = new Map<string, { adapter: AgentAdapter; retries: number }>()
+const activeRuns = new Map<string, { adapter: AgentAdapter; retries: number; messageId: string }>()
 
 function formatRunContext(input: AgentRunInput, attempt = 0): string {
   const parts = [
@@ -34,20 +35,23 @@ export function supervisedRun(
   input: AgentRunInput,
   emit: (event: AgentEvent) => void
 ): void {
-  const adapter = agentRegistry.get(input.agentId)
-  if (!adapter) {
-    emit({
-      type: 'message.error',
-      conversationId: input.conversationId,
-      error: `Agent "${input.agentId}" not found`
-    })
-    return
-  }
+  void ensureAgentRegistry().then(() => {
+    const adapter = agentRegistry.get(input.agentId)
+    if (!adapter) {
+      emit({
+        type: 'message.error',
+        conversationId: input.conversationId,
+        messageId: input.messageId,
+        error: `Agent "${input.agentId}" not found`
+      })
+      return
+    }
 
-  activeRuns.set(input.conversationId, { adapter, retries: 0 })
-  logInfo('Supervisor', `Starting run: ${formatRunContext(input)}`)
+    activeRuns.set(input.conversationId, { adapter, retries: 0, messageId: input.messageId })
+    logInfo('Supervisor', `Starting run: ${formatRunContext(input)}`)
 
-  runWithRetry(adapter, input, emit, 0)
+    runWithRetry(adapter, input, emit, 0)
+  })
 }
 
 function runWithRetry(
@@ -56,9 +60,17 @@ function runWithRetry(
   emit: (event: AgentEvent) => void,
   attempt: number
 ): void {
-  adapter.run(input, emit).catch((error: unknown) => {
+  adapter
+    .run(input, emit)
+    .then(() => {
+      const entry = activeRuns.get(input.conversationId)
+      if (entry?.messageId === input.messageId) {
+        activeRuns.delete(input.conversationId)
+      }
+    })
+    .catch((error: unknown) => {
     const entry = activeRuns.get(input.conversationId)
-    if (!entry) return
+    if (!entry || entry.messageId !== input.messageId) return
 
     const errMsg = error instanceof Error ? error.message : String(error)
     logError('Supervisor', `Run failed (attempt ${attempt + 1}): ${errMsg}`, error)
@@ -72,6 +84,7 @@ function runWithRetry(
       emit({
         type: 'message.error',
         conversationId: input.conversationId,
+        messageId: input.messageId,
         error: `Agent crashed after ${attempt + 1} attempt(s): ${errMsg}`
       })
     }

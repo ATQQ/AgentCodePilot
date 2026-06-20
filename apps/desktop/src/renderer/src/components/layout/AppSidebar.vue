@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import {
   EditPen,
   Search,
-  MagicStick,
+  // MagicStick,
   Setting,
   FolderOpened,
   Folder,
@@ -14,6 +14,7 @@ import {
 } from '@element-plus/icons-vue'
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
 import { useChatStore } from '@renderer/stores/chat.store'
+import { useLayoutStore } from '@renderer/stores/layout.store'
 import { formatRelativeTime } from '@renderer/composables/useRelativeTime'
 import { formatShortcutKey } from '@renderer/composables/useShortcutLabel'
 import type { Conversation } from '@renderer/types'
@@ -23,12 +24,13 @@ const router = useRouter()
 const route = useRoute()
 const workspaceStore = useWorkspaceStore()
 const chatStore = useChatStore()
+const layoutStore = useLayoutStore()
 const openSearch = inject<() => void>('openSearch', () => {})
 
 const topNavItems = [
   { name: 'new-chat', path: '/', icon: EditPen, labelKey: 'sidebar.newChat', shortcutKey: 'n' },
-  { name: 'search', path: '/search', icon: Search, labelKey: 'sidebar.search', shortcutKey: 'g' },
-  { name: 'skills', path: '/skills', icon: MagicStick, labelKey: 'sidebar.skills' }
+  { name: 'search', path: '/search', icon: Search, labelKey: 'sidebar.search', shortcutKey: 'g' }
+  // { name: 'skills', path: '/skills', icon: MagicStick, labelKey: 'sidebar.skills' }
 ]
 
 const collapsedProjects = ref<Set<string>>(new Set())
@@ -47,7 +49,9 @@ const contextMenu = reactive({
 const renaming = ref<{ id: string; title: string } | null>(null)
 const renameInputRef = ref<HTMLInputElement | null>(null)
 
-const projectRenaming = ref<{ id: string; name: string; type: 'project' | 'workspace' } | null>(null)
+const projectRenaming = ref<{ id: string; name: string; type: 'project' | 'workspace' } | null>(
+  null
+)
 const projectRenameInputRef = ref<HTMLInputElement | null>(null)
 
 const projectMenu = reactive({
@@ -64,7 +68,12 @@ const projectMenuRef = ref<HTMLElement | null>(null)
 const CONTEXT_MENU_ESTIMATED_HEIGHT = 320
 const CONTEXT_MENU_MIN_WIDTH = 180
 
-function clampMenuPosition(x: number, y: number, menuWidth: number, menuHeight: number): { x: number; y: number } {
+function clampMenuPosition(
+  x: number,
+  y: number,
+  menuWidth: number,
+  menuHeight: number
+): { x: number; y: number } {
   const padding = 8
   const maxX = window.innerWidth - menuWidth - padding
   const maxY = window.innerHeight - menuHeight - padding
@@ -98,7 +107,12 @@ async function openContextMenu(x: number, y: number, conv: Conversation): Promis
   contextMenu.y = pos.y
 }
 
-async function openProjectMenu(x: number, y: number, id: string, type: 'project' | 'workspace'): Promise<void> {
+async function openProjectMenu(
+  x: number,
+  y: number,
+  id: string,
+  type: 'project' | 'workspace'
+): Promise<void> {
   projectMenu.visible = true
   projectMenu.x = x
   projectMenu.y = y
@@ -163,6 +177,14 @@ function newChatForProject(e: MouseEvent, projectId: string): void {
   router.push('/')
 }
 
+function openProjectPlans(e: MouseEvent, projectId: string): void {
+  e.stopPropagation()
+  const ownerType = workspaceStore.workspaces.some((w) => w.id === projectId)
+    ? 'workspace'
+    : 'project'
+  layoutStore.openPlansPanel(undefined, { scope: 'owner', ownerType, ownerId: projectId })
+}
+
 function getConvTitle(conv: Conversation): string {
   if (conv.title) return conv.title
   if (conv.messages.length > 0) {
@@ -203,7 +225,10 @@ function handlePin(): void {
 
 function handleRename(): void {
   if (!contextMenu.conv) return
-  renaming.value = { id: contextMenu.conv.id, title: contextMenu.conv.title || getConvTitle(contextMenu.conv) }
+  renaming.value = {
+    id: contextMenu.conv.id,
+    title: contextMenu.conv.title || getConvTitle(contextMenu.conv)
+  }
   closeContextMenu()
   setTimeout(() => renameInputRef.value?.focus(), 50)
 }
@@ -330,7 +355,7 @@ onUnmounted(() => {
 <template>
   <aside class="sidebar">
     <div class="sidebar-drag-area"></div>
-    <div class="sidebar-content">
+    <div class="sidebar-content elegant-scroll">
       <nav class="sidebar-nav">
         <button
           v-for="item in topNavItems"
@@ -341,209 +366,273 @@ onUnmounted(() => {
         >
           <el-icon :size="15"><component :is="item.icon" /></el-icon>
           <span class="nav-item-label">{{ t(item.labelKey) }}</span>
-          <span v-if="item.shortcutKey" class="nav-shortcut">{{ formatShortcutKey(item.shortcutKey) }}</span>
+          <span v-if="item.shortcutKey" class="nav-shortcut">{{
+            formatShortcutKey(item.shortcutKey)
+          }}</span>
         </button>
       </nav>
 
       <div v-if="workspaceStore.workspaces.length" class="sidebar-section">
         <div class="section-header" @click="toggleSectionCollapse('workspaces')">
           <span class="section-label">{{ t('sidebar.workspaces') }}</span>
-          <el-icon :size="10" class="section-collapse-icon" :class="{ collapsed: isSectionCollapsed('workspaces') }">
+          <el-icon
+            :size="10"
+            class="section-collapse-icon"
+            :class="{ collapsed: isSectionCollapsed('workspaces') }"
+          >
             <ArrowDown />
           </el-icon>
         </div>
 
         <template v-if="!isSectionCollapsed('workspaces')">
-        <div
-          v-for="ws in workspaceStore.workspaces"
-          :key="ws.id"
-          class="project-group"
-        >
-          <div
-            class="project-header"
-            :class="{ active: isProjectHeaderActive(ws.id) }"
-            @click="toggleProjectCollapse(ws.id)"
-          >
-            <el-icon :size="10" class="collapse-icon" :class="{ collapsed: isProjectCollapsed(ws.id) }">
-              <ArrowDown />
-            </el-icon>
-            <el-icon :size="13"><Folder /></el-icon>
-            <template v-if="projectRenaming && projectRenaming.id === ws.id">
-              <input
-                ref="projectRenameInputRef"
-                v-model="projectRenaming.name"
-                class="rename-input project-rename-input"
-                @click.stop
-                @keydown="handleProjectRenameKeydown"
-                @blur="confirmProjectRename"
-              />
-            </template>
-            <template v-else>
-              <span class="project-name" :title="ws.folders.join('\n')">{{ ws.name }}</span>
-            </template>
-            <div class="project-actions">
-              <button class="action-btn" @click="showProjectMenu($event, ws.id, 'workspace')">
-                <el-icon :size="12"><MoreFilled /></el-icon>
-              </button>
-              <button class="action-btn" @click="newChatForProject($event, ws.id)">
-                <el-icon :size="12"><EditPen /></el-icon>
-              </button>
-            </div>
-          </div>
-
-          <div v-if="!isProjectCollapsed(ws.id)" class="project-conversations">
-            <div class="ws-sub-projects">
-              <div
-                v-for="proj in workspaceStore.getProjectsForWorkspace(ws.id)"
-                :key="proj.id"
-                class="ws-sub-project-item"
-                :title="proj.path"
+          <div v-for="ws in workspaceStore.workspaces" :key="ws.id" class="project-group">
+            <div
+              class="project-header"
+              :class="{ active: isProjectHeaderActive(ws.id) }"
+              @click="toggleProjectCollapse(ws.id)"
+            >
+              <el-icon
+                :size="10"
+                class="collapse-icon"
+                :class="{ collapsed: isProjectCollapsed(ws.id) }"
               >
-                <el-icon :size="11"><FolderOpened /></el-icon>
-                <span class="ws-sub-project-name">{{ proj.name }}</span>
-              </div>
-            </div>
-            <template v-if="chatStore.getConversationsByProject(ws.id).length">
-              <div
-                v-for="conv in chatStore.getConversationsByProject(ws.id)"
-                :key="conv.id"
-                class="conv-item"
-                :class="{ active: chatStore.activeConversationId === conv.id }"
-                @click="openConversation(conv.id)"
-                @contextmenu="showContextMenu($event, conv)"
-              >
-                <template v-if="renaming && renaming.id === conv.id">
-                  <input
-                    ref="renameInputRef"
-                    v-model="renaming.title"
-                    class="rename-input"
-                    @click.stop
-                    @keydown="handleRenameKeydown"
-                    @blur="confirmRename"
-                  />
-                </template>
-                <template v-else>
-                  <button
-                    class="conv-pin-btn"
-                    :class="{ pinned: conv.pinned }"
-                    @click="handleQuickPin($event, conv)"
-                    :title="conv.pinned ? '取消置顶' : '置顶'"
+                <ArrowDown />
+              </el-icon>
+              <el-icon :size="13"><Folder /></el-icon>
+              <template v-if="projectRenaming && projectRenaming.id === ws.id">
+                <input
+                  ref="projectRenameInputRef"
+                  v-model="projectRenaming.name"
+                  class="rename-input project-rename-input"
+                  @click.stop
+                  @keydown="handleProjectRenameKeydown"
+                  @blur="confirmProjectRename"
+                />
+              </template>
+              <template v-else>
+                <span class="project-name" :title="ws.folders.join('\n')">{{ ws.name }}</span>
+              </template>
+              <div class="project-actions">
+                <button
+                  class="action-btn"
+                  :title="t('plans.viewProjectPlans')"
+                  @click="openProjectPlans($event, ws.id)"
+                >
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
                   >
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-                      <path d="M9.828.722a.5.5 0 0 1 .354.146l4.95 4.95a.5.5 0 0 1-.707.707l-.55-.55-3.18 3.18a5.5 5.5 0 0 1-1.32 4.988.5.5 0 0 1-.707 0L5.843 11.32l-3.89 3.89a.5.5 0 0 1-.707-.708l3.89-3.89-2.824-2.823a.5.5 0 0 1 0-.707 5.5 5.5 0 0 1 4.988-1.32l3.18-3.18-.55-.55a.5.5 0 0 1 .354-.854z"/>
-                    </svg>
-                  </button>
-                  <span class="conv-title">{{ getConvTitle(conv) }}</span>
-                  <span v-if="chatStore.hasPendingApproval(conv.id)" class="conv-approval-tag">{{ t('approval.waitingTag') }}</span>
-                  <span class="conv-time">{{ formatRelativeTime(conv.updatedAt) }}</span>
-                  <button class="conv-more-btn" @click="showContextMenuFromButton($event, conv)">
-                    <el-icon :size="12"><MoreFilled /></el-icon>
-                  </button>
-                </template>
+                    <rect x="2" y="1" width="12" height="14" rx="1.5" />
+                    <line x1="5" y1="5" x2="11" y2="5" />
+                    <line x1="5" y1="8" x2="11" y2="8" />
+                    <line x1="5" y1="11" x2="9" y2="11" />
+                  </svg>
+                </button>
+                <button class="action-btn" @click="showProjectMenu($event, ws.id, 'workspace')">
+                  <el-icon :size="12"><MoreFilled /></el-icon>
+                </button>
+                <button class="action-btn" @click="newChatForProject($event, ws.id)">
+                  <el-icon :size="12"><EditPen /></el-icon>
+                </button>
               </div>
-            </template>
-            <div v-else class="no-conversations">{{ t('sidebar.noChats') }}</div>
+            </div>
+
+            <div v-if="!isProjectCollapsed(ws.id)" class="project-conversations">
+              <div class="ws-sub-projects">
+                <div
+                  v-for="proj in workspaceStore.getProjectsForWorkspace(ws.id)"
+                  :key="proj.id"
+                  class="ws-sub-project-item"
+                  :title="proj.path"
+                >
+                  <el-icon :size="11"><FolderOpened /></el-icon>
+                  <span class="ws-sub-project-name">{{ proj.name }}</span>
+                </div>
+              </div>
+              <template v-if="chatStore.conversationsByProject.get(ws.id)?.length">
+                <div
+                  v-for="conv in chatStore.conversationsByProject.get(ws.id)"
+                  :key="conv.id"
+                  class="conv-item"
+                  :class="{ active: chatStore.activeConversationId === conv.id }"
+                  @click="openConversation(conv.id)"
+                  @contextmenu="showContextMenu($event, conv)"
+                >
+                  <template v-if="renaming && renaming.id === conv.id">
+                    <input
+                      ref="renameInputRef"
+                      v-model="renaming.title"
+                      class="rename-input"
+                      @click.stop
+                      @keydown="handleRenameKeydown"
+                      @blur="confirmRename"
+                    />
+                  </template>
+                  <template v-else>
+                    <button
+                      class="conv-pin-btn"
+                      :class="{ pinned: conv.pinned }"
+                      :title="conv.pinned ? '取消置顶' : '置顶'"
+                      @click="handleQuickPin($event, conv)"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                        <path
+                          d="M9.828.722a.5.5 0 0 1 .354.146l4.95 4.95a.5.5 0 0 1-.707.707l-.55-.55-3.18 3.18a5.5 5.5 0 0 1-1.32 4.988.5.5 0 0 1-.707 0L5.843 11.32l-3.89 3.89a.5.5 0 0 1-.707-.708l3.89-3.89-2.824-2.823a.5.5 0 0 1 0-.707 5.5 5.5 0 0 1 4.988-1.32l3.18-3.18-.55-.55a.5.5 0 0 1 .354-.854z"
+                        />
+                      </svg>
+                    </button>
+                    <span class="conv-title">{{ getConvTitle(conv) }}</span>
+                    <span v-if="chatStore.hasPendingApproval(conv.id)" class="conv-approval-tag">{{
+                      t('approval.waitingTag')
+                    }}</span>
+                    <span class="conv-time">{{ formatRelativeTime(conv.updatedAt) }}</span>
+                    <button class="conv-more-btn" @click="showContextMenuFromButton($event, conv)">
+                      <el-icon :size="12"><MoreFilled /></el-icon>
+                    </button>
+                  </template>
+                </div>
+              </template>
+              <div v-else class="no-conversations">{{ t('sidebar.noChats') }}</div>
+            </div>
           </div>
-        </div>
         </template>
       </div>
 
       <div class="sidebar-section">
         <div class="section-header" @click="toggleSectionCollapse('projects')">
           <span class="section-label">{{ t('sidebar.projects') }}</span>
-          <el-icon :size="10" class="section-collapse-icon" :class="{ collapsed: isSectionCollapsed('projects') }">
+          <el-icon
+            :size="10"
+            class="section-collapse-icon"
+            :class="{ collapsed: isSectionCollapsed('projects') }"
+          >
             <ArrowDown />
           </el-icon>
         </div>
 
         <template v-if="!isSectionCollapsed('projects')">
-        <div
-          v-for="proj in workspaceStore.standaloneProjects"
-          :key="proj.id"
-          class="project-group"
-        >
           <div
-            class="project-header"
-            :class="{ active: isProjectHeaderActive(proj.id) }"
-            @click="toggleProjectCollapse(proj.id)"
+            v-for="proj in workspaceStore.standaloneProjects"
+            :key="proj.id"
+            class="project-group"
           >
-            <el-icon :size="10" class="collapse-icon" :class="{ collapsed: isProjectCollapsed(proj.id) }">
-              <ArrowDown />
-            </el-icon>
-            <el-icon :size="13"><FolderOpened /></el-icon>
-            <template v-if="projectRenaming && projectRenaming.id === proj.id">
-              <input
-                ref="projectRenameInputRef"
-                v-model="projectRenaming.name"
-                class="rename-input project-rename-input"
-                @click.stop
-                @keydown="handleProjectRenameKeydown"
-                @blur="confirmProjectRename"
-              />
-            </template>
-            <template v-else>
-              <span class="project-name">{{ proj.name }}</span>
-            </template>
-            <div class="project-actions">
-              <button class="action-btn" @click="showProjectMenu($event, proj.id, 'project')">
-                <el-icon :size="12"><MoreFilled /></el-icon>
-              </button>
-              <button class="action-btn" @click="newChatForProject($event, proj.id)">
-                <el-icon :size="12"><EditPen /></el-icon>
-              </button>
+            <div
+              class="project-header"
+              :class="{ active: isProjectHeaderActive(proj.id) }"
+              @click="toggleProjectCollapse(proj.id)"
+            >
+              <el-icon
+                :size="10"
+                class="collapse-icon"
+                :class="{ collapsed: isProjectCollapsed(proj.id) }"
+              >
+                <ArrowDown />
+              </el-icon>
+              <el-icon :size="13"><FolderOpened /></el-icon>
+              <template v-if="projectRenaming && projectRenaming.id === proj.id">
+                <input
+                  ref="projectRenameInputRef"
+                  v-model="projectRenaming.name"
+                  class="rename-input project-rename-input"
+                  @click.stop
+                  @keydown="handleProjectRenameKeydown"
+                  @blur="confirmProjectRename"
+                />
+              </template>
+              <template v-else>
+                <span class="project-name">{{ proj.name }}</span>
+              </template>
+              <div class="project-actions">
+                <button
+                  class="action-btn"
+                  :title="t('plans.viewProjectPlans')"
+                  @click="openProjectPlans($event, proj.id)"
+                >
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <rect x="2" y="1" width="12" height="14" rx="1.5" />
+                    <line x1="5" y1="5" x2="11" y2="5" />
+                    <line x1="5" y1="8" x2="11" y2="8" />
+                    <line x1="5" y1="11" x2="9" y2="11" />
+                  </svg>
+                </button>
+                <button class="action-btn" @click="showProjectMenu($event, proj.id, 'project')">
+                  <el-icon :size="12"><MoreFilled /></el-icon>
+                </button>
+                <button class="action-btn" @click="newChatForProject($event, proj.id)">
+                  <el-icon :size="12"><EditPen /></el-icon>
+                </button>
+              </div>
+            </div>
+
+            <div v-if="!isProjectCollapsed(proj.id)" class="project-conversations">
+              <template v-if="chatStore.conversationsByProject.get(proj.id)?.length">
+                <div
+                  v-for="conv in chatStore.conversationsByProject.get(proj.id)"
+                  :key="conv.id"
+                  class="conv-item"
+                  :class="{ active: chatStore.activeConversationId === conv.id }"
+                  @click="openConversation(conv.id)"
+                  @contextmenu="showContextMenu($event, conv)"
+                >
+                  <template v-if="renaming && renaming.id === conv.id">
+                    <input
+                      ref="renameInputRef"
+                      v-model="renaming.title"
+                      class="rename-input"
+                      @click.stop
+                      @keydown="handleRenameKeydown"
+                      @blur="confirmRename"
+                    />
+                  </template>
+                  <template v-else>
+                    <button
+                      class="conv-pin-btn"
+                      :class="{ pinned: conv.pinned }"
+                      :title="conv.pinned ? '取消置顶' : '置顶'"
+                      @click="handleQuickPin($event, conv)"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                        <path
+                          d="M9.828.722a.5.5 0 0 1 .354.146l4.95 4.95a.5.5 0 0 1-.707.707l-.55-.55-3.18 3.18a5.5 5.5 0 0 1-1.32 4.988.5.5 0 0 1-.707 0L5.843 11.32l-3.89 3.89a.5.5 0 0 1-.707-.708l3.89-3.89-2.824-2.823a.5.5 0 0 1 0-.707 5.5 5.5 0 0 1 4.988-1.32l3.18-3.18-.55-.55a.5.5 0 0 1 .354-.854z"
+                        />
+                      </svg>
+                    </button>
+                    <span class="conv-title">{{ getConvTitle(conv) }}</span>
+                    <span v-if="chatStore.hasPendingApproval(conv.id)" class="conv-approval-tag">{{
+                      t('approval.waitingTag')
+                    }}</span>
+                    <span class="conv-time">{{ formatRelativeTime(conv.updatedAt) }}</span>
+                    <button class="conv-more-btn" @click="showContextMenuFromButton($event, conv)">
+                      <el-icon :size="12"><MoreFilled /></el-icon>
+                    </button>
+                  </template>
+                </div>
+              </template>
+              <div v-else class="no-conversations">{{ t('sidebar.noChats') }}</div>
             </div>
           </div>
-
-          <div v-if="!isProjectCollapsed(proj.id)" class="project-conversations">
-            <template v-if="chatStore.getConversationsByProject(proj.id).length">
-              <div
-                v-for="conv in chatStore.getConversationsByProject(proj.id)"
-                :key="conv.id"
-                class="conv-item"
-                :class="{ active: chatStore.activeConversationId === conv.id }"
-                @click="openConversation(conv.id)"
-                @contextmenu="showContextMenu($event, conv)"
-              >
-                <template v-if="renaming && renaming.id === conv.id">
-                  <input
-                    ref="renameInputRef"
-                    v-model="renaming.title"
-                    class="rename-input"
-                    @click.stop
-                    @keydown="handleRenameKeydown"
-                    @blur="confirmRename"
-                  />
-                </template>
-                <template v-else>
-                  <button
-                    class="conv-pin-btn"
-                    :class="{ pinned: conv.pinned }"
-                    @click="handleQuickPin($event, conv)"
-                    :title="conv.pinned ? '取消置顶' : '置顶'"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-                      <path d="M9.828.722a.5.5 0 0 1 .354.146l4.95 4.95a.5.5 0 0 1-.707.707l-.55-.55-3.18 3.18a5.5 5.5 0 0 1-1.32 4.988.5.5 0 0 1-.707 0L5.843 11.32l-3.89 3.89a.5.5 0 0 1-.707-.708l3.89-3.89-2.824-2.823a.5.5 0 0 1 0-.707 5.5 5.5 0 0 1 4.988-1.32l3.18-3.18-.55-.55a.5.5 0 0 1 .354-.854z"/>
-                    </svg>
-                  </button>
-                  <span class="conv-title">{{ getConvTitle(conv) }}</span>
-                  <span v-if="chatStore.hasPendingApproval(conv.id)" class="conv-approval-tag">{{ t('approval.waitingTag') }}</span>
-                  <span class="conv-time">{{ formatRelativeTime(conv.updatedAt) }}</span>
-                  <button class="conv-more-btn" @click="showContextMenuFromButton($event, conv)">
-                    <el-icon :size="12"><MoreFilled /></el-icon>
-                  </button>
-                </template>
-              </div>
-            </template>
-            <div v-else class="no-conversations">{{ t('sidebar.noChats') }}</div>
-          </div>
-        </div>
         </template>
       </div>
 
       <div class="sidebar-section">
         <div class="section-header" @click="toggleSectionCollapse('conversations')">
           <span class="section-label">{{ t('sidebar.conversations') }}</span>
-          <el-icon :size="10" class="section-collapse-icon" :class="{ collapsed: isSectionCollapsed('conversations') }">
+          <el-icon
+            :size="10"
+            class="section-collapse-icon"
+            :class="{ collapsed: isSectionCollapsed('conversations') }"
+          >
             <ArrowDown />
           </el-icon>
           <div class="section-actions">
@@ -553,9 +642,9 @@ onUnmounted(() => {
           </div>
         </div>
         <div v-if="!isSectionCollapsed('conversations')" class="project-conversations">
-          <template v-if="chatStore.getOrphanConversations().length">
+          <template v-if="chatStore.orphanConversations.length">
             <div
-              v-for="conv in chatStore.getOrphanConversations()"
+              v-for="conv in chatStore.orphanConversations"
               :key="conv.id"
               class="conv-item"
               :class="{ active: chatStore.activeConversationId === conv.id }"
@@ -576,15 +665,19 @@ onUnmounted(() => {
                 <button
                   class="conv-pin-btn"
                   :class="{ pinned: conv.pinned }"
-                  @click="handleQuickPin($event, conv)"
                   :title="conv.pinned ? '取消置顶' : '置顶'"
+                  @click="handleQuickPin($event, conv)"
                 >
                   <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M9.828.722a.5.5 0 0 1 .354.146l4.95 4.95a.5.5 0 0 1-.707.707l-.55-.55-3.18 3.18a5.5 5.5 0 0 1-1.32 4.988.5.5 0 0 1-.707 0L5.843 11.32l-3.89 3.89a.5.5 0 0 1-.707-.708l3.89-3.89-2.824-2.823a.5.5 0 0 1 0-.707 5.5 5.5 0 0 1 4.988-1.32l3.18-3.18-.55-.55a.5.5 0 0 1 .354-.854z"/>
+                    <path
+                      d="M9.828.722a.5.5 0 0 1 .354.146l4.95 4.95a.5.5 0 0 1-.707.707l-.55-.55-3.18 3.18a5.5 5.5 0 0 1-1.32 4.988.5.5 0 0 1-.707 0L5.843 11.32l-3.89 3.89a.5.5 0 0 1-.707-.708l3.89-3.89-2.824-2.823a.5.5 0 0 1 0-.707 5.5 5.5 0 0 1 4.988-1.32l3.18-3.18-.55-.55a.5.5 0 0 1 .354-.854z"
+                    />
                   </svg>
                 </button>
                 <span class="conv-title">{{ getConvTitle(conv) }}</span>
-                <span v-if="chatStore.hasPendingApproval(conv.id)" class="conv-approval-tag">{{ t('approval.waitingTag') }}</span>
+                <span v-if="chatStore.hasPendingApproval(conv.id)" class="conv-approval-tag">{{
+                  t('approval.waitingTag')
+                }}</span>
                 <span class="conv-time">{{ formatRelativeTime(conv.updatedAt) }}</span>
                 <button class="conv-more-btn" @click="showContextMenuFromButton($event, conv)">
                   <el-icon :size="12"><MoreFilled /></el-icon>
@@ -595,7 +688,6 @@ onUnmounted(() => {
           <div v-else class="no-conversations">{{ t('sidebar.noChats') }}</div>
         </div>
       </div>
-
     </div>
 
     <div class="sidebar-footer">
@@ -628,7 +720,11 @@ onUnmounted(() => {
             <span>重命名</span>
           </button>
           <div class="ctx-divider"></div>
-          <div class="ctx-submenu-wrapper" @mouseenter="contextMenu.showCopySubmenu = true" @mouseleave="contextMenu.showCopySubmenu = false">
+          <div
+            class="ctx-submenu-wrapper"
+            @mouseenter="contextMenu.showCopySubmenu = true"
+            @mouseleave="contextMenu.showCopySubmenu = false"
+          >
             <button class="ctx-item">
               <span class="ctx-icon">&#x1F4CB;</span>
               <span>复制</span>
@@ -693,7 +789,7 @@ onUnmounted(() => {
 .sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
-  height: 100vh;
+  height: 100%;
   background: var(--sidebar-bg-translucent, rgba(249, 250, 251, 0.82));
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -710,31 +806,10 @@ onUnmounted(() => {
 
 .sidebar-content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 0 var(--spacing-sm);
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-}
-
-.sidebar-content:hover {
-  scrollbar-color: color-mix(in srgb, var(--sidebar-section-title) 30%, transparent) transparent;
-}
-
-.sidebar-content::-webkit-scrollbar {
-  width: 4px;
-}
-
-.sidebar-content::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.sidebar-content::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 4px;
-}
-
-.sidebar-content:hover::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--sidebar-section-title) 30%, transparent);
+  --scroll-thumb: var(--sidebar-section-title);
 }
 
 .sidebar-nav {
@@ -793,6 +868,7 @@ onUnmounted(() => {
 }
 
 .sidebar-footer {
+  flex-shrink: 0;
   padding: var(--spacing-sm);
   border-top: 1px solid var(--sidebar-border);
 }
@@ -810,7 +886,9 @@ onUnmounted(() => {
   font-size: var(--font-size-sm);
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -867,7 +945,9 @@ onUnmounted(() => {
   cursor: pointer;
   color: var(--sidebar-text);
   font-size: var(--font-size-sm);
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .project-header:hover {
@@ -919,7 +999,9 @@ onUnmounted(() => {
   background: transparent;
   color: var(--sidebar-text);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .action-btn:hover {
@@ -945,7 +1027,9 @@ onUnmounted(() => {
   font-size: var(--font-size-xs);
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
   gap: 0;
 }
 
@@ -1170,7 +1254,9 @@ html.dark .conv-approval-tag {
 
 .ctx-fade-enter-active,
 .ctx-fade-leave-active {
-  transition: opacity 0.12s, transform 0.12s;
+  transition:
+    opacity 0.12s,
+    transform 0.12s;
 }
 
 .ctx-fade-enter-from,

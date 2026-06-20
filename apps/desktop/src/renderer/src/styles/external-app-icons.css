@@ -1,0 +1,32 @@
+:root {
+  --external-app-icon-bg: color-mix(in srgb, var(--content-text) 7%, transparent);
+  --external-app-icon-border: color-mix(in srgb, var(--content-text) 12%, transparent);
+}
+
+.external-app-icon-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  border-radius: 4px;
+  background: var(--external-app-icon-bg);
+  box-shadow: inset 0 0 0 1px var(--external-app-icon-border);
+  overflow: hidden;
+}
+
+.external-app-icon-wrap--inset {
+  padding: 2px;
+}
+
+.external-app-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  display: block;
+}
+
+html.dark .external-app-icon--mono {
+  filter: invert(1) brightness(1.08);
+}

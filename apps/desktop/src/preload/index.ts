@@ -4,16 +4,23 @@ import type {
   AgentEvent,
   AgentConfigSettings,
   ApprovalRespondPayload,
-  AttachmentPayload,
   CreateConversationPayload,
   SendMessagePayload,
+  SendMessageResult,
   SettingsPayload,
   ConversationUpdatePayload,
   ProjectPayload,
   WorkspacePayload,
-  ProviderConfigPayload
+  ProviderConfigPayload,
+  GitDiffScope,
+  TerminalDataEvent,
+  TerminalExitEvent,
+  PlansListPayload,
+  PlanDetail,
+  OpenPathPayload
 } from './types'
 import { IPC_CHANNELS } from './types'
+import { cloneForIpc } from '../shared/ipc-clone'
 
 const agentAPI = {
   agents: {
@@ -26,11 +33,11 @@ const agentAPI = {
   },
   chat: {
     createConversation: (payload: CreateConversationPayload) =>
-      ipcRenderer.invoke(IPC_CHANNELS.CHAT_CREATE, payload),
+      ipcRenderer.invoke(IPC_CHANNELS.CHAT_CREATE, cloneForIpc(payload)),
     sendMessage: (payload: SendMessagePayload) =>
-      ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND, payload) as Promise<AttachmentPayload[] | undefined>,
+      ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND, cloneForIpc(payload)) as Promise<SendMessageResult>,
     sendFirstMessage: (payload: SendMessagePayload) =>
-      ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND_FIRST, payload),
+      ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND_FIRST, cloneForIpc(payload)),
     stop: (conversationId: string) => ipcRenderer.invoke(IPC_CHANNELS.CHAT_STOP, conversationId),
     onAgentEvent: (callback: (event: AgentEvent) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, data: AgentEvent): void =>
@@ -68,7 +75,9 @@ const agentAPI = {
   projects: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_LIST),
     save: (payload: ProjectPayload) => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_SAVE, payload),
-    delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_DELETE, id)
+    delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_DELETE, id),
+    restoreByPath: (path: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_RESTORE_BY_PATH, path)
   },
   workspaces: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACES_LIST),
@@ -100,7 +109,69 @@ const agentAPI = {
     openAttachment: (filePath: string, type: 'image' | 'file') =>
       ipcRenderer.invoke(IPC_CHANNELS.FILE_OPEN_ATTACHMENT, filePath, type),
     getImageDataUrl: (filePath: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.FILE_GET_IMAGE_DATA_URL, filePath) as Promise<string | null>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_GET_IMAGE_DATA_URL, filePath) as Promise<string | null>,
+    list: (dirPath: string, roots: string[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_LIST, dirPath, roots),
+    read: (filePath: string, roots: string[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_READ, filePath, roots),
+    write: (filePath: string, content: string, roots: string[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_WRITE, filePath, content, roots),
+    delete: (filePath: string, roots: string[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_DELETE, filePath, roots),
+    copy: (srcPath: string, destPath: string, roots: string[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_COPY, srcPath, destPath, roots)
+  },
+  git: {
+    status: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STATUS, cwd),
+    changedFiles: (cwd: string, scope: GitDiffScope) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_CHANGED_FILES, cwd, scope),
+    diff: (cwd: string, file: string, staged?: boolean) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF, cwd, file, staged),
+    stage: (cwd: string, paths: string[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_STAGE, cwd, paths),
+    unstage: (cwd: string, paths: string[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_UNSTAGE, cwd, paths),
+    discard: (cwd: string, paths: string[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_DISCARD, cwd, paths),
+    commit: (cwd: string, message: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_COMMIT, cwd, message),
+    push: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT_PUSH, cwd),
+    stagedDiff: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STAGED_DIFF, cwd),
+    recentLog: (cwd: string, limit?: number) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GIT_RECENT_LOG, cwd, limit)
+  },
+  agent: {
+    runUtility: (payload: import('./types').AgentUtilityPayload) =>
+      ipcRenderer.invoke(IPC_CHANNELS.AGENT_RUN_UTILITY, payload)
+  },
+  terminal: {
+    create: (scopeKey: string, cwd: string, title?: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_CREATE, scopeKey, cwd, title),
+    write: (terminalId: string, data: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_WRITE, terminalId, data),
+    resize: (terminalId: string, cols: number, rows: number) =>
+      ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_RESIZE, terminalId, cols, rows),
+    kill: (terminalId: string) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_KILL, terminalId),
+    list: (scopeKey: string) => ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_LIST, scopeKey),
+    onData: (callback: (event: TerminalDataEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: TerminalDataEvent): void =>
+        callback(data)
+      ipcRenderer.on(IPC_CHANNELS.TERMINAL_DATA, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_DATA, listener)
+    },
+    onExit: (callback: (event: TerminalExitEvent) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, data: TerminalExitEvent): void =>
+        callback(data)
+      ipcRenderer.on(IPC_CHANNELS.TERMINAL_EXIT, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TERMINAL_EXIT, listener)
+    }
+  },
+  plans: {
+    list: (payload: PlansListPayload) => ipcRenderer.invoke(IPC_CHANNELS.PLANS_LIST, payload),
+    get: (planId: string) => ipcRenderer.invoke(IPC_CHANNELS.PLANS_GET, planId) as Promise<PlanDetail | null>
+  },
+  shell: {
+    openPath: (payload: OpenPathPayload) => ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_PATH, payload)
   }
 }
 

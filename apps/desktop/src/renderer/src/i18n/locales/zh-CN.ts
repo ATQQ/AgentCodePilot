@@ -4,6 +4,9 @@ export default {
     cancel: '取消',
     confirm: '确认',
     save: '保存',
+    saveSuccess: '保存成功',
+    close: '关闭',
+    loading: '加载中…',
     backToApp: '返回应用'
   },
   sidebar: {
@@ -26,10 +29,16 @@ export default {
       addPhotosAndFiles: '图片或文件',
       attachUrl: '附加外部链接内容',
       planMode: '计划模式',
-      pursueGoals: '追求目标',
-      plugins: '插件'
+      referencePlan: '引用计划',
+      pursueGoals: '追求目标'
     },
     urlPlaceholder: '输入 URL 链接...',
+    planModeActive: '计划模式已开启，点击关闭',
+    planModeInactive: '计划模式未开启，点击开启',
+    planModeClose: '关闭计划模式',
+    planPicker: {
+      title: '选择要引用的计划'
+    },
     approval: {
       label: '请求批准',
       title: '应如何批准操作？',
@@ -66,7 +75,10 @@ export default {
     copy: '复制',
     resend: '重新编辑',
     thinking: '思考中',
+    stoppedManually: '已手动终止 AI 回复',
+    stoppedBadge: '已手动停止',
     planModeTag: '计划模式',
+    planRefTag: '引用计划: {title}',
     previewAttachment: '预览图片',
     showInFolder: '在访达中显示',
     closePreview: '关闭预览',
@@ -84,6 +96,37 @@ export default {
     deny: '拒绝',
     allowed: '已允许',
     denied: '已拒绝'
+  },
+  plans: {
+    tabLabel: '计划',
+    empty: '暂无执行计划，开启计划模式发送消息即可生成',
+    loading: '加载中…',
+    scopeConversation: '当前对话',
+    scopeProject: '项目全部',
+    scopeWorkspace: '工作空间全部',
+    referenceToChat: '引用到对话',
+    executePlan: '开始执行',
+    executePlanMessage: '开始执行以上计划',
+    copy: '复制',
+    viewPlan: '查看计划',
+    viewProjectPlans: '查看项目执行计划',
+    headerButton: '执行计划 ({count})'
+  },
+  review: {
+    expandTree: '展开文件树',
+    collapseTree: '收起文件树',
+    discardAll: '放弃所有更改',
+    stageAll: '暂存所有更改',
+    unstageAll: '取消暂存所有更改',
+    discardAllConfirm: '确定放弃全部 {count} 个文件的更改？此操作不可撤销。'
+  },
+  browser: {
+    urlPlaceholder: '输入 URL',
+    startBrowsing: '开始浏览',
+    enterUrlHint: '输入 URL 以打开页面',
+    detectedLinks: '检测到的链接',
+    recentPages: '最近访问',
+    suggestedLinks: '推荐链接'
   },
   settings: {
     title: '设置',
@@ -112,6 +155,10 @@ export default {
     archivedConversations: '已归档对话',
     theme: '主题',
     themeDesc: '使用浅色、深色，或匹配系统设置',
+    rememberPanelState: '按对话记忆面板状态',
+    rememberPanelStateDesc: '切换对话时自动恢复右侧和底部面板的打开状态',
+    browserAutoExtractLinks: '自动提取链接',
+    browserAutoExtractLinksDesc: '从终端输出和对话内容中自动识别 HTTP 链接，在浏览器中提供快捷入口',
     light: '浅色',
     dark: '深色',
     system: '系统',
@@ -135,7 +182,9 @@ export default {
     off: '关闭',
     agentConfig: {
       title: 'Agent 配置',
-      desc: '管理 Claude Code 的默认模型与可选模型列表。优先读取 SDK 与 ~/.claude/settings.json，应用内配置作为兜底覆盖。',
+      desc: '按 Agent 分别管理模型与可选列表。Claude Code 优先读取 SDK 与 ~/.claude/settings.json，应用内配置作为兜底覆盖。',
+      maxTurns: '单次最大回合数',
+      maxTurnsDesc: '每条用户消息允许 Agent 调用的最大工具回合数。范围 {min}–{max}，默认 {default}。复杂任务可适当调高。',
       discoveredSource: '当前检测来源',
       sourceSdk: 'Claude Agent SDK',
       sourceClaudeSettings: 'Claude Code 设置 (~/.claude/settings.json)',
@@ -150,10 +199,104 @@ export default {
       modelName: '显示名称',
       modelDescription: '描述（可选）',
       addModel: '添加模型',
-      reset: '恢复自动检测'
+      reset: '恢复自动检测',
+      resetSuccess: '已恢复默认配置',
+      noConfig: '{agent} 暂无可配置项',
+      replyLanguage: 'AI 回复语言',
+      replyLanguageDesc: '控制 Agent 回复使用的语言，默认与用户提问语言保持一致',
+      replyLanguageAuto: '跟随用户语言',
+      replyLanguageZhCN: '简体中文',
+      replyLanguageEn: 'English',
+      replyLanguageJa: '日本語',
+      replyLanguageKo: '한국어',
+      mock: {
+        initialDelay: '默认等待时间',
+        initialDelayDesc: '开始返回内容前的等待时长（毫秒），用于模拟网络延迟',
+        responses: 'Markdown 响应内容',
+        responsesDesc: '可配置多条 Markdown，每次对话随机返回其中一条',
+        addResponse: '添加响应',
+        responseItem: '响应 #{index}'
+      }
+    },
+    aiFeatures: {
+      title: 'AI 功能',
+      desc: '按功能分类维护独立 AI 提示词，hover 后可预览或编辑。',
+      categoryGit: 'Git',
+      commitMessage: 'Commit Message 生成',
+      commitMessageDesc: '审查面板中 AI 生成提交消息时使用的 system prompt',
+      autoCommit: '自动提交',
+      autoCommitDesc: '一键自动提交时使用的提示词（预留）',
+      preview: '预览',
+      edit: '编辑',
+      resetItem: '恢复默认',
+      emptyPrompt: '（未设置）',
+      save: '保存',
+      saving: '保存中…'
+    },
+    filePreview: {
+      title: '文件预览',
+      desc: '配置工作区文件预览所支持的后缀列表。',
+      textExtensions: '文本预览后缀',
+      textExtensionsDesc: '以标签形式管理，输入后按回车添加，支持逗号分隔批量粘贴并自动去重',
+      imageExtensions: '图片预览后缀',
+      imageExtensionsDesc: '以标签形式管理，输入后按回车添加，支持逗号分隔批量粘贴并自动去重',
+      addExtension: '添加后缀…',
+      copyAll: '复制全部',
+      copySuccess: '已复制到剪贴板',
+      resetExtensions: '恢复默认后缀',
+      saving: '保存中…'
     },
     language: '语言',
-    zhCN: '简体中文'
+    zhCN: '简体中文',
+    externalApps: {
+      title: '外部打开方式',
+      desc: '配置环境信息中「本地」目录的默认打开方式，以及自定义 URL 协议。',
+      defaultTitle: '默认打开方式',
+      defaultDesc: '选择默认应用；内置应用可勾选是否在菜单中显示，协议信息直接展示在列表中。',
+      builtin: '内置',
+      visibility: '是否在菜单中显示',
+      showInMenu: '显示',
+      customTitle: '自定义协议',
+      customDesc: '协议模板需包含 {path} 占位符，例如 myapp://open?folder={path}。可设置图标链接或 SVG 内容。',
+      protocolHintReveal: '系统文件管理器（showItemInFolder）',
+      protocolHintTerminal: '系统终端（macOS Terminal / Windows cmd）',
+      namePlaceholder: '显示名称',
+      protocolPlaceholder: '例如 myapp://open?folder={path}',
+      iconUrlPlaceholder: '图标 URL（可选）',
+      iconSvgPlaceholder: 'SVG 内容（可选，与 URL 二选一）',
+      editIcon: '图标',
+      editIconTitle: '编辑自定义图标',
+      add: '添加',
+      remove: '删除'
+    }
+  },
+  workspace: {
+    filePreview: {
+      unsupported: '无法预览此文件类型',
+      readAsPrefix: '按',
+      readAsSuffix: '格式读取',
+      read: '读取',
+      addToChat: '添加到对话',
+      addSelectionToChat: '添加到对话',
+      edit: '编辑',
+      readOnly: '只读',
+      save: '保存',
+      preview: '预览',
+      source: '源码',
+      saved: '已保存',
+      saveFailed: '保存失败',
+      enterEditMode: '已进入编辑模式'
+    }
+  },
+  env: {
+    open: '打开',
+    openMenu: '选择打开方式',
+    defaultApp: '默认',
+    revealInFolder: '打开所在文件夹',
+    copyBranch: '复制分支名',
+    copied: '已复制',
+    openFailed: '打开失败',
+    openFailedNotInstalled: '未安装 {app}，无法打开'
   },
   archived: {
     searchPlaceholder: '搜索已归档聊天',
