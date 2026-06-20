@@ -1,12 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { Attachment, PlanReference } from '@renderer/types'
+import type { Attachment, FileReference, PlanReference } from '@renderer/types'
+import { usePanelContextStore } from './panelContext.store'
+import { createFileReference } from '@renderer/utils/fileReference'
 
 export interface ComposerInsertRequest {
   id: string
   text?: string
   attachment?: Attachment
   planRef?: PlanReference
+  fileRef?: FileReference
 }
 
 export interface ExecutePlanRequest {
@@ -52,13 +55,11 @@ export const useComposerStore = defineStore('composer', () => {
   }
 
   function addFileReference(path: string, startLine?: number, endLine?: number): void {
-    const lineRef =
-      startLine !== undefined
-        ? endLine !== undefined && endLine !== startLine
-          ? `@${path}:${startLine}-${endLine}`
-          : `@${path}:${startLine}`
-        : `@${path}`
-    insertText(`\n${lineRef}\n`)
+    const cwd = usePanelContextStore().effectivePanelCwd
+    pendingInsert.value = {
+      id: `ins-${Date.now()}`,
+      fileRef: createFileReference(path, { startLine, endLine, cwd })
+    }
   }
 
   function addPlanReference(plan: PlanReference): void {

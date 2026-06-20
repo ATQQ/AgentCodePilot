@@ -108,6 +108,14 @@ export interface FileAttachment {
   previewUrl?: string
 }
 
+export interface FileReference {
+  id: string
+  path: string
+  name: string
+  startLine?: number
+  endLine?: number
+}
+
 export interface UrlAttachment {
   id: string
   type: 'url'

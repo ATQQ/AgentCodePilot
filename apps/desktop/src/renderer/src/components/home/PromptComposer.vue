@@ -7,33 +7,30 @@ import { toLocalFileUrl } from '@renderer/utils/localFile'
 import { useImagePreview } from '@renderer/composables/useImagePreview'
 import { useComposerStore } from '@renderer/stores/composer.store'
 import PlanPicker from '@renderer/components/plans/PlanPicker.vue'
+import ComposerInlineInput from './ComposerInlineInput.vue'
 
 const { t } = useI18n()
 const { openImagePreview } = useImagePreview()
 const composerStore = useComposerStore()
-const input = ref('')
-const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const inlineInputRef = ref<InstanceType<typeof ComposerInlineInput> | null>(null)
+const inlineHasContent = ref(false)
 const composerRootRef = ref<HTMLElement | null>(null)
 /** 仅 Agent 选择器在窄宽度下收起为图标 */
 const isAgentCompact = ref(false)
 
 const AGENT_COMPACT_WIDTH = 400
 
-const TEXTAREA_MAX_HEIGHT = 200
-
-function resizeTextarea(): void {
-  const el = textareaRef.value
-  if (!el) return
-  el.style.height = 'auto'
-  const nextHeight = Math.min(el.scrollHeight, TEXTAREA_MAX_HEIGHT)
-  el.style.height = `${nextHeight}px`
-  el.style.overflowY = el.scrollHeight > TEXTAREA_MAX_HEIGHT ? 'auto' : 'hidden'
+function syncInlineContentState(): void {
+  inlineHasContent.value = !inlineInputRef.value?.isContentEmpty()
 }
 
 let compactObserver: ResizeObserver | null = null
 
 onMounted(() => {
-  nextTick(() => resizeTextarea())
+  nextTick(() => {
+    inlineInputRef.value?.resizeEditor()
+    syncInlineContentState()
+  })
   if (composerRootRef.value) {
     compactObserver = new ResizeObserver(([entry]) => {
       isAgentCompact.value = entry.contentRect.width < AGENT_COMPACT_WIDTH
@@ -53,12 +50,15 @@ watch(
     const consumed = composerStore.consumeInsert()
     if (!consumed) return
     if (consumed.text) {
-      input.value += consumed.text
-      nextTick(() => resizeTextarea())
+      inlineInputRef.value?.insertText(consumed.text)
+      syncInlineContentState()
     } else if (consumed.attachment) {
       attachments.value.push(consumed.attachment)
     } else if (consumed.planRef) {
       addPlanRef(consumed.planRef)
+    } else if (consumed.fileRef) {
+      inlineInputRef.value?.insertFileRef(consumed.fileRef)
+      syncInlineContentState()
     }
   }
 )
@@ -105,16 +105,24 @@ function getFileName(path: string): string {
   return path.split('/').pop() || path.split('\\').pop() || path
 }
 
+const hasComposerContent = computed(
+  () =>
+    inlineHasContent.value ||
+    attachments.value.length > 0 ||
+    planRefs.value.length > 0
+)
+
 function handleSubmit(): void {
-  const text = input.value.trim()
+  const text = inlineInputRef.value?.getContent() ?? ''
   if (!text && attachments.value.length === 0 && planRefs.value.length === 0) return
   const refs = [...planRefs.value]
   const effectivePlanMode = refs.length > 0 ? false : planMode.value
   emit('submit', text, [...attachments.value], effectivePlanMode, refs)
-  input.value = ''
+  inlineInputRef.value?.clear()
+  inlineHasContent.value = false
   attachments.value = []
   planRefs.value = []
-  nextTick(() => resizeTextarea())
+  nextTick(() => inlineInputRef.value?.resizeEditor())
   if (refs.length > 0) {
     composerStore.setPlanMode(props.conversationId, false)
   }
@@ -139,19 +147,8 @@ function handlePlanPickerSelect(plan: PlanReference): void {
   addPlanRef(plan)
 }
 
-function handleInput(): void {
-  if (input.value.endsWith('@plan')) {
-    showPlanPicker.value = true
-    input.value = input.value.slice(0, -5)
-  }
-  resizeTextarea()
-}
-
-function handleKeydown(e: KeyboardEvent): void {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault()
-    handleSubmit()
-  }
+function onInlineInput(): void {
+  syncInlineContentState()
 }
 
 function isUrl(text: string): boolean {
@@ -164,9 +161,9 @@ async function handlePaste(e: ClipboardEvent): Promise<void> {
 
   const text = e.clipboardData?.getData('text/plain') || ''
 
-  // Check if pasted text is a URL
   if (text && isUrl(text)) {
     e.preventDefault()
+    e.stopPropagation()
     attachments.value.push({
       id: generateId(),
       type: 'url',
@@ -178,6 +175,7 @@ async function handlePaste(e: ClipboardEvent): Promise<void> {
   for (const item of items) {
     if (item.type.startsWith('image/')) {
       e.preventDefault()
+      e.stopPropagation()
       const file = item.getAsFile()
       if (!file) continue
 
@@ -195,7 +193,7 @@ async function handlePaste(e: ClipboardEvent): Promise<void> {
       })
     }
   }
-  nextTick(() => resizeTextarea())
+  nextTick(() => inlineInputRef.value?.resizeEditor())
 }
 
 async function handleSelectFiles(): Promise<void> {
@@ -294,7 +292,12 @@ function previewComposerImage(att: FileAttachment): void {
   })
 }
 
-defineExpose({ setInput: (text: string) => { input.value = text } })
+defineExpose({
+  setInput: (text: string) => {
+    inlineInputRef.value?.setText(text)
+    syncInlineContentState()
+  }
+})
 </script>
 
 <template>
@@ -362,16 +365,15 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
       </button>
     </div>
 
-    <textarea
-      ref="textareaRef"
-      v-model="input"
-      class="composer-input elegant-scroll"
-      :placeholder="t('home.placeholder')"
-      rows="1"
-      @keydown="handleKeydown"
-      @paste="handlePaste"
-      @input="handleInput"
-    />
+    <div class="composer-input-area" @paste.capture="handlePaste">
+      <ComposerInlineInput
+        ref="inlineInputRef"
+        :placeholder="t('home.placeholder')"
+        @submit="handleSubmit"
+        @plan-trigger="showPlanPicker = true"
+        @input="onInlineInput"
+      />
+    </div>
     <div class="composer-toolbar">
       <div class="toolbar-left">
         <!-- + Button with popup -->
@@ -479,7 +481,7 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
       <div class="toolbar-right">
         <slot name="selectors" :agent-compact="isAgentCompact" />
         <button
-          v-if="props.stoppable && !input.trim() && attachments.length === 0 && planRefs.length === 0"
+          v-if="props.stoppable && !hasComposerContent"
           class="stop-btn"
           @click="handleStop"
           :title="t('chat.stop')"
@@ -489,7 +491,7 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
         <button
           v-else
           class="send-btn"
-          :disabled="!input.trim() && attachments.length === 0 && planRefs.length === 0"
+          :disabled="!hasComposerContent"
           @click="handleSubmit"
         >
           <el-icon :size="14"><Top /></el-icon>
@@ -758,20 +760,10 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
   background: var(--btn-ghost-hover);
 }
 
-.composer-input {
-  width: 100%;
-  padding: var(--spacing-lg) var(--spacing-lg) var(--spacing-sm);
-  border: none;
-  background: transparent;
-  color: var(--content-text);
-  font-size: var(--font-size-base);
-  font-family: inherit;
-  resize: none;
-  outline: none;
-  line-height: 1.5;
-  min-height: 40px;
-  max-height: 200px;
-  overflow-y: hidden;
+.composer-input-area {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .composer-toolbar {
@@ -799,10 +791,6 @@ defineExpose({ setInput: (text: string) => { input.value = text } })
   flex: 0 0 auto;
   max-width: 100%;
   margin-left: auto;
-}
-
-.composer-input::placeholder {
-  color: var(--composer-placeholder);
 }
 
 .toolbar-btn {
