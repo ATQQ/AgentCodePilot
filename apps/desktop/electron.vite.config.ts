@@ -38,8 +38,10 @@ export default defineConfig({
       }
     },
     optimizeDeps: {
-      exclude: ['monaco-editor'],
-      include: ['stream-monaco', 'mermaid', 'katex']
+      // monaco-editor workers use ?worker imports; stream-monaco resolves worker URLs
+      // relative to its bundle and breaks when pre-bundled into .vite/deps/.
+      exclude: ['monaco-editor', 'stream-monaco'],
+      include: ['mermaid', 'katex']
     },
     worker: {
       format: 'es'

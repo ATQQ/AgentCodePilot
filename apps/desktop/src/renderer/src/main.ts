@@ -1,4 +1,5 @@
 import './assets/main.css'
+import '@renderer/utils/monacoWorkers'
 
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
