@@ -7,13 +7,20 @@
     "dev": "pnpm -C apps/desktop dev",
     "build": "pnpm -C apps/desktop build",
     "build:mac": "pnpm -C apps/desktop build:mac",
+    "build:mac:arm64": "pnpm -C apps/desktop build:mac:arm64",
+    "build:mac:x64": "pnpm -C apps/desktop build:mac:x64",
     "build:win": "pnpm -C apps/desktop build:win",
     "build:linux": "pnpm -C apps/desktop build:linux",
     "lint": "pnpm -C apps/desktop lint",
     "format": "pnpm -C apps/desktop format",
     "format:check": "pnpm -C apps/desktop format:check",
     "typecheck": "pnpm -C apps/desktop typecheck",
-    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm build"
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm build",
+    "icons:generate": "node scripts/generate-icons.mjs"
+  },
+  "devDependencies": {
+    "png-to-ico": "^2.1.8",
+    "sharp": "^0.34.3"
   },
   "engines": {
     "node": ">=18.0.0",
@@ -24,7 +31,8 @@
       "better-sqlite3",
       "electron",
       "esbuild",
-      "electron-winstaller"
+      "electron-winstaller",
+      "sharp"
     ]
   }
 }

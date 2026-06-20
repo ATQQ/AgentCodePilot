@@ -19,7 +19,9 @@
     "postinstall": "electron-builder install-app-deps && electron-rebuild -f -w better-sqlite3",
     "build:unpack": "pnpm build && electron-builder --dir",
     "build:win": "pnpm build && electron-builder --win",
-    "build:mac": "pnpm build && electron-builder --mac",
+    "build:mac": "pnpm build && electron-builder --mac --arm64 --x64",
+    "build:mac:arm64": "pnpm build && electron-builder --mac --arm64",
+    "build:mac:x64": "pnpm build && electron-builder --mac --x64",
     "build:linux": "pnpm build && electron-builder --linux"
   },
   "dependencies": {
