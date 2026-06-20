@@ -14,6 +14,7 @@ const STORAGE_KEY = 'workbench-layout'
 interface LayoutPersist {
   rightPanelWidth: number
   bottomPanelHeight: number
+  sideTreeWidth?: number
   diffViewMode?: DiffViewMode
 }
 
@@ -31,7 +32,7 @@ function loadPersist(): LayoutPersist {
   } catch {
     /* ignore */
   }
-  return { rightPanelWidth: 380, bottomPanelHeight: 260, diffViewMode: 'side-by-side' }
+  return { rightPanelWidth: 380, bottomPanelHeight: 260, sideTreeWidth: 220, diffViewMode: 'side-by-side' }
 }
 
 export const useLayoutStore = defineStore('layout', () => {
@@ -47,6 +48,7 @@ export const useLayoutStore = defineStore('layout', () => {
   const plansOwnerId = ref<string | null>(null)
   const rightPanelWidth = ref(persisted.rightPanelWidth)
   const bottomPanelHeight = ref(persisted.bottomPanelHeight)
+  const sideTreeWidth = ref(persisted.sideTreeWidth ?? 220)
   const diffViewMode = ref<DiffViewMode>(persisted.diffViewMode ?? 'side-by-side')
   const envInfoVisible = ref(false)
   const homeRouteActive = ref(false)
@@ -112,12 +114,13 @@ export const useLayoutStore = defineStore('layout', () => {
 
   const showWorkbenchControls = computed(() => !homeRouteActive.value)
 
-  watch([rightPanelWidth, bottomPanelHeight, diffViewMode], () => {
+  watch([rightPanelWidth, bottomPanelHeight, sideTreeWidth, diffViewMode], () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
         rightPanelWidth: rightPanelWidth.value,
         bottomPanelHeight: bottomPanelHeight.value,
+        sideTreeWidth: sideTreeWidth.value,
         diffViewMode: diffViewMode.value
       })
     )
@@ -208,6 +211,7 @@ export const useLayoutStore = defineStore('layout', () => {
     plansOwnerId,
     rightPanelWidth,
     bottomPanelHeight,
+    sideTreeWidth,
     diffViewMode,
     envInfoVisible,
     toggleRightPanel,

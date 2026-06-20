@@ -3,6 +3,7 @@ import { onMounted, ref, watch } from 'vue'
 import { useFileExplorerStore } from '@renderer/stores/fileExplorer.store'
 import { usePanelContextStore } from '@renderer/stores/panelContext.store'
 import { useComposerStore } from '@renderer/stores/composer.store'
+import { useLayoutStore } from '@renderer/stores/layout.store'
 import type { FileEntry } from '@renderer/types'
 import { getFileLanguageIconHtml } from '@renderer/utils/fileLanguageIcon'
 import { FileTreeNode } from './FileTreeNode'
@@ -14,6 +15,7 @@ import FilePreview from './FilePreview.vue'
 const fileStore = useFileExplorerStore()
 const panelContext = usePanelContextStore()
 const composerStore = useComposerStore()
+const layoutStore = useLayoutStore()
 
 const treeCollapsed = ref(false)
 
@@ -125,7 +127,12 @@ function onCloseAll(): void {
           </div>
         </div>
 
-        <SideTreePanel v-if="!treeCollapsed" overlay>
+        <SideTreePanel
+          v-if="!treeCollapsed"
+          overlay
+          :width="layoutStore.sideTreeWidth"
+          @update:width="layoutStore.sideTreeWidth = $event"
+        >
           <template #header>
             <input
               v-model="fileStore.filter"
@@ -336,5 +343,22 @@ function onCloseAll(): void {
 :deep(.file-lang-icon svg) {
   width: 16px;
   height: 16px;
+}
+
+:deep(.compressed-path-row) {
+  display: flex;
+  align-items: center;
+  padding: 3px 8px 1px;
+  box-sizing: border-box;
+}
+
+:deep(.compressed-path-label) {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-xs);
+  color: var(--content-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

@@ -271,7 +271,12 @@ watch(
           </div>
         </div>
 
-        <SideTreePanel v-if="!treeCollapsed" overlay>
+        <SideTreePanel
+          v-if="!treeCollapsed"
+          overlay
+          :width="layoutStore.sideTreeWidth"
+          @update:width="layoutStore.sideTreeWidth = $event"
+        >
           <template #header>
             <input
               v-model="treeFilter"

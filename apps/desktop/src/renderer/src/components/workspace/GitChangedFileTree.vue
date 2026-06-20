@@ -166,6 +166,23 @@ function isExpanded(path: string): boolean {
   min-width: 0;
 }
 
+:deep(.compressed-path-row) {
+  display: flex;
+  align-items: center;
+  padding: 3px 8px 1px;
+  box-sizing: border-box;
+}
+
+:deep(.compressed-path-label) {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-xs);
+  color: var(--content-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 :deep(.file-actions) {
   display: none;
   align-items: center;
