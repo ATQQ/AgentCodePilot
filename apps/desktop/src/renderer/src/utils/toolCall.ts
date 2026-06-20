@@ -65,8 +65,10 @@ export function getToolDetailLines(toolCall: ToolCall): ToolDetailLine[] {
         lines.push({ label: '内容', value: truncateText(String(input.content), 200) })
       }
       if (toolCall.toolName === 'Edit') {
-        if (input.old_string) lines.push({ label: '原内容', value: truncateText(String(input.old_string), 120) })
-        if (input.new_string) lines.push({ label: '新内容', value: truncateText(String(input.new_string), 120) })
+        if (input.old_string)
+          lines.push({ label: '原内容', value: truncateText(String(input.old_string), 120) })
+        if (input.new_string)
+          lines.push({ label: '新内容', value: truncateText(String(input.new_string), 120) })
       }
       break
     case 'Glob':
@@ -105,7 +107,9 @@ export function getToolDetailLines(toolCall: ToolCall): ToolDetailLine[] {
 export function getToolDetail(toolCall: ToolCall): string {
   const lines = getToolDetailLines(toolCall)
   if (lines.length === 0) return ''
-  return lines.map((l) => (lines.length === 1 && l.label === '摘要' ? l.value : `${l.value}`)).join('\n')
+  return lines
+    .map((l) => (lines.length === 1 && l.label === '摘要' ? l.value : `${l.value}`))
+    .join('\n')
 }
 
 export function getToolDetailPreview(toolCall: ToolCall, maxLen = 60): string {
@@ -113,7 +117,15 @@ export function getToolDetailPreview(toolCall: ToolCall, maxLen = 60): string {
   const lines = getToolDetailLines(toolCall)
   if (lines.length === 0) return `${toolCall.toolName} · ${label}`
 
-  const primary = lines.find((l) => l.label === '命令' || l.label === '路径' || l.label === '指令' || l.label === '任务' || l.label === 'URL') ?? lines[0]
+  const primary =
+    lines.find(
+      (l) =>
+        l.label === '命令' ||
+        l.label === '路径' ||
+        l.label === '指令' ||
+        l.label === '任务' ||
+        l.label === 'URL'
+    ) ?? lines[0]
   let text = primary.value
   if (primary.label === '命令') text = `$ ${text}`
   if (primary.label === '路径') text = text.split('/').pop() || text

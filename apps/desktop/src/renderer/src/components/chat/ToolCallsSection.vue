@@ -43,11 +43,7 @@ function toggle(): void {
       <span class="toggle-summary">{{ collapsedSummary }}</span>
     </button>
     <div v-show="expanded" class="tool-calls-list">
-      <ToolCallCard
-        v-for="tc in toolCalls"
-        :key="tc.toolUseId"
-        :tool-call="tc"
-      />
+      <ToolCallCard v-for="tc in toolCalls" :key="tc.toolUseId" :tool-call="tc" />
     </div>
   </div>
 </template>
@@ -70,7 +66,9 @@ function toggle(): void {
   font-size: var(--font-size-xs);
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
 
 .tool-calls-section.expanded .tool-calls-toggle {

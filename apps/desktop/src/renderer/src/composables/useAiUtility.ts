@@ -1,4 +1,4 @@
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, type Ref } from 'vue'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import { useAgentStore } from '@renderer/stores/agent.store'
 import { useModelStore } from '@renderer/stores/model.store'
@@ -7,7 +7,11 @@ import { DEFAULT_COMMIT_MESSAGE_PROMPT } from '@renderer/constants/defaults'
 
 export type AiUtilityKey = 'commitMessage' | 'autoCommit'
 
-export function useAiUtility() {
+export function useAiUtility(): {
+  running: Ref<boolean>
+  error: Ref<string | null>
+  generateCommitMessage: () => Promise<string | null>
+} {
   const settingsStore = useSettingsStore()
   const agentStore = useAgentStore()
   const modelStore = useModelStore()
@@ -63,7 +67,10 @@ export function useAiUtility() {
         modelId: modelStore.getEffectiveModelId()
       })
 
-      return result.replace(/^```[\w]*\n?/m, '').replace(/\n?```$/m, '').trim()
+      return result
+        .replace(/^```[\w]*\n?/m, '')
+        .replace(/\n?```$/m, '')
+        .trim()
     } catch (err) {
       error.value = err instanceof Error ? err.message : '生成失败'
       return null

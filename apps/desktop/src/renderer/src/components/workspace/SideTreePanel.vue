@@ -27,11 +27,7 @@ function onResize(next: number): void {
 </script>
 
 <template>
-  <aside
-    class="side-tree-panel"
-    :class="{ overlay }"
-    :style="{ width: `${width ?? 220}px` }"
-  >
+  <aside class="side-tree-panel" :class="{ overlay }" :style="{ width: `${width ?? 220}px` }">
     <ResizableSplit
       v-if="resizable"
       direction="horizontal"

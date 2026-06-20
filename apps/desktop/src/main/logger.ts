@@ -32,7 +32,9 @@ export function logInfo(category: string, message: string): void {
   const line = formatMessage('INFO', category, message)
   try {
     appendFileSync(getLogFile(), line)
-  } catch {}
+  } catch {
+    /* ignore */
+  }
   if (!app.isPackaged) {
     process.stdout.write(line)
   }
@@ -42,16 +44,25 @@ export function logWarn(category: string, message: string): void {
   const line = formatMessage('WARN', category, message)
   try {
     appendFileSync(getLogFile(), line)
-  } catch {}
+  } catch {
+    /* ignore */
+  }
   console.warn(line.trim())
 }
 
 export function logError(category: string, message: string, error?: unknown): void {
-  const errStr = error instanceof Error ? `\n  ${error.stack || error.message}` : error ? `\n  ${String(error)}` : ''
+  const errStr =
+    error instanceof Error
+      ? `\n  ${error.stack || error.message}`
+      : error
+        ? `\n  ${String(error)}`
+        : ''
   const line = formatMessage('ERROR', category, message + errStr)
   try {
     appendFileSync(getLogFile(), line)
-  } catch {}
+  } catch {
+    /* ignore */
+  }
   console.error(line.trim())
 }
 
@@ -68,7 +79,9 @@ export function cleanOldLogs(maxDays = 7): void {
         unlinkSync(filePath)
       }
     }
-  } catch {}
+  } catch {
+    /* ignore */
+  }
 }
 
 export function getLogPath(): string {

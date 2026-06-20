@@ -18,8 +18,12 @@ const textCount = computed(() => textExtensions.value.length)
 const imageCount = computed(() => imageExtensions.value.length)
 
 function syncDraft(): void {
-  textExtensions.value = [...settingsStore.filePreview.textExtensions].sort((a, b) => a.localeCompare(b))
-  imageExtensions.value = [...settingsStore.filePreview.imageExtensions].sort((a, b) => a.localeCompare(b))
+  textExtensions.value = [...settingsStore.filePreview.textExtensions].sort((a, b) =>
+    a.localeCompare(b)
+  )
+  imageExtensions.value = [...settingsStore.filePreview.imageExtensions].sort((a, b) =>
+    a.localeCompare(b)
+  )
 }
 
 onMounted(async () => {
@@ -33,7 +37,10 @@ function normalizeExt(raw: string): string {
 
 function addExtensions(target: 'text' | 'image', raw: string): void {
   const list = target === 'text' ? textExtensions : imageExtensions
-  const parts = raw.split(/[\n,;\s]+/).map(normalizeExt).filter(Boolean)
+  const parts = raw
+    .split(/[\n,;\s]+/)
+    .map(normalizeExt)
+    .filter(Boolean)
   if (!parts.length) return
   const merged = new Set(list.value)
   for (const part of parts) merged.add(part)
@@ -108,14 +115,19 @@ function resetExtensions(): void {
         <div class="ext-chips elegant-scroll">
           <span v-for="ext in textExtensions" :key="ext" class="ext-chip">
             .{{ ext }}
-            <button type="button" class="chip-remove" @click="removeExtension('text', ext)">×</button>
+            <button type="button" class="chip-remove" @click="removeExtension('text', ext)">
+              ×
+            </button>
           </span>
           <input
             v-model="textInput"
             class="ext-input"
             :placeholder="t('settings.filePreview.addExtension')"
             @keydown="onTextInputKeydown"
-            @blur="addExtensions('text', textInput); textInput = ''"
+            @blur="
+              addExtensions('text', textInput)
+              textInput = ''
+            "
           />
         </div>
       </div>
@@ -136,14 +148,19 @@ function resetExtensions(): void {
         <div class="ext-chips ext-chips--compact elegant-scroll">
           <span v-for="ext in imageExtensions" :key="ext" class="ext-chip">
             .{{ ext }}
-            <button type="button" class="chip-remove" @click="removeExtension('image', ext)">×</button>
+            <button type="button" class="chip-remove" @click="removeExtension('image', ext)">
+              ×
+            </button>
           </span>
           <input
             v-model="imageInput"
             class="ext-input"
             :placeholder="t('settings.filePreview.addExtension')"
             @keydown="onImageInputKeydown"
-            @blur="addExtensions('image', imageInput); imageInput = ''"
+            @blur="
+              addExtensions('image', imageInput)
+              imageInput = ''
+            "
           />
         </div>
       </div>

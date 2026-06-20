@@ -213,11 +213,7 @@ function applyViewMode(): void {
 
 function addSelectionToChat(): void {
   if (!selection.value) return
-  emit(
-    'add-selection-to-chat',
-    selection.value.startLine,
-    selection.value.endLine
-  )
+  emit('add-selection-to-chat', selection.value.startLine, selection.value.endLine)
   clearSelection()
 }
 

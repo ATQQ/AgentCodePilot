@@ -15,7 +15,7 @@ export const usePanelContextStore = defineStore('panelContext', () => {
   const chatStore = useChatStore()
   const workspaceStore = useWorkspaceStore()
 
-  function getLayoutStore() {
+  function getLayoutStore(): ReturnType<typeof useLayoutStore> {
     return useLayoutStore()
   }
 
@@ -38,7 +38,9 @@ export const usePanelContextStore = defineStore('panelContext', () => {
   })
 
   const isHomePanelContextAvailable = computed(
-    () => getLayoutStore().homeRouteActive && !!(homeSelectedProject.value || homeSelectedWorkspace.value)
+    () =>
+      getLayoutStore().homeRouteActive &&
+      !!(homeSelectedProject.value || homeSelectedWorkspace.value)
   )
 
   const isWorkspaceContext = computed(() => {
@@ -49,7 +51,9 @@ export const usePanelContextStore = defineStore('panelContext', () => {
   })
 
   const availableFolders = computed<PanelFolderOption[]>(() => {
-    const ws = getLayoutStore().homeRouteActive ? homeSelectedWorkspace.value : conversationWorkspace.value
+    const ws = getLayoutStore().homeRouteActive
+      ? homeSelectedWorkspace.value
+      : conversationWorkspace.value
     if (!ws) return []
     return ws.folders.map((path) => {
       const project = workspaceStore.projects.find((p) => p.path === path)

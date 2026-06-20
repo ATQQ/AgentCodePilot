@@ -26,7 +26,12 @@ function fileName(path: string): string {
   return path.split('/').pop() ?? path
 }
 
-function clampMenuPosition(x: number, y: number, menuWidth: number, menuHeight: number) {
+function clampMenuPosition(
+  x: number,
+  y: number,
+  menuWidth: number,
+  menuHeight: number
+): { x: number; y: number } {
   const padding = 8
   const maxX = window.innerWidth - menuWidth - padding
   const maxY = window.innerHeight - menuHeight - padding
@@ -100,11 +105,7 @@ onUnmounted(() => {
       @contextmenu="openContextMenu($event, path)"
     >
       <span class="tab-label">{{ fileName(path) }}</span>
-      <span
-        class="tab-close"
-        title="关闭"
-        @click.stop="emit('close', path)"
-      >×</span>
+      <span class="tab-close" title="关闭" @click.stop="emit('close', path)">×</span>
     </button>
 
     <div
@@ -118,11 +119,7 @@ onUnmounted(() => {
         <span>关闭</span>
         <span class="ctx-shortcut">⌘ W</span>
       </button>
-      <button
-        class="ctx-item"
-        :disabled="tabs.length <= 1"
-        @click="handleCloseOthers"
-      >
+      <button class="ctx-item" :disabled="tabs.length <= 1" @click="handleCloseOthers">
         <span>关闭其它</span>
         <span class="ctx-shortcut">⌥ ⌘ T</span>
       </button>

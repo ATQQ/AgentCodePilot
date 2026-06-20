@@ -366,8 +366,7 @@ export const useGitStore = defineStore('git', () => {
     pendingSaveTimers.delete(file)
 
     const content =
-      pendingSaveContent.get(file) ??
-      diffCache.get(diffCacheKey('unstaged', file))?.modified
+      pendingSaveContent.get(file) ?? diffCache.get(diffCacheKey('unstaged', file))?.modified
     pendingSaveContent.delete(file)
 
     if (content !== undefined) {

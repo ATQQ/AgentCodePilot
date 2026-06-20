@@ -99,7 +99,11 @@ onUnmounted(() => {
   <div ref="rootRef" class="open-path-menu">
     <div class="open-split">
       <button class="open-main" type="button" @click="openDefault">
-        <ExternalAppIcon :app-id="defaultAppId" :icon-url="defaultApp?.iconUrl" :icon-svg="defaultApp?.iconSvg" />
+        <ExternalAppIcon
+          :app-id="defaultAppId"
+          :icon-url="defaultApp?.iconUrl"
+          :icon-svg="defaultApp?.iconSvg"
+        />
         <span class="open-label">{{ t('env.open') }}</span>
       </button>
       <button
@@ -109,7 +113,14 @@ onUnmounted(() => {
         :title="t('env.openMenu')"
         @click.stop="toggleMenu"
       >
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+        >
           <path d="M4 6l4 4 4-4" />
         </svg>
       </button>
@@ -123,11 +134,7 @@ onUnmounted(() => {
         type="button"
         @click.stop="selectApp(app)"
       >
-        <ExternalAppIcon
-          :app-id="app.id"
-          :icon-url="app.iconUrl"
-          :icon-svg="app.iconSvg"
-        />
+        <ExternalAppIcon :app-id="app.id" :icon-url="app.iconUrl" :icon-svg="app.iconSvg" />
         <span class="open-item-name">{{ app.name }}</span>
         <span v-if="app.id === defaultAppId" class="open-item-badge">
           {{ t('env.defaultApp') }}

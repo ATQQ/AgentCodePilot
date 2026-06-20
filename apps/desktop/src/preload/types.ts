@@ -422,16 +422,48 @@ export interface ApprovalRespondPayload {
 export type AgentEvent =
   | { type: 'message.started'; conversationId: string; messageId: string }
   | { type: 'message.delta'; conversationId: string; messageId: string; delta: string }
-  | { type: 'message.completed'; conversationId: string; messageId: string; usage?: TokenUsage; debugInput?: string; debugOutput?: string; stopped?: boolean }
+  | {
+      type: 'message.completed'
+      conversationId: string
+      messageId: string
+      usage?: TokenUsage
+      debugInput?: string
+      debugOutput?: string
+      stopped?: boolean
+    }
   | { type: 'message.error'; conversationId: string; messageId: string; error: string }
   | { type: 'tool.started'; conversationId: string; messageId: string; tool: ToolUseInfo }
-  | { type: 'tool.input_updated'; conversationId: string; messageId: string; toolUseId: string; input: Record<string, unknown> }
-  | { type: 'tool.progress'; conversationId: string; messageId: string; toolUseId: string; elapsedSeconds: number }
-  | { type: 'tool.completed'; conversationId: string; messageId: string; toolUseId: string; summary?: string }
+  | {
+      type: 'tool.input_updated'
+      conversationId: string
+      messageId: string
+      toolUseId: string
+      input: Record<string, unknown>
+    }
+  | {
+      type: 'tool.progress'
+      conversationId: string
+      messageId: string
+      toolUseId: string
+      elapsedSeconds: number
+    }
+  | {
+      type: 'tool.completed'
+      conversationId: string
+      messageId: string
+      toolUseId: string
+      summary?: string
+    }
   | { type: 'session.updated'; conversationId: string; sessionId: string }
   | { type: 'session.cleared'; conversationId: string }
   | ({ type: 'approval.requested' } & ApprovalRequestInfo)
-  | { type: 'approval.resolved'; requestId: string; conversationId: string; allowed: boolean; scope?: 'once' | 'conversation' }
+  | {
+      type: 'approval.resolved'
+      requestId: string
+      conversationId: string
+      allowed: boolean
+      scope?: 'once' | 'conversation'
+    }
 
 export interface AgentAPI {
   agents: {

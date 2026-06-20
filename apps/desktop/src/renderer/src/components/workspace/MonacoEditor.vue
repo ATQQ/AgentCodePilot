@@ -31,7 +31,9 @@ let selectionDisposable: Monaco.IDisposable | null = null
 let scrollDisposable: Monaco.IDisposable | null = null
 
 function resolveLanguage(): string {
-  return props.languageOverride ?? (props.filePath ? getLanguageFromPath(props.filePath) : 'plaintext')
+  return (
+    props.languageOverride ?? (props.filePath ? getLanguageFromPath(props.filePath) : 'plaintext')
+  )
 }
 
 function layoutEditor(): void {

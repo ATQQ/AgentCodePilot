@@ -4,7 +4,16 @@ import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import type { ThemeMode } from '@renderer/types'
-import { ArrowLeft, Bell, Brush, Document, Cpu, MagicStick, FolderOpened, Files } from '@element-plus/icons-vue'
+import {
+  ArrowLeft,
+  Bell,
+  Brush,
+  Document,
+  Cpu,
+  MagicStick,
+  FolderOpened,
+  Files
+} from '@element-plus/icons-vue'
 import ArchivedConversationsSection from '@renderer/components/settings/ArchivedConversationsSection.vue'
 import AgentSettingsSection from '@renderer/components/settings/AgentSettingsSection.vue'
 import AiPromptsSettingsSection from '@renderer/components/settings/AiPromptsSettingsSection.vue'
@@ -35,7 +44,16 @@ const activeSection = ref('appearance')
 watch(
   () => route.query.section,
   (section) => {
-    if (typeof section === 'string' && (section === 'appearance' || section === 'notifications' || section === 'archived' || section === 'agents' || section === 'aiFeatures' || section === 'filePreview' || section === 'externalApps')) {
+    if (
+      typeof section === 'string' &&
+      (section === 'appearance' ||
+        section === 'notifications' ||
+        section === 'archived' ||
+        section === 'agents' ||
+        section === 'aiFeatures' ||
+        section === 'filePreview' ||
+        section === 'externalApps')
+    ) {
       activeSection.value = section
     }
   },
@@ -210,7 +228,11 @@ function goBack(): void {
                 :class="{ active: settingsStore.rememberPanelStatePerConversation }"
                 role="switch"
                 :aria-checked="settingsStore.rememberPanelStatePerConversation"
-                @click="settingsStore.setRememberPanelStatePerConversation(!settingsStore.rememberPanelStatePerConversation)"
+                @click="
+                  settingsStore.setRememberPanelStatePerConversation(
+                    !settingsStore.rememberPanelStatePerConversation
+                  )
+                "
               />
             </div>
           </div>
@@ -227,7 +249,9 @@ function goBack(): void {
                 :class="{ active: settingsStore.browserAutoExtractLinks }"
                 role="switch"
                 :aria-checked="settingsStore.browserAutoExtractLinks"
-                @click="settingsStore.setBrowserAutoExtractLinks(!settingsStore.browserAutoExtractLinks)"
+                @click="
+                  settingsStore.setBrowserAutoExtractLinks(!settingsStore.browserAutoExtractLinks)
+                "
               />
             </div>
           </div>
@@ -288,7 +312,11 @@ function goBack(): void {
                 :class="{ active: settingsStore.permissionNotificationsEnabled }"
                 role="switch"
                 :aria-checked="settingsStore.permissionNotificationsEnabled"
-                @click="settingsStore.setPermissionNotificationsEnabled(!settingsStore.permissionNotificationsEnabled)"
+                @click="
+                  settingsStore.setPermissionNotificationsEnabled(
+                    !settingsStore.permissionNotificationsEnabled
+                  )
+                "
               />
             </div>
           </div>
@@ -377,7 +405,9 @@ function goBack(): void {
   color: var(--content-text-secondary);
   font-size: var(--font-size-sm);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
   -webkit-app-region: no-drag;
 }
 
@@ -442,7 +472,9 @@ function goBack(): void {
   font-size: var(--font-size-sm);
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .nav-item:hover {

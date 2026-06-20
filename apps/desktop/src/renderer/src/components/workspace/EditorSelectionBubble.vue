@@ -26,12 +26,7 @@ function onAddToChat(): void {
 
 <template>
   <Teleport to="body">
-    <div
-      v-if="visible"
-      class="editor-selection-bubble"
-      :style="style"
-      @mousedown.stop
-    >
+    <div v-if="visible" class="editor-selection-bubble" :style="style" @mousedown.stop>
       <button class="bubble-btn" @click="onAddToChat">
         {{ t('workspace.filePreview.addSelectionToChat') }}
         <kbd class="bubble-kbd">⌘L</kbd>

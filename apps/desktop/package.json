@@ -1,12 +1,14 @@
 {
   "name": "@agent-code-pilot/desktop",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "AgentCodePilot desktop application",
   "main": "./out/main/index.js",
   "author": "sugar",
   "scripts": {
     "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "lint": "eslint --cache .",
+    "lint:fix": "eslint --cache --fix .",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "vue-tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "pnpm typecheck:node && pnpm typecheck:web",

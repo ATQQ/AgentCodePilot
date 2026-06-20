@@ -5,17 +5,14 @@ import claudeIcon from '@renderer/assets/claude-icon.svg'
 import codexIcon from '@renderer/assets/codex-icon.svg'
 import cursorIcon from '@renderer/assets/external-apps/cursor.svg'
 
-const props = withDefaults(
-  defineProps<{ compact?: boolean }>(),
-  { compact: false }
-)
+const props = withDefaults(defineProps<{ compact?: boolean }>(), { compact: false })
 
 const agentStore = useAgentStore()
 
 const agentIcons: Record<string, string> = {
   'claude-code': claudeIcon,
-  'codex': codexIcon,
-  'cursor': cursorIcon
+  codex: codexIcon,
+  cursor: cursorIcon
 }
 
 const currentIcon = computed(() => agentIcons[agentStore.selectedAgentId] || claudeIcon)
@@ -41,7 +38,13 @@ function getAgentIcon(id: string): string {
             :command="agent.id"
             :disabled="!agent.enabled"
           >
-            <img :src="getAgentIcon(agent.id)" class="dropdown-icon" width="14" height="14" alt="" />
+            <img
+              :src="getAgentIcon(agent.id)"
+              class="dropdown-icon"
+              width="14"
+              height="14"
+              alt=""
+            />
             {{ agent.name }}
           </el-dropdown-item>
         </el-dropdown-menu>

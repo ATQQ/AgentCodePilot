@@ -146,7 +146,12 @@ async function requestToolApproval(
     params.decisionReason ? params.decisionReason : undefined
   ].filter(Boolean)
   const detail = detailParts.join('\n') || 'Claude Code 请求执行一项操作，请确认是否允许。'
-  const approvalKey = buildApprovalKey(context.conversationId, params.toolUseId, params.toolName, params.input)
+  const approvalKey = buildApprovalKey(
+    context.conversationId,
+    params.toolUseId,
+    params.toolName,
+    params.input
+  )
 
   let pending = activeApprovalByToolUse.get(approvalKey)
   if (!pending) {

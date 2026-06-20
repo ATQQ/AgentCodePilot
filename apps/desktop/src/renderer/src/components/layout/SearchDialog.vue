@@ -106,7 +106,9 @@ watch(
               @mouseenter="selectedIndex = idx"
             >
               <span class="result-title">{{ getTitle(conv) }}</span>
-              <span v-if="getProjectName(conv.projectId)" class="result-project">{{ getProjectName(conv.projectId) }}</span>
+              <span v-if="getProjectName(conv.projectId)" class="result-project">{{
+                getProjectName(conv.projectId)
+              }}</span>
               <span class="result-time">{{ formatRelativeTime(conv.updatedAt) }}</span>
             </div>
           </div>

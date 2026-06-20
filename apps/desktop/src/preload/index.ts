@@ -35,13 +35,15 @@ const agentAPI = {
     createConversation: (payload: CreateConversationPayload) =>
       ipcRenderer.invoke(IPC_CHANNELS.CHAT_CREATE, cloneForIpc(payload)),
     sendMessage: (payload: SendMessagePayload) =>
-      ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND, cloneForIpc(payload)) as Promise<SendMessageResult>,
+      ipcRenderer.invoke(
+        IPC_CHANNELS.CHAT_SEND,
+        cloneForIpc(payload)
+      ) as Promise<SendMessageResult>,
     sendFirstMessage: (payload: SendMessagePayload) =>
       ipcRenderer.invoke(IPC_CHANNELS.CHAT_SEND_FIRST, cloneForIpc(payload)),
     stop: (conversationId: string) => ipcRenderer.invoke(IPC_CHANNELS.CHAT_STOP, conversationId),
     onAgentEvent: (callback: (event: AgentEvent) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, data: AgentEvent): void =>
-        callback(data)
+      const listener = (_event: Electron.IpcRendererEvent, data: AgentEvent): void => callback(data)
       ipcRenderer.on(IPC_CHANNELS.AGENT_EVENT, listener)
       return () => {
         ipcRenderer.removeListener(IPC_CHANNELS.AGENT_EVENT, listener)
@@ -76,8 +78,7 @@ const agentAPI = {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_LIST),
     save: (payload: ProjectPayload) => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_SAVE, payload),
     delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_DELETE, id),
-    restoreByPath: (path: string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_RESTORE_BY_PATH, path)
+    restoreByPath: (path: string) => ipcRenderer.invoke(IPC_CHANNELS.PROJECTS_RESTORE_BY_PATH, path)
   },
   workspaces: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.WORKSPACES_LIST),
@@ -127,8 +128,7 @@ const agentAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.GIT_CHANGED_FILES, cwd, scope),
     diff: (cwd: string, file: string, staged?: boolean) =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_DIFF, cwd, file, staged),
-    stage: (cwd: string, paths: string[]) =>
-      ipcRenderer.invoke(IPC_CHANNELS.GIT_STAGE, cwd, paths),
+    stage: (cwd: string, paths: string[]) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STAGE, cwd, paths),
     unstage: (cwd: string, paths: string[]) =>
       ipcRenderer.invoke(IPC_CHANNELS.GIT_UNSTAGE, cwd, paths),
     discard: (cwd: string, paths: string[]) =>
@@ -168,10 +168,12 @@ const agentAPI = {
   },
   plans: {
     list: (payload: PlansListPayload) => ipcRenderer.invoke(IPC_CHANNELS.PLANS_LIST, payload),
-    get: (planId: string) => ipcRenderer.invoke(IPC_CHANNELS.PLANS_GET, planId) as Promise<PlanDetail | null>
+    get: (planId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.PLANS_GET, planId) as Promise<PlanDetail | null>
   },
   shell: {
-    openPath: (payload: OpenPathPayload) => ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_PATH, payload)
+    openPath: (payload: OpenPathPayload) =>
+      ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_PATH, payload)
   }
 }
 

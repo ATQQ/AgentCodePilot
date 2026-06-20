@@ -56,7 +56,9 @@ export function loadMonaco(): Promise<typeof Monaco> {
       .then(() => import('monaco-editor'))
       .then(async (monaco) => {
         ensureMonacoThemes(monaco)
-        await registerMonacoThemes(CODE_BLOCK_MONACO_THEMES, [...MONACO_LANGUAGES]).catch(() => undefined)
+        await registerMonacoThemes(CODE_BLOCK_MONACO_THEMES, [...MONACO_LANGUAGES]).catch(
+          () => undefined
+        )
         return monaco
       })
   }

@@ -16,7 +16,9 @@ export function getFileBaseName(path: string): string {
   return path.split('/').pop() || path.split('\\').pop() || path
 }
 
-export function formatFileReferenceLabel(ref: Pick<FileReference, 'name' | 'startLine' | 'endLine'>): string {
+export function formatFileReferenceLabel(
+  ref: Pick<FileReference, 'name' | 'startLine' | 'endLine'>
+): string {
   if (ref.startLine !== undefined) {
     if (ref.endLine !== undefined && ref.endLine !== ref.startLine) {
       return `${ref.name} (${ref.startLine}-${ref.endLine})`
@@ -26,7 +28,9 @@ export function formatFileReferenceLabel(ref: Pick<FileReference, 'name' | 'star
   return ref.name
 }
 
-export function serializeFileReference(ref: Pick<FileReference, 'path' | 'startLine' | 'endLine'>): string {
+export function serializeFileReference(
+  ref: Pick<FileReference, 'path' | 'startLine' | 'endLine'>
+): string {
   const { path, startLine, endLine } = ref
   if (startLine !== undefined) {
     if (endLine !== undefined && endLine !== startLine) {
@@ -37,7 +41,9 @@ export function serializeFileReference(ref: Pick<FileReference, 'path' | 'startL
   return `@${path}`
 }
 
-export function fileRefFromElement(el: HTMLElement): Pick<FileReference, 'path' | 'name' | 'startLine' | 'endLine'> {
+export function fileRefFromElement(
+  el: HTMLElement
+): Pick<FileReference, 'path' | 'name' | 'startLine' | 'endLine'> {
   const path = el.dataset.path ?? ''
   const startLine = el.dataset.startLine ? Number(el.dataset.startLine) : undefined
   const endLine = el.dataset.endLine ? Number(el.dataset.endLine) : undefined
@@ -49,7 +55,9 @@ export function fileRefFromElement(el: HTMLElement): Pick<FileReference, 'path' 
   }
 }
 
-export function formatFileReferenceTooltip(ref: Pick<FileReference, 'path' | 'startLine' | 'endLine'>): string {
+export function formatFileReferenceTooltip(
+  ref: Pick<FileReference, 'path' | 'startLine' | 'endLine'>
+): string {
   if (ref.startLine !== undefined) {
     if (ref.endLine !== undefined && ref.endLine !== ref.startLine) {
       return `${ref.path}\n行 ${ref.startLine}-${ref.endLine}`
@@ -93,7 +101,10 @@ export function serializeEditorContent(root: HTMLElement): string {
   }
 
   for (const child of root.childNodes) walk(child)
-  return parts.join('').replace(/\n{3,}/g, '\n\n').trim()
+  return parts
+    .join('')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 export function buildMessageWithFileReferences(userText: string, refs: FileReference[]): string {
@@ -118,9 +129,5 @@ export function createFileReference(
 }
 
 export function isSameFileReference(a: FileReference, b: FileReference): boolean {
-  return (
-    a.path === b.path &&
-    a.startLine === b.startLine &&
-    a.endLine === b.endLine
-  )
+  return a.path === b.path && a.startLine === b.startLine && a.endLine === b.endLine
 }

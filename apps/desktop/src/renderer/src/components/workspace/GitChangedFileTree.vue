@@ -231,6 +231,10 @@ function isExpanded(path: string): boolean {
   font-size: var(--font-size-xs);
 }
 
-:deep(.add) { color: #16a34a; }
-:deep(.del) { color: #dc2626; }
+:deep(.add) {
+  color: #16a34a;
+}
+:deep(.del) {
+  color: #dc2626;
+}
 </style>

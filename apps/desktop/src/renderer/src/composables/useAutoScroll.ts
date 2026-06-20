@@ -2,7 +2,12 @@ import { nextTick, onUnmounted, type Ref } from 'vue'
 
 const BOTTOM_THRESHOLD = 80
 
-export function useAutoScroll(containerRef: Ref<HTMLElement | null> | (() => HTMLElement | null)) {
+export function useAutoScroll(containerRef: Ref<HTMLElement | null> | (() => HTMLElement | null)): {
+  onScroll: () => void
+  scheduleScrollToBottom: (instant?: boolean) => void
+  forceScrollToBottom: (instant?: boolean) => void
+  scrollToBottom: (instant?: boolean) => void
+} {
   let rafId: number | null = null
   let userPinnedToBottom = true
 

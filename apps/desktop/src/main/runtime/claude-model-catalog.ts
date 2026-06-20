@@ -68,10 +68,7 @@ function buildModelsFromClaudeEnv(env: Record<string, string>): AgentModelOption
     const displayName = env[`ANTHROPIC_DEFAULT_${envPrefix}_MODEL_NAME`]
     const resolvedModel = env[`ANTHROPIC_DEFAULT_${envPrefix}_MODEL`]
     const name = displayName || meta.label
-    const description =
-      resolvedModel && resolvedModel !== name
-        ? resolvedModel
-        : meta.description
+    const description = resolvedModel && resolvedModel !== name ? resolvedModel : meta.description
 
     models.push({ id: alias, name, description })
   }
@@ -211,7 +208,10 @@ async function discoverModels(forceRefresh: boolean): Promise<{
   return snapshot
 }
 
-export async function getModelCatalog(agentId: string, forceRefresh = false): Promise<ModelCatalogResult> {
+export async function getModelCatalog(
+  agentId: string,
+  forceRefresh = false
+): Promise<ModelCatalogResult> {
   if (agentId !== 'claude-code') {
     return {
       agentId,
@@ -224,14 +224,9 @@ export async function getModelCatalog(agentId: string, forceRefresh = false): Pr
   }
 
   const appConfig = readAgentConfig(agentId)
-  const { discoveredModels, discoveredDefault, discoveredSource } = await discoverModels(forceRefresh)
-  return finalizeCatalog(
-    agentId,
-    discoveredModels,
-    discoveredDefault,
-    discoveredSource,
-    appConfig
-  )
+  const { discoveredModels, discoveredDefault, discoveredSource } =
+    await discoverModels(forceRefresh)
+  return finalizeCatalog(agentId, discoveredModels, discoveredDefault, discoveredSource, appConfig)
 }
 
 export function invalidateModelCatalog(agentId?: string): void {

@@ -51,7 +51,12 @@ async function refreshPlans(): Promise<void> {
   if (layoutStore.plansScope === 'owner' && owner && owner.ownerType !== 'conversation') {
     await planStore.loadPlans(conv?.id ?? null, owner.ownerType, owner.ownerId, 'owner')
   } else if (conv) {
-    await planStore.loadPlans(conv.id, owner?.ownerType ?? null, owner?.ownerId ?? null, 'conversation')
+    await planStore.loadPlans(
+      conv.id,
+      owner?.ownerType ?? null,
+      owner?.ownerId ?? null,
+      'conversation'
+    )
   } else if (owner && owner.ownerType !== 'conversation') {
     await planStore.loadPlans(null, owner.ownerType, owner.ownerId, 'owner')
   } else {
@@ -87,7 +92,10 @@ watch(
 watch(
   () => planStore.plans.length,
   () => {
-    if (layoutStore.activePlanId && planStore.plans.some((p) => p.id === layoutStore.activePlanId)) {
+    if (
+      layoutStore.activePlanId &&
+      planStore.plans.some((p) => p.id === layoutStore.activePlanId)
+    ) {
       void planStore.selectPlan(layoutStore.activePlanId)
       layoutStore.activePlanId = null
     }
@@ -128,10 +136,7 @@ function handleReferencePlan(): void {
 function handleExecutePlan(): void {
   const plan = planStore.activePlan
   if (!plan || !chatStore.activeConversationId) return
-  composerStore.executePlan(
-    { id: plan.id, title: plan.title },
-    t('plans.executePlanMessage')
-  )
+  composerStore.executePlan({ id: plan.id, title: plan.title }, t('plans.executePlanMessage'))
 }
 
 async function handleCopyPlan(): Promise<void> {
@@ -143,11 +148,7 @@ async function handleCopyPlan(): Promise<void> {
 <template>
   <div class="plans-panel">
     <div class="plans-toolbar">
-      <select
-        class="scope-select"
-        :value="planStore.scope"
-        @change="handleScopeChange"
-      >
+      <select class="scope-select" :value="planStore.scope" @change="handleScopeChange">
         <option value="conversation">{{ t('plans.scopeConversation') }}</option>
         <option v-if="hasOwnerScope" value="owner">{{ ownerScopeLabel }}</option>
       </select>

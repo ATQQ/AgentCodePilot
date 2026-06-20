@@ -250,7 +250,8 @@ function findAdjacentChip(
   }
 
   if (!(container instanceof HTMLElement)) return null
-  const child = direction === 'before' ? container.childNodes[offset - 1] : container.childNodes[offset]
+  const child =
+    direction === 'before' ? container.childNodes[offset - 1] : container.childNodes[offset]
   if (child instanceof HTMLElement && child.classList.contains('inline-file-ref')) return child
   return null
 }

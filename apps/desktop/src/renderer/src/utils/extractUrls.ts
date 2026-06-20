@@ -1,6 +1,6 @@
 const HTTP_URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`[\]]+/gi
 
-const TRAILING_PUNCT = /[)\]},.;!?]+$/ 
+const TRAILING_PUNCT = /[)\]},.;!?]+$/
 
 export function extractHttpUrls(text: string): string[] {
   if (!text) return []

@@ -24,7 +24,9 @@ const editingCustomId = ref<string | null>(null)
 const editIconUrl = ref('')
 const editIconSvg = ref('')
 
-const runtimePlatform = computed(() => (isWindowsPlatform() ? 'win32' : 'darwin') as NodeJS.Platform)
+const runtimePlatform = computed((): 'win32' | 'darwin' =>
+  isWindowsPlatform() ? 'win32' : 'darwin'
+)
 
 const allApps = computed(() =>
   getDefaultExternalAppsForSettings(settingsStore.externalApps, runtimePlatform.value)
@@ -160,12 +162,20 @@ async function saveCustomIcon(): Promise<void> {
           <div class="app-meta">
             <div class="app-name-row">
               <span class="app-name">{{ app.name }}</span>
-              <span v-if="app.builtin" class="app-badge">{{ t('settings.externalApps.builtin') }}</span>
+              <span v-if="app.builtin" class="app-badge">{{
+                t('settings.externalApps.builtin')
+              }}</span>
             </div>
-            <code v-if="formatProtocolHint(app)" class="app-protocol">{{ formatProtocolHint(app) }}</code>
+            <code v-if="formatProtocolHint(app)" class="app-protocol">{{
+              formatProtocolHint(app)
+            }}</code>
           </div>
 
-          <label v-if="app.builtin" class="visibility-toggle" :title="t('settings.externalApps.visibility')">
+          <label
+            v-if="app.builtin"
+            class="visibility-toggle"
+            :title="t('settings.externalApps.visibility')"
+          >
             <input
               type="checkbox"
               :checked="isAppVisible(app)"
@@ -183,11 +193,7 @@ async function saveCustomIcon(): Promise<void> {
       <p class="section-desc">{{ t('settings.externalApps.customDesc') }}</p>
 
       <div v-if="settingsStore.externalApps.customApps.length" class="custom-list">
-        <div
-          v-for="app in settingsStore.externalApps.customApps"
-          :key="app.id"
-          class="custom-row"
-        >
+        <div v-for="app in settingsStore.externalApps.customApps" :key="app.id" class="custom-row">
           <ExternalAppIcon
             :app-id="app.id"
             :icon-url="app.iconUrl"
@@ -199,10 +205,20 @@ async function saveCustomIcon(): Promise<void> {
             <div class="custom-protocol">{{ app.protocol }}</div>
           </div>
           <div class="custom-actions">
-            <button class="ghost-btn" type="button" :disabled="saving" @click="startEditCustom({ ...app, kind: 'protocol', builtin: false })">
+            <button
+              class="ghost-btn"
+              type="button"
+              :disabled="saving"
+              @click="startEditCustom({ ...app, kind: 'protocol', builtin: false })"
+            >
               {{ t('settings.externalApps.editIcon') }}
             </button>
-            <button class="danger-btn" type="button" :disabled="saving" @click="removeCustom(app.id)">
+            <button
+              class="danger-btn"
+              type="button"
+              :disabled="saving"
+              @click="removeCustom(app.id)"
+            >
               {{ t('settings.externalApps.remove') }}
             </button>
           </div>

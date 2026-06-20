@@ -1,14 +1,16 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
-import type { ThemeMode, ApprovalLevel, FilePreviewSettings, AiPromptsSettings, ExternalAppsSettings, CustomExternalApp, ReplyLanguage } from '@renderer/types'
-import {
-  DEFAULT_FILE_PREVIEW,
-  DEFAULT_AI_PROMPTS
-} from '@renderer/constants/defaults'
-import {
-  DEFAULT_MAX_AGENT_TURNS,
-  clampMaxAgentTurns
-} from '../../../shared/agent-run-settings'
+import type {
+  ThemeMode,
+  ApprovalLevel,
+  FilePreviewSettings,
+  AiPromptsSettings,
+  ExternalAppsSettings,
+  CustomExternalApp,
+  ReplyLanguage
+} from '@renderer/types'
+import { DEFAULT_FILE_PREVIEW, DEFAULT_AI_PROMPTS } from '@renderer/constants/defaults'
+import { DEFAULT_MAX_AGENT_TURNS, clampMaxAgentTurns } from '../../../shared/agent-run-settings'
 import {
   DEFAULT_EXTERNAL_APPS_SETTINGS,
   findExternalAppById,
@@ -31,12 +33,14 @@ function applyThemeToDOM(mode: ThemeMode): void {
 }
 
 function normalizeExtensions(raw: string): string[] {
-  return [...new Set(
-    raw
-      .split(/[\n,;\s]+/)
-      .map((s) => s.trim().replace(/^\./, '').toLowerCase())
-      .filter(Boolean)
-  )]
+  return [
+    ...new Set(
+      raw
+        .split(/[\n,;\s]+/)
+        .map((s) => s.trim().replace(/^\./, '').toLowerCase())
+        .filter(Boolean)
+    )
+  ]
 }
 
 export const useSettingsStore = defineStore('settings', () => {

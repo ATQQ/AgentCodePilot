@@ -1,4 +1,10 @@
-export type { AgentModelOption, AgentConfigSettings, MockAgentConfig, ModelCatalogSource, ModelCatalogResult } from '../../../preload/types'
+export type {
+  AgentModelOption,
+  AgentConfigSettings,
+  MockAgentConfig,
+  ModelCatalogSource,
+  ModelCatalogResult
+} from '../../../preload/types'
 export type {
   GitChangedFile,
   GitStatusResult,
@@ -63,7 +69,13 @@ export interface Message {
   agentId?: string
   planMode?: boolean
   planRefs?: import('../../../preload/types').PlanReference[]
-  usage?: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheCreationTokens: number; costUSD: number }
+  usage?: {
+    inputTokens: number
+    outputTokens: number
+    cacheReadTokens: number
+    cacheCreationTokens: number
+    costUSD: number
+  }
   attachments?: Attachment[]
   toolCalls?: ToolCall[]
   debugInput?: string

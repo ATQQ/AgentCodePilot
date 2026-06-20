@@ -44,7 +44,17 @@ const statusIcon = computed(() => {
     <div v-if="detailLines.length" class="tool-details">
       <div v-for="(line, idx) in detailLines" :key="idx" class="tool-detail-row">
         <span class="tool-detail-label">{{ line.label }}</span>
-        <span class="tool-detail-value" :class="{ mono: line.label === '命令' || line.label === '路径' || line.label === '内容' || line.label === '原内容' || line.label === '新内容' }">
+        <span
+          class="tool-detail-value"
+          :class="{
+            mono:
+              line.label === '命令' ||
+              line.label === '路径' ||
+              line.label === '内容' ||
+              line.label === '原内容' ||
+              line.label === '新内容'
+          }"
+        >
           {{ line.label === '命令' ? `$ ${line.value}` : line.value }}
         </span>
       </div>
@@ -122,8 +132,12 @@ const statusIcon = computed(() => {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .tool-label {

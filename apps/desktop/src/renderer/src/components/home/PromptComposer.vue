@@ -2,7 +2,13 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Plus, Top, CircleCheck, CircleClose } from '@element-plus/icons-vue'
-import type { Attachment, ApprovalLevel, FileAttachment, UrlAttachment, PlanReference } from '@renderer/types'
+import type {
+  Attachment,
+  ApprovalLevel,
+  FileAttachment,
+  UrlAttachment,
+  PlanReference
+} from '@renderer/types'
 import { toLocalFileUrl } from '@renderer/utils/localFile'
 import { useImagePreview } from '@renderer/composables/useImagePreview'
 import { useComposerStore } from '@renderer/stores/composer.store'
@@ -106,10 +112,7 @@ function getFileName(path: string): string {
 }
 
 const hasComposerContent = computed(
-  () =>
-    inlineHasContent.value ||
-    attachments.value.length > 0 ||
-    planRefs.value.length > 0
+  () => inlineHasContent.value || attachments.value.length > 0 || planRefs.value.length > 0
 )
 
 function handleSubmit(): void {
@@ -316,7 +319,9 @@ defineExpose({
       <div v-for="plan in planRefs" :key="plan.id" class="plan-ref-chip">
         <span class="plan-ref-icon">&#x1F4CB;</span>
         <span class="plan-ref-title">{{ plan.title }}</span>
-        <button type="button" class="plan-ref-remove" @click="removePlanRef(plan.id)">&times;</button>
+        <button type="button" class="plan-ref-remove" @click="removePlanRef(plan.id)">
+          &times;
+        </button>
       </div>
     </div>
 
@@ -326,7 +331,9 @@ defineExpose({
         <template v-if="att.type === 'image'">
           <div class="attachment-image" @click="previewComposerImage(att)">
             <img :src="att.previewUrl" :alt="att.name" />
-            <button class="attachment-remove" @click.stop="removeAttachment(att.id)">&times;</button>
+            <button class="attachment-remove" @click.stop="removeAttachment(att.id)">
+              &times;
+            </button>
           </div>
         </template>
         <template v-else-if="att.type === 'file'">
@@ -360,7 +367,13 @@ defineExpose({
       <button class="url-input-confirm" @click="confirmUrl">
         {{ t('common.confirm') }}
       </button>
-      <button class="url-input-cancel" @click="showUrlInput = false; urlInputValue = ''">
+      <button
+        class="url-input-cancel"
+        @click="
+          showUrlInput = false
+          urlInputValue = ''
+        "
+      >
         {{ t('common.cancel') }}
       </button>
     </div>
@@ -433,7 +446,11 @@ defineExpose({
             <span class="chevron">&#x25BE;</span>
           </button>
           <Transition name="fade">
-            <div v-if="showApprovalMenu" class="dropdown-menu dropdown-menu--wide" @mouseleave="showApprovalMenu = false">
+            <div
+              v-if="showApprovalMenu"
+              class="dropdown-menu dropdown-menu--wide"
+              @mouseleave="showApprovalMenu = false"
+            >
               <div class="menu-header">
                 <span>{{ t('composer.approval.title') }}</span>
               </div>
@@ -445,7 +462,9 @@ defineExpose({
                 <div class="menu-item-icon">&#x270B;</div>
                 <div class="menu-item-content">
                   <div class="menu-item-title">{{ t('composer.approval.requestApproval') }}</div>
-                  <div class="menu-item-description">{{ t('composer.approval.requestApprovalDesc') }}</div>
+                  <div class="menu-item-description">
+                    {{ t('composer.approval.requestApprovalDesc') }}
+                  </div>
                 </div>
                 <span v-if="approvalLevel === 'request'" class="check-mark">&#x2713;</span>
               </button>
@@ -457,7 +476,9 @@ defineExpose({
                 <div class="menu-item-icon">&#x1F64A;</div>
                 <div class="menu-item-content">
                   <div class="menu-item-title">{{ t('composer.approval.autoApprove') }}</div>
-                  <div class="menu-item-description">{{ t('composer.approval.autoApproveDesc') }}</div>
+                  <div class="menu-item-description">
+                    {{ t('composer.approval.autoApproveDesc') }}
+                  </div>
                 </div>
                 <span v-if="approvalLevel === 'auto'" class="check-mark">&#x2713;</span>
               </button>
@@ -469,7 +490,9 @@ defineExpose({
                 <div class="menu-item-icon">&#x26A0;</div>
                 <div class="menu-item-content">
                   <div class="menu-item-title">{{ t('composer.approval.fullAccess') }}</div>
-                  <div class="menu-item-description">{{ t('composer.approval.fullAccessDesc') }}</div>
+                  <div class="menu-item-description">
+                    {{ t('composer.approval.fullAccessDesc') }}
+                  </div>
                 </div>
                 <span v-if="approvalLevel === 'full'" class="check-mark">&#x2713;</span>
               </button>
@@ -483,17 +506,12 @@ defineExpose({
         <button
           v-if="props.stoppable && !hasComposerContent"
           class="stop-btn"
-          @click="handleStop"
           :title="t('chat.stop')"
+          @click="handleStop"
         >
           <span class="stop-icon"></span>
         </button>
-        <button
-          v-else
-          class="send-btn"
-          :disabled="!hasComposerContent"
-          @click="handleSubmit"
-        >
+        <button v-else class="send-btn" :disabled="!hasComposerContent" @click="handleSubmit">
           <el-icon :size="14"><Top /></el-icon>
         </button>
       </div>
@@ -966,7 +984,10 @@ defineExpose({
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    opacity 0.15s;
 }
 
 .stop-btn:hover {
@@ -1133,7 +1154,9 @@ defineExpose({
 
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.15s, transform 0.15s;
+  transition:
+    opacity 0.15s,
+    transform 0.15s;
 }
 
 .fade-enter-from,
