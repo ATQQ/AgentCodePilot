@@ -61,7 +61,12 @@ function loadPersist(): LayoutPersist {
   } catch {
     /* ignore */
   }
-  return { rightPanelWidth: 380, bottomPanelHeight: 260, sideTreeWidth: 220, diffViewMode: 'side-by-side' }
+  return {
+    rightPanelWidth: 380,
+    bottomPanelHeight: 260,
+    sideTreeWidth: 220,
+    diffViewMode: 'side-by-side'
+  }
 }
 
 export interface LayoutStoreReturn {
