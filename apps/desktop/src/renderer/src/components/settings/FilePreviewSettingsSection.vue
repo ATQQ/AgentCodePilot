@@ -66,9 +66,19 @@ function onTextInputKeydown(event: KeyboardEvent): void {
   textInput.value = ''
 }
 
+function onTextInputBlur(): void {
+  addExtensions('text', textInput.value)
+  textInput.value = ''
+}
+
 function onImageInputKeydown(event: KeyboardEvent): void {
   if (event.key !== 'Enter') return
   event.preventDefault()
+  addExtensions('image', imageInput.value)
+  imageInput.value = ''
+}
+
+function onImageInputBlur(): void {
   addExtensions('image', imageInput.value)
   imageInput.value = ''
 }
@@ -124,10 +134,7 @@ function resetExtensions(): void {
             class="ext-input"
             :placeholder="t('settings.filePreview.addExtension')"
             @keydown="onTextInputKeydown"
-            @blur="
-              addExtensions('text', textInput)
-              textInput = ''
-            "
+            @blur="onTextInputBlur"
           />
         </div>
       </div>
@@ -157,10 +164,7 @@ function resetExtensions(): void {
             class="ext-input"
             :placeholder="t('settings.filePreview.addExtension')"
             @keydown="onImageInputKeydown"
-            @blur="
-              addExtensions('image', imageInput)
-              imageInput = ''
-            "
+            @blur="onImageInputBlur"
           />
         </div>
       </div>

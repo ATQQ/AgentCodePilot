@@ -151,6 +151,20 @@ function goBack(): void {
     router.push('/')
   }
 }
+
+function toggleRememberPanelState(): void {
+  settingsStore.setRememberPanelStatePerConversation(
+    !settingsStore.rememberPanelStatePerConversation
+  )
+}
+
+function toggleBrowserAutoExtractLinks(): void {
+  settingsStore.setBrowserAutoExtractLinks(!settingsStore.browserAutoExtractLinks)
+}
+
+function togglePermissionNotifications(): void {
+  settingsStore.setPermissionNotificationsEnabled(!settingsStore.permissionNotificationsEnabled)
+}
 </script>
 
 <template>
@@ -228,11 +242,7 @@ function goBack(): void {
                 :class="{ active: settingsStore.rememberPanelStatePerConversation }"
                 role="switch"
                 :aria-checked="settingsStore.rememberPanelStatePerConversation"
-                @click="
-                  settingsStore.setRememberPanelStatePerConversation(
-                    !settingsStore.rememberPanelStatePerConversation
-                  )
-                "
+                @click="toggleRememberPanelState"
               />
             </div>
           </div>
@@ -249,9 +259,7 @@ function goBack(): void {
                 :class="{ active: settingsStore.browserAutoExtractLinks }"
                 role="switch"
                 :aria-checked="settingsStore.browserAutoExtractLinks"
-                @click="
-                  settingsStore.setBrowserAutoExtractLinks(!settingsStore.browserAutoExtractLinks)
-                "
+                @click="toggleBrowserAutoExtractLinks"
               />
             </div>
           </div>
@@ -312,11 +320,7 @@ function goBack(): void {
                 :class="{ active: settingsStore.permissionNotificationsEnabled }"
                 role="switch"
                 :aria-checked="settingsStore.permissionNotificationsEnabled"
-                @click="
-                  settingsStore.setPermissionNotificationsEnabled(
-                    !settingsStore.permissionNotificationsEnabled
-                  )
-                "
+                @click="togglePermissionNotifications"
               />
             </div>
           </div>

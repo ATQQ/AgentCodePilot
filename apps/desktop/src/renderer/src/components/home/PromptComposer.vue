@@ -237,13 +237,17 @@ function confirmUrl(): void {
   showUrlInput.value = false
 }
 
+function cancelUrlInput(): void {
+  showUrlInput.value = false
+  urlInputValue.value = ''
+}
+
 function handleUrlKeydown(e: KeyboardEvent): void {
   if (e.key === 'Enter') {
     e.preventDefault()
     confirmUrl()
   } else if (e.key === 'Escape') {
-    showUrlInput.value = false
-    urlInputValue.value = ''
+    cancelUrlInput()
   }
 }
 
@@ -367,13 +371,7 @@ defineExpose({
       <button class="url-input-confirm" @click="confirmUrl">
         {{ t('common.confirm') }}
       </button>
-      <button
-        class="url-input-cancel"
-        @click="
-          showUrlInput = false
-          urlInputValue = ''
-        "
-      >
+      <button class="url-input-cancel" @click="cancelUrlInput">
         {{ t('common.cancel') }}
       </button>
     </div>
