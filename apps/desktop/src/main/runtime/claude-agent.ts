@@ -5,6 +5,8 @@ import type { AgentAdapter, AgentRunInput } from './types'
 import type { ApprovalLevel } from './permissions'
 import { buildPermissionOptions, buildToolAccessOptions } from './permissions'
 import { DEFAULT_MAX_AGENT_TURNS } from '../../shared/agent-run-settings'
+import { getShellEnvironment } from '../shell/shell-env'
+import { resolveClaudeCodeExecutablePath } from './claude-executable'
 
 const AGENT_TOOLS = [
   'Read',
@@ -132,9 +134,12 @@ export class ClaudeAgentAdapter implements AgentAdapter {
 
     const maxTurns = input.maxTurns ?? DEFAULT_MAX_AGENT_TURNS
 
+    const claudeExecutable = resolveClaudeCodeExecutablePath()
     const queryOptions: Options = {
       abortController: controller,
       cwd: input.cwd || app.getPath('home'),
+      env: getShellEnvironment(),
+      ...(claudeExecutable ? { pathToClaudeCodeExecutable: claudeExecutable } : {}),
       ...(input.attachmentDirectories?.length
         ? { additionalDirectories: input.attachmentDirectories }
         : {}),

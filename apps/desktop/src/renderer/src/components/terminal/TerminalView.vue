@@ -84,8 +84,4 @@ defineExpose({ refit })
   background-color: var(--content-bg) !important;
   overflow: hidden;
 }
-
-.terminal-view :deep(.xterm-rows) {
-  color: var(--content-text);
-}
 </style>

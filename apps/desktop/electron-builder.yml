@@ -18,6 +18,8 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+  - node_modules/@anthropic-ai/**
+  - node_modules/node-pty/**
 icon: build/icon.png
 win:
   executableName: AgentCodePilot

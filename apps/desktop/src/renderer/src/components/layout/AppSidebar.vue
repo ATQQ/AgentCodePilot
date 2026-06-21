@@ -816,7 +816,9 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+  border-bottom: 1px solid var(--sidebar-border);
 }
 
 .sidebar-section {

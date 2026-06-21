@@ -65,6 +65,7 @@ import {
   parseExternalAppsSetting
 } from './settings/defaults'
 import { openPathWithApp } from './shell/open-external-app'
+import { initShellEnvironment } from './shell/shell-env'
 import type { GitDiffScope } from '../preload/types'
 import {
   listDirectory,
@@ -927,6 +928,7 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.agentcodepilot.app')
+  initShellEnvironment()
   registerLocalFileProtocol()
 
   if (process.platform === 'darwin' && app.dock) {

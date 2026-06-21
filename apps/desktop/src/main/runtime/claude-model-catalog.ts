@@ -2,6 +2,8 @@ import { homedir } from 'os'
 import { app } from 'electron'
 import type { ModelInfo } from '@anthropic-ai/claude-agent-sdk'
 import { loadClaudeAgentSdk } from './claude-sdk-loader'
+import { resolveClaudeCodeExecutablePath } from './claude-executable'
+import { getShellEnvironment } from '../shell/shell-env'
 import * as repo from '../database/repositories'
 import {
   type AgentConfigSettings,
@@ -82,11 +84,14 @@ async function fetchSdkModels(): Promise<AgentModelOption[] | null> {
 
   try {
     const { query } = await loadClaudeAgentSdk()
+    const claudeExecutable = resolveClaudeCodeExecutablePath()
     const q = query({
       prompt: '',
       options: {
         abortController: controller,
         cwd: app.getPath('home') || homedir(),
+        env: getShellEnvironment(),
+        ...(claudeExecutable ? { pathToClaudeCodeExecutable: claudeExecutable } : {}),
         maxTurns: 1,
         permissionMode: 'plan'
       }

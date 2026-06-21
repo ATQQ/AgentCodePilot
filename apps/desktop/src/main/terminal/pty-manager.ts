@@ -1,6 +1,7 @@
 import * as pty from 'node-pty'
 import type { BrowserWindow } from 'electron'
 import { IPC_CHANNELS } from '../../preload/types'
+import { getShellEnvironment } from '../shell/shell-env'
 
 export interface PtySession {
   id: string
@@ -41,10 +42,11 @@ export function createTerminal(
   const tabTitle = title || shell.split('/').pop() || 'terminal'
   const displayTitle = scopeSessions.size > 0 ? `${tabTitle} (${scopeSessions.size + 1})` : tabTitle
 
-  const ptyProcess = pty.spawn(shell, [], {
+  const shellArgs = process.platform === 'win32' ? [] : ['-l']
+  const ptyProcess = pty.spawn(shell, shellArgs, {
     name: 'xterm-256color',
     cwd,
-    env: process.env as Record<string, string>
+    env: getShellEnvironment()
   })
 
   const session: PtySession = {
