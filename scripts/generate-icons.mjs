@@ -8,12 +8,14 @@
  *   winLinux  - white + rounded (Windows/Linux window & packaged icons)
  *   web       - white + rounded (renderer favicons / PWA assets)
  *
- * Dev consumers:
- *   apps/desktop/resources/icon-mac.png  -> mac Dock (main/index.ts)
- *   apps/desktop/resources/icon.png      -> Win/Linux BrowserWindow
- *   resources/icons/webapp/*             -> renderer publicDir (electron.vite.config.ts)
+ * Dev consumers (electron-vite / runtime):
+ *   apps/desktop/resources/icon-mac.dev.png -> mac Dock in dev (app.dock.setIcon)
+ *   apps/desktop/resources/icon.dev.png      -> Win/Linux BrowserWindow in dev
+ *   apps/desktop/resources/icon-mac.png      -> mac Dock in packaged app
+ *   apps/desktop/resources/icon.png          -> Win/Linux BrowserWindow in packaged app
+ *   resources/icons/webapp/*                 -> renderer publicDir (electron.vite.config.ts)
  *
- * Build consumers:
+ * Build consumers (electron-builder):
  *   apps/desktop/build/icon.icns  -> electron-builder mac (via AppIcon.iconset sync + iconutil)
  *   apps/desktop/build/icon.ico   -> electron-builder win
  *   apps/desktop/build/icon.png   -> electron-builder linux / default
@@ -172,15 +174,45 @@ async function renderIcon(size, profile) {
 }
 
 /**
+ * @param {Buffer} buffer
+ * @param {number} size
+ */
+async function applyDevBadge(buffer, size) {
+  const badgeWidth = Math.max(28, Math.round(size * 0.26))
+  const badgeHeight = Math.max(14, Math.round(size * 0.13))
+  const fontSize = Math.max(8, Math.round(badgeHeight * 0.58))
+  const rx = Math.round(badgeHeight * 0.22)
+  const margin = Math.max(4, Math.round(size * 0.05))
+  const x = size - badgeWidth - margin
+  const y = size - badgeHeight - margin
+
+  const overlay = Buffer.from(
+    `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+      <rect x="${x}" y="${y}" width="${badgeWidth}" height="${badgeHeight}" rx="${rx}" fill="#D97706"/>
+      <text x="${x + badgeWidth / 2}" y="${y + badgeHeight / 2 + fontSize * 0.36}"
+        font-family="system-ui, -apple-system, BlinkMacSystemFont, sans-serif"
+        font-size="${fontSize}" font-weight="700" fill="#FFFFFF" text-anchor="middle">DEV</text>
+    </svg>`
+  )
+
+  return sharp(buffer).composite([{ input: overlay }]).png().toBuffer()
+}
+
+/**
  * @param {string} outputPath
  * @param {number} size
  * @param {IconProfile} profile
+ * @param {{ devBadge?: boolean }} [options]
  */
-async function writeIcon(outputPath, size, profile) {
+async function writeIcon(outputPath, size, profile, options = {}) {
   mkdirSync(dirname(outputPath), { recursive: true })
-  const buffer = await renderIcon(size, profile)
+  let buffer = await renderIcon(size, profile)
+  if (options.devBadge) {
+    buffer = await applyDevBadge(buffer, size)
+  }
   await sharp(buffer).toFile(outputPath)
-  console.log(`  ${outputPath.replace(`${ROOT}/`, '')} (${size}x${size})`)
+  const suffix = options.devBadge ? ', DEV badge' : ''
+  console.log(`  ${outputPath.replace(`${ROOT}/`, '')} (${size}x${size}${suffix})`)
 }
 
 /** @param {string} contentsPath */
@@ -292,6 +324,12 @@ async function main() {
   console.log(`\napps/desktop/resources [macDock + winLinux]`)
   await writeIcon(join(DESKTOP_RESOURCES_DIR, 'icon-mac.png'), 1024, PROFILES.macDock)
   await writeIcon(join(DESKTOP_RESOURCES_DIR, 'icon.png'), 512, PROFILES.winLinux)
+  await writeIcon(join(DESKTOP_RESOURCES_DIR, 'icon-mac.dev.png'), 1024, PROFILES.macDock, {
+    devBadge: true
+  })
+  await writeIcon(join(DESKTOP_RESOURCES_DIR, 'icon.dev.png'), 512, PROFILES.winLinux, {
+    devBadge: true
+  })
 
   await generateMacIcns()
   await generateElectronBuildResources()

@@ -20,7 +20,8 @@
     "format:check": "pnpm -C apps/desktop format:check",
     "typecheck": "pnpm -C apps/desktop typecheck",
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm build",
-    "icons:generate": "node scripts/generate-icons.mjs"
+    "icons:generate": "node scripts/generate-icons.mjs",
+    "icons:sync": "node scripts/sync-icons.mjs"
   },
   "devDependencies": {
     "png-to-ico": "^2.1.8",

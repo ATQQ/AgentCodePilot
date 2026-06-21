@@ -3,7 +3,9 @@ import { join } from 'path'
 import { existsSync, mkdirSync, writeFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import iconDev from '../../resources/icon.dev.png?asset'
 import macDockIcon from '../../resources/icon-mac.png?asset'
+import macDockIconDev from '../../resources/icon-mac.dev.png?asset'
 import { IPC_CHANNELS } from '../preload/types'
 import type {
   AgentEvent,
@@ -896,7 +898,7 @@ function createWindow(): void {
     autoHideMenuBar: true,
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 12, y: 12 },
-    ...(process.platform !== 'darwin' ? { icon } : {}),
+    ...(process.platform !== 'darwin' ? { icon: is.dev ? iconDev : icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -932,7 +934,7 @@ app.whenReady().then(() => {
   registerLocalFileProtocol()
 
   if (process.platform === 'darwin' && app.dock) {
-    app.dock.setIcon(nativeImage.createFromPath(macDockIcon))
+    app.dock.setIcon(nativeImage.createFromPath(is.dev ? macDockIconDev : macDockIcon))
   }
 
   logInfo('App', `Starting AgentCodePilot v${app.getVersion()}`)
