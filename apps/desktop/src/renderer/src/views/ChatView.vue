@@ -12,6 +12,7 @@ import ModelSelector from '@renderer/components/home/ModelSelector.vue'
 import ToolCallsSection from '@renderer/components/chat/ToolCallsSection.vue'
 import ApprovalRequestCard from '@renderer/components/chat/ApprovalRequestCard.vue'
 import MessageAttachmentImage from '@renderer/components/chat/MessageAttachmentImage.vue'
+import ChatMessageList from '@renderer/components/chat/ChatMessageList.vue'
 import { getAgentIcon } from '@renderer/utils/agentIcons'
 import type { Attachment, Message, PlanReference, ApprovalRequest } from '@renderer/types'
 import { useLayoutStore, type LayoutStore } from '@renderer/stores/layout.store'
@@ -29,8 +30,10 @@ const settingsStore = useSettingsStore()
 const layoutStore: LayoutStore = useLayoutStore()
 const planStore = usePlanStore()
 const composerStore = useComposerStore()
-const messagesContainer = ref<HTMLElement | null>(null)
-const { onScroll, scheduleScrollToBottom, forceScrollToBottom } = useAutoScroll(messagesContainer)
+const messageListRef = ref<InstanceType<typeof ChatMessageList> | null>(null)
+const { onScroll, scheduleScrollToBottom, forceScrollToBottom } = useAutoScroll(
+  () => messageListRef.value?.scrollContainer ?? null
+)
 const chatViewRef = ref<HTMLElement | null>(null)
 const composerRef = ref<InstanceType<typeof PromptComposer> | null>(null)
 const copiedMessageId = ref<string | null>(null)
@@ -165,6 +168,20 @@ watch(
     ] as const,
   () => scheduleScrollToBottom()
 )
+
+const pendingApprovalMessageIds = computed(() => {
+  const ids = new Set<string>()
+  for (const req of chatStore.pendingApprovals.values()) {
+    if (req.status === 'pending' && req.messageId) {
+      ids.add(req.messageId)
+    }
+  }
+  return ids
+})
+
+function hasPendingApprovalForMessage(messageId: string): boolean {
+  return pendingApprovalMessageIds.value.has(messageId)
+}
 
 const assistantPlanMap = ref<Map<string, string>>(new Map())
 
@@ -348,17 +365,22 @@ function handleApprovalRespond(
             </span>
           </div>
 
-          <div
-            ref="messagesContainer"
-            class="messages-container elegant-scroll"
+          <ChatMessageList
+            ref="messageListRef"
+            :messages="chatStore.activeConversation.messages"
+            :conversation-id="chatStore.activeConversationId"
+            :is-dark="isDark"
+            :layout-width="layoutStore.chatLayoutWidth"
+            :is-message-streaming="chatStore.isMessageStreaming"
+            :has-pending-approval="hasPendingApprovalForMessage"
             @scroll="onScroll"
           >
-            <div
-              v-for="msg in chatStore.activeConversation.messages"
-              :key="msg.id"
-              class="message"
-              :class="[msg.role, { 'message--plan': msg.role === 'user' && msg.planMode }]"
-            >
+            <template #message="{ msg, measureRef, markdownProps }">
+              <div
+                :ref="measureRef"
+                class="message"
+                :class="[msg.role, { 'message--plan': msg.role === 'user' && msg.planMode }]"
+              >
                 <div v-if="msg.role === 'assistant'" class="message-role">
                   <span class="agent-avatar">
                     <img :src="getMessageAgentIcon(msg)" width="14" height="14" alt="" />
@@ -408,24 +430,18 @@ function handleApprovalRespond(
                       >
                     </div>
                     <MarkdownRender
-                      v-else-if="msg.content.trim()"
-                      mode="chat"
+                      v-if="msg.content.trim() && !isThinkingMessage(msg)"
+                      v-bind="markdownProps"
                       custom-id="chat"
-                      :content="msg.content"
-                      :final="!chatStore.isMessageStreaming(msg.id)"
                       :smooth-streaming="chatStore.isMessageStreaming(msg.id) ? 'auto' : false"
                       :fade="
                         !chatStore.isMessageStreaming(msg.id) &&
                         !chatStore.wasMessageStreamed(msg.id)
                       "
                       :typewriter="chatStore.isMessageStreaming(msg.id)"
-                      :max-live-nodes="chatStore.isMessageStreaming(msg.id) ? 0 : undefined"
+                      :max-live-nodes="chatStore.isMessageStreaming(msg.id) ? 0 : 280"
                       :render-code-blocks-as-pre="false"
                       :is-dark="isDark"
-                      :batch-rendering="true"
-                      :render-batch-size="16"
-                      :render-batch-delay="8"
-                      :render-batch-budget-ms="4"
                       :code-block-props="CODE_BLOCK_PROPS"
                     />
                     <button
@@ -449,7 +465,7 @@ function handleApprovalRespond(
                     </span>
                     <div v-if="msg.attachments?.length" class="message-attachments">
                       <div
-                        v-for="(att, idx) in msg.attachments"
+                        v-for="(att, attachmentIndex) in msg.attachments"
                         :key="att.id"
                         class="msg-attachment"
                       >
@@ -473,7 +489,7 @@ function handleApprovalRespond(
                         <template v-else-if="att.type === 'url'">
                           <span class="msg-attachment-chip msg-attachment-url">
                             <span class="msg-url-label"
-                              >&#x1F517; #{{ idx + 1 }} {{ att.url }}</span
+                              >&#x1F517; #{{ Number(attachmentIndex) + 1 }} {{ att.url }}</span
                             >
                             <span class="msg-attachment-tooltip">
                               <button class="tooltip-copy" @click.stop="copyText(att.url)">
@@ -578,19 +594,22 @@ function handleApprovalRespond(
                     }}</pre>
                   </div>
                 </div>
-            </div>
-            <div v-if="showStandaloneThinking" class="thinking-indicator">
-              <span class="agent-avatar">
-                <img :src="waitingAgentIcon" width="14" height="14" alt="" />
-              </span>
-              <div class="thinking-dots">
-                <span class="dot"></span>
-                <span class="dot"></span>
-                <span class="dot"></span>
               </div>
-              <span class="thinking-text">{{ t('chat.thinking') }} {{ waitingSeconds }}s</span>
-            </div>
-          </div>
+            </template>
+            <template #after>
+              <div v-if="showStandaloneThinking" class="thinking-indicator">
+                <span class="agent-avatar">
+                  <img :src="waitingAgentIcon" width="14" height="14" alt="" />
+                </span>
+                <div class="thinking-dots">
+                  <span class="dot"></span>
+                  <span class="dot"></span>
+                  <span class="dot"></span>
+                </div>
+                <span class="thinking-text">{{ t('chat.thinking') }} {{ waitingSeconds }}s</span>
+              </div>
+            </template>
+          </ChatMessageList>
 
           <div class="chat-input-area">
             <div v-if="isArchived" class="archived-banner">
