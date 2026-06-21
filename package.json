@@ -1,6 +1,6 @@
 {
   "name": "agent-code-pilot",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "private": true,
   "description": "AgentCodePilot - AI coding agent desktop application",
   "scripts": {
@@ -11,6 +11,9 @@
     "build:mac:x64": "pnpm -C apps/desktop build:mac:x64",
     "build:win": "pnpm -C apps/desktop build:win",
     "build:linux": "pnpm -C apps/desktop build:linux",
+    "build:linux:x64": "pnpm -C apps/desktop build:linux:x64",
+    "build:linux:arm64": "pnpm -C apps/desktop build:linux:arm64",
+    "version:bump": "node scripts/bump-version.mjs",
     "lint": "pnpm -C apps/desktop lint",
     "format": "pnpm -C apps/desktop format",
     "format:check": "pnpm -C apps/desktop format:check",

@@ -15,11 +15,15 @@ icon: build/icon.png
 win:
   executableName: AgentCodePilot
   icon: build/icon.ico
-nsis:
-  artifactName: ${productName}-${version}-setup.${ext}
-  shortcutName: ${productName}
-  uninstallDisplayName: ${productName}
-  createDesktopShortcut: always
+  target:
+    - target: msi
+      arch: x64
+    - target: portable
+      arch: x64
+msi:
+  artifactName: ${productName}-v${version}-Windows.${ext}
+portable:
+  artifactName: ${productName}-v${version}-Windows-Portable.${ext}
 mac:
   icon: build/icon.icns
   target:
@@ -31,6 +35,10 @@ mac:
       arch: arm64
     - target: zip
       arch: x64
+    - target: tar.gz
+      arch: arm64
+    - target: tar.gz
+      arch: x64
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
@@ -38,7 +46,7 @@ mac:
     - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
   notarize: false
-  artifactName: ${productName}-${version}-${arch}.${ext}
+  artifactName: ${productName}-v${version}-macOS-${arch}.${ext}
 dmg:
   writeUpdateInfo: false
 linux:
@@ -46,10 +54,15 @@ linux:
   target:
     - AppImage
     - deb
+    - rpm
   maintainer: electronjs.org
   category: Utility
+deb:
+  artifactName: ${productName}-v${version}-Linux-${arch}.${ext}
+rpm:
+  artifactName: ${productName}-v${version}-Linux-${arch}.${ext}
 appImage:
-  artifactName: ${productName}-${version}.${ext}
+  artifactName: ${productName}-v${version}-Linux-${arch}.${ext}
 npmRebuild: false
 publish:
   provider: github

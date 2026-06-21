@@ -1,15 +1,32 @@
 #!/usr/bin/env node
 /**
- * Generate platform icons from resources/icons/origin.png with unified safe-area scaling.
+ * Generate platform icons from resources/icon.png (1024 RGBA master).
+ *
+ * Profiles:
+ *   macDock   - transparent + pre-baked corners (dev Dock via app.dock.setIcon)
+ *   macNative - transparent + square (macOS applies squircle at runtime; .icns / AppIcon.appiconset)
+ *   winLinux  - white + rounded (Windows/Linux window & packaged icons)
+ *   web       - white + rounded (renderer favicons / PWA assets)
+ *
+ * Dev consumers:
+ *   apps/desktop/resources/icon-mac.png  -> mac Dock (main/index.ts)
+ *   apps/desktop/resources/icon.png      -> Win/Linux BrowserWindow
+ *   resources/icons/webapp/*             -> renderer publicDir (electron.vite.config.ts)
+ *
+ * Build consumers:
+ *   apps/desktop/build/icon.icns  -> electron-builder mac (via AppIcon.iconset sync + iconutil)
+ *   apps/desktop/build/icon.ico   -> electron-builder win
+ *   apps/desktop/build/icon.png   -> electron-builder linux / default
  *
  * Usage:
- *   node scripts/generate-icons.mjs [--scale=0.82] [--radius=0.1754]
+ *   pnpm icons:generate
+ *   node scripts/generate-icons.mjs [--scale=0.80] [--radius=0.1754]
  */
 
 import sharp from 'sharp'
 import pngToIco from 'png-to-ico'
 import { execSync } from 'child_process'
-import { readFileSync, mkdirSync, writeFileSync } from 'fs'
+import { existsSync, readFileSync, mkdirSync, readdirSync, unlinkSync, copyFileSync, writeFileSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
@@ -17,10 +34,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '..')
 const ICONS_DIR = join(ROOT, 'resources/icons')
 const BUILD_DIR = join(ROOT, 'apps/desktop/build')
-const SOURCE = join(ICONS_DIR, 'origin.png')
+const DESKTOP_RESOURCES_DIR = join(ROOT, 'apps/desktop/resources')
+const SOURCE = join(ROOT, 'resources/icon.png')
+const MAC_APPICONSET_DIR = join(ICONS_DIR, 'mac/AppIcon.appiconset')
 
-const DEFAULT_SCALE = 0.82
-const DEFAULT_CORNER_RADIUS_RATIO = 0.1754
+const DEFAULT_SCALE = 0.80
+const DEFAULT_CORNER_RADIUS_RATIO = 0.20
 
 const scaleArg = process.argv.find((arg) => arg.startsWith('--scale='))
 const CONTENT_SCALE = scaleArg ? Number.parseFloat(scaleArg.split('=')[1]) : DEFAULT_SCALE
@@ -40,6 +59,16 @@ if (!Number.isFinite(CORNER_RADIUS_RATIO) || CORNER_RADIUS_RATIO < 0 || CORNER_R
   process.exit(1)
 }
 
+/** @typedef {{ backgroundMode: 'transparent' | 'white'; roundCorners: boolean; scale: number }} IconProfile */
+
+/** @type {Record<string, IconProfile>} */
+const PROFILES = {
+  macDock: { backgroundMode: 'transparent', roundCorners: true, scale: CONTENT_SCALE },
+  macNative: { backgroundMode: 'transparent', roundCorners: false, scale: CONTENT_SCALE },
+  winLinux: { backgroundMode: 'white', roundCorners: true, scale: CONTENT_SCALE },
+  web: { backgroundMode: 'white', roundCorners: true, scale: CONTENT_SCALE }
+}
+
 const ANDROID_MIPMAPS = {
   'mipmap-ldpi': 36,
   'mipmap-mdpi': 48,
@@ -57,22 +86,7 @@ const WEB_ICONS = {
   'android-chrome-512x512.png': 512
 }
 
-/** iconutil expects icon_<w>x<h>[@2x].png filenames. */
-const MAC_ICONSET_FILES = [
-  ['icon_16x16.png', 16],
-  ['icon_16x16@2x.png', 32],
-  ['icon_32x32.png', 32],
-  ['icon_32x32@2x.png', 64],
-  ['icon_128x128.png', 128],
-  ['icon_128x128@2x.png', 256],
-  ['icon_256x256.png', 256],
-  ['icon_256x256@2x.png', 512],
-  ['icon_512x512.png', 512],
-  ['icon_512x512@2x.png', 1024]
-]
-
 /** @typedef {{ r: number; g: number; b: number; alpha: number }} Rgba */
-/** @typedef {{ backgroundMode?: 'transparent' | 'white'; roundCorners?: boolean }} RenderOptions */
 
 /** @param {'transparent' | 'white'} mode */
 function canvasBackground(mode) {
@@ -80,6 +94,32 @@ function canvasBackground(mode) {
   return mode === 'white'
     ? { r: 255, g: 255, b: 255, alpha: 1 }
     : { r: 0, g: 0, b: 0, alpha: 0 }
+}
+
+/** @param {IconProfile} profile */
+function formatProfile(profile) {
+  return [
+    `bg=${profile.backgroundMode}`,
+    `corners=${profile.roundCorners ? 'rounded' : 'square'}`,
+    `scale=${(profile.scale * 100).toFixed(0)}%`
+  ].join(', ')
+}
+
+async function validateSource() {
+  if (!existsSync(SOURCE)) {
+    console.error(`Source not found: ${SOURCE.replace(`${ROOT}/`, '')}`)
+    process.exit(1)
+  }
+
+  const metadata = await sharp(SOURCE).metadata()
+  if (!metadata.width || !metadata.height) {
+    console.error('Source image has invalid dimensions.')
+    process.exit(1)
+  }
+
+  if (metadata.hasAlpha !== true) {
+    console.warn('Warning: source image has no alpha channel; transparent profiles may look incorrect.')
+  }
 }
 
 /**
@@ -102,12 +142,12 @@ async function applyRoundedCorners(buffer, size) {
 
 /**
  * @param {number} size
- * @param {RenderOptions} options
+ * @param {IconProfile} profile
  */
-async function renderIcon(size, options = {}) {
-  const { backgroundMode = 'white', roundCorners = true } = options
+async function renderIcon(size, profile) {
+  const { backgroundMode, roundCorners, scale } = profile
   const background = canvasBackground(backgroundMode)
-  const contentSize = Math.max(1, Math.round(size * CONTENT_SCALE))
+  const contentSize = Math.max(1, Math.round(size * scale))
   const offset = Math.round((size - contentSize) / 2)
 
   const resized = await sharp(SOURCE)
@@ -134,11 +174,11 @@ async function renderIcon(size, options = {}) {
 /**
  * @param {string} outputPath
  * @param {number} size
- * @param {RenderOptions} options
+ * @param {IconProfile} profile
  */
-async function writeIcon(outputPath, size, options = {}) {
+async function writeIcon(outputPath, size, profile) {
   mkdirSync(dirname(outputPath), { recursive: true })
-  const buffer = await renderIcon(size, options)
+  const buffer = await renderIcon(size, profile)
   await sharp(buffer).toFile(outputPath)
   console.log(`  ${outputPath.replace(`${ROOT}/`, '')} (${size}x${size})`)
 }
@@ -156,23 +196,29 @@ function parseAppIconset(contentsPath) {
   })
 }
 
-/** @param {string} appIconsetDir */
-async function generateAppIconset(appIconsetDir) {
+/** @param {string} appIconsetDir @param {IconProfile} profile */
+async function generateAppIconset(appIconsetDir, profile) {
   const entries = parseAppIconset(join(appIconsetDir, 'Contents.json'))
-  console.log(`\n${appIconsetDir.replace(`${ROOT}/`, '')}`)
+  const expectedFilenames = new Set(entries.map((entry) => entry.filename))
+
+  console.log(`\n${appIconsetDir.replace(`${ROOT}/`, '')} [${formatProfile(profile)}]`)
+
+  for (const filename of readdirSync(appIconsetDir)) {
+    if (filename.endsWith('.png') && !expectedFilenames.has(filename)) {
+      unlinkSync(join(appIconsetDir, filename))
+    }
+  }
+
   for (const entry of entries) {
-    await writeIcon(join(appIconsetDir, entry.filename), entry.pixelSize, {
-      backgroundMode: 'transparent',
-      roundCorners: false
-    })
+    await writeIcon(join(appIconsetDir, entry.filename), entry.pixelSize, profile)
   }
 }
 
 async function generateFaviconIco() {
+  const profile = PROFILES.web
   const sizes = [16, 32, 48, 256]
-  const pngBuffers = await Promise.all(
-    sizes.map((size) => renderIcon(size, { backgroundMode: 'white', roundCorners: true }))
-  )
+  console.log(`\nresources/icons/webapp/favicon.ico [${formatProfile(profile)}]`)
+  const pngBuffers = await Promise.all(sizes.map((size) => renderIcon(size, profile)))
   const ico = await pngToIco(pngBuffers)
   const outputPath = join(ICONS_DIR, 'webapp/favicon.ico')
   writeFileSync(outputPath, ico)
@@ -180,15 +226,29 @@ async function generateFaviconIco() {
 }
 
 async function generateElectronBuildResources() {
+  const profile = PROFILES.winLinux
+  console.log(`\napps/desktop/build [${formatProfile(profile)}]`)
+
+  await writeIcon(join(BUILD_DIR, 'icon.png'), 512, profile)
+
+  const winSizes = [16, 32, 48, 256]
+  const winBuffers = await Promise.all(winSizes.map((size) => renderIcon(size, profile)))
+  writeFileSync(join(BUILD_DIR, 'icon.ico'), await pngToIco(winBuffers))
+  console.log(`  apps/desktop/build/icon.ico (${winSizes.join(', ')}px)`)
+}
+
+async function generateMacIcns() {
   const iconsetDir = join(BUILD_DIR, 'AppIcon.iconset')
   const icnsPath = join(BUILD_DIR, 'icon.icns')
-  const macOptions = { backgroundMode: 'transparent', roundCorners: false }
+  console.log(`\napps/desktop/build/icon.icns [sync macNative AppIcon.appiconset -> AppIcon.iconset]`)
 
-  console.log('\napps/desktop/build')
   mkdirSync(iconsetDir, { recursive: true })
 
-  for (const [filename, size] of MAC_ICONSET_FILES) {
-    await writeIcon(join(iconsetDir, filename), size, macOptions)
+  copyFileSync(join(MAC_APPICONSET_DIR, 'Contents.json'), join(iconsetDir, 'Contents.json'))
+  for (const filename of readdirSync(MAC_APPICONSET_DIR)) {
+    if (filename.endsWith('.png')) {
+      copyFileSync(join(MAC_APPICONSET_DIR, filename), join(iconsetDir, filename))
+    }
   }
 
   if (process.platform === 'darwin') {
@@ -197,50 +257,43 @@ async function generateElectronBuildResources() {
   } else {
     console.warn('  skip icon.icns (iconutil requires macOS)')
   }
-
-  await writeIcon(join(BUILD_DIR, 'icon.png'), 512, {
-    backgroundMode: 'white',
-    roundCorners: true
-  })
-
-  const winSizes = [16, 32, 48, 256]
-  const winBuffers = await Promise.all(
-    winSizes.map((size) => renderIcon(size, { backgroundMode: 'white', roundCorners: true }))
-  )
-  writeFileSync(join(BUILD_DIR, 'icon.ico'), await pngToIco(winBuffers))
-  console.log(`  apps/desktop/build/icon.ico (${winSizes.join(', ')}px)`)
 }
 
 async function main() {
-  const rounded = { backgroundMode: 'white', roundCorners: true }
+  await validateSource()
 
   console.log(`Source: ${SOURCE.replace(`${ROOT}/`, '')}`)
-  console.log(`Content scale: ${(CONTENT_SCALE * 100).toFixed(0)}%`)
+  console.log(`Content scale: ${(CONTENT_SCALE * 100).toFixed(0)}% (${((1 - CONTENT_SCALE) / 2 * 100).toFixed(0)}% padding per side)`)
   console.log(`Corner radius: ${(CORNER_RADIUS_RATIO * 100).toFixed(2)}%`)
+  console.log('Profiles:')
+  for (const [name, profile] of Object.entries(PROFILES)) {
+    console.log(`  ${name}: ${formatProfile(profile)}`)
+  }
 
-  await generateAppIconset(join(ICONS_DIR, 'mac/AppIcon.appiconset'))
+  await generateAppIconset(MAC_APPICONSET_DIR, PROFILES.macNative)
 
-  console.log(`\n${join(ICONS_DIR, 'ios/AppIcon.appiconset').replace(`${ROOT}/`, '')}`)
+  console.log(`\n${join(ICONS_DIR, 'ios/AppIcon.appiconset').replace(`${ROOT}/`, '')} [${formatProfile(PROFILES.winLinux)}]`)
   for (const entry of parseAppIconset(join(ICONS_DIR, 'ios/AppIcon.appiconset/Contents.json'))) {
-    await writeIcon(join(ICONS_DIR, 'ios/AppIcon.appiconset', entry.filename), entry.pixelSize, rounded)
+    await writeIcon(join(ICONS_DIR, 'ios/AppIcon.appiconset', entry.filename), entry.pixelSize, PROFILES.winLinux)
   }
 
-  console.log('\nresources/icons/android')
+  console.log(`\nresources/icons/android [${formatProfile(PROFILES.winLinux)}]`)
   for (const [folder, size] of Object.entries(ANDROID_MIPMAPS)) {
-    await writeIcon(join(ICONS_DIR, 'android', folder, 'ic_launcher.png'), size, rounded)
+    await writeIcon(join(ICONS_DIR, 'android', folder, 'ic_launcher.png'), size, PROFILES.winLinux)
   }
-  await writeIcon(join(ICONS_DIR, 'android/playstore-icon.png'), 512, rounded)
+  await writeIcon(join(ICONS_DIR, 'android/playstore-icon.png'), 512, PROFILES.winLinux)
 
-  console.log('\nresources/icons/webapp')
+  console.log(`\nresources/icons/webapp [${formatProfile(PROFILES.web)}]`)
   for (const [filename, size] of Object.entries(WEB_ICONS)) {
-    await writeIcon(join(ICONS_DIR, 'webapp', filename), size, rounded)
+    await writeIcon(join(ICONS_DIR, 'webapp', filename), size, PROFILES.web)
   }
   await generateFaviconIco()
 
-  console.log('\napps/desktop/resources')
-  await writeIcon(join(ROOT, 'apps/desktop/resources/icon.png'), 512, rounded)
-  await writeIcon(join(ROOT, 'apps/desktop/resources/icon-mac.png'), 1024, rounded)
+  console.log(`\napps/desktop/resources [macDock + winLinux]`)
+  await writeIcon(join(DESKTOP_RESOURCES_DIR, 'icon-mac.png'), 1024, PROFILES.macDock)
+  await writeIcon(join(DESKTOP_RESOURCES_DIR, 'icon.png'), 512, PROFILES.winLinux)
 
+  await generateMacIcns()
   await generateElectronBuildResources()
 
   console.log('\nDone.')

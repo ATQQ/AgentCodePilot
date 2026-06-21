@@ -16,10 +16,13 @@ jobs:
         include:
           - os: macos-latest
             platform: mac
+            args: --arm64 --x64
           - os: windows-latest
             platform: win
+            args: --x64
           - os: ubuntu-latest
             platform: linux
+            args: --x64 --arm64
 
     runs-on: ${{ matrix.os }}
     env:
@@ -49,7 +52,7 @@ jobs:
         run: pnpm -C apps/desktop build
 
       - name: Package and publish
-        run: pnpm -C apps/desktop exec electron-builder --${{ matrix.platform }} --publish always
+        run: pnpm -C apps/desktop exec electron-builder --${{ matrix.platform }} ${{ matrix.args }} --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -59,9 +62,13 @@ jobs:
           name: AgentCodePilot-${{ matrix.platform }}-${{ github.ref_name }}
           path: |
             apps/desktop/dist/*.dmg
-            apps/desktop/dist/*.exe
+            apps/desktop/dist/*.zip
+            apps/desktop/dist/*.tar.gz
+            apps/desktop/dist/*.msi
+            apps/desktop/dist/*Portable*
             apps/desktop/dist/*.AppImage
             apps/desktop/dist/*.deb
+            apps/desktop/dist/*.rpm
             apps/desktop/dist/*.yml
             apps/desktop/dist/*.blockmap
           if-no-files-found: warn
