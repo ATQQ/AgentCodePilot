@@ -1,15 +1,21 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useTerminalStore } from '@renderer/stores/terminal.store'
 import { useChatStore } from '@renderer/stores/chat.store'
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
+import { useLayoutStore } from '@renderer/stores/layout.store'
 import TerminalView from './TerminalView.vue'
 import TerminalFolderPicker from './TerminalFolderPicker.vue'
 import ResizableSplit from '@renderer/components/layout/ResizableSplit.vue'
 
+const props = defineProps<{
+  embedded?: boolean
+}>()
+
 const terminalStore = useTerminalStore()
 const chatStore = useChatStore()
 const workspaceStore = useWorkspaceStore()
+const layoutStore = useLayoutStore()
 
 const showFolderPicker = ref(false)
 const splitWidth = ref(400)
@@ -34,13 +40,36 @@ function refitActivePanes(): void {
   }
 }
 
+function focusActiveTerminal(): void {
+  const tab = terminalStore.activeTab
+  if (!tab || tab.panes.length === 0) return
+  terminalViewRefs.value.get(tab.panes[0])?.focus?.()
+}
+
+function scheduleFocusActiveTerminal(): void {
+  nextTick(() => {
+    refitActivePanes()
+    focusActiveTerminal()
+    requestAnimationFrame(() => {
+      refitActivePanes()
+      focusActiveTerminal()
+    })
+  })
+}
+
+const isTerminalVisible = computed(() =>
+  props.embedded
+    ? layoutStore.rightPanelVisible && layoutStore.activeExtensionTab === 'terminal'
+    : layoutStore.showBottomTerminal
+)
+
 async function init(): Promise<void> {
   const gen = ++initGeneration
   const scopeKey = terminalStore.currentScopeKey
   await terminalStore.ensureTerminals()
   if (gen !== initGeneration) return
   if (scopeKey && terminalStore.currentScopeKey !== scopeKey) return
-  nextTick(() => refitActivePanes())
+  scheduleFocusActiveTerminal()
 }
 
 function scheduleInit(): void {
@@ -67,9 +96,13 @@ watch(
 watch(
   () => terminalStore.activeTab?.id,
   () => {
-    nextTick(() => refitActivePanes())
+    scheduleFocusActiveTerminal()
   }
 )
+
+watch(isTerminalVisible, (visible) => {
+  if (visible) scheduleFocusActiveTerminal()
+})
 
 async function onNewTab(): Promise<void> {
   if (terminalStore.needsFolderPicker()) {
@@ -77,13 +110,13 @@ async function onNewTab(): Promise<void> {
     return
   }
   await terminalStore.createTerminal()
-  nextTick(() => refitActivePanes())
+  scheduleFocusActiveTerminal()
 }
 
 async function onFolderSelect(path: string): Promise<void> {
   showFolderPicker.value = false
   await terminalStore.createTerminal(path)
-  nextTick(() => refitActivePanes())
+  scheduleFocusActiveTerminal()
 }
 
 function onFolderCancel(): void {
@@ -107,7 +140,7 @@ function onFolderCancel(): void {
           :key="tab.id"
           class="tab-item"
           :class="{ active: terminalStore.activeTab?.id === tab.id }"
-          @click="void terminalStore.setActiveTab(tab.id)"
+          @click="void terminalStore.setActiveTab(tab.id).then(() => scheduleFocusActiveTerminal())"
         >
           <svg
             width="12"
@@ -130,7 +163,7 @@ function onFolderCancel(): void {
           v-if="terminalStore.activeTab && terminalStore.activeTab.panes.length === 1"
           class="icon-btn"
           title="左右分屏"
-          @click="terminalStore.splitActiveTab().then(() => nextTick(refitActivePanes))"
+          @click="terminalStore.splitActiveTab().then(() => scheduleFocusActiveTerminal())"
         >
           <svg
             width="13"

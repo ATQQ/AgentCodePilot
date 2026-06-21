@@ -188,6 +188,12 @@ export function refitTerminalSession(terminalId: string): void {
   scheduleRefit(session)
 }
 
+export function focusTerminalSession(terminalId: string): void {
+  const session = sessions.get(terminalId)
+  if (!session?.host) return
+  session.term.focus()
+}
+
 export function disposeTerminalSession(terminalId: string): void {
   const session = sessions.get(terminalId)
   if (!session) return
