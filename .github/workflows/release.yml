@@ -52,7 +52,7 @@ jobs:
         run: pnpm -C apps/desktop build
 
       - name: Package and publish
-        run: pnpm -C apps/desktop exec electron-builder --${{ matrix.platform }} ${{ matrix.args }} --publish always
+        run: pnpm -C apps/desktop exec electron-builder --config electron-builder.release.yml --${{ matrix.platform }} ${{ matrix.args }} --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

@@ -1,9 +1,8 @@
-# Local / smoke packaging (fast).
-# - mac: dmg + zip, arm64 only (no tar.gz, no x64 cross-build)
-# - win: msi only
-# - linux: AppImage + deb, single arch via CLI flags
-#
-# Full multi-format release builds use electron-builder.release.yml (CI + *:release scripts).
+# Full release packaging for CI / GitHub Releases.
+# Matches CC-Switch coverage:
+# - mac: dmg + zip + tar.gz × arm64/x64
+# - win: msi + portable
+# - linux: AppImage + deb + rpm × x64/arm64
 
 appId: com.agentcodepilot.app
 productName: AgentCodePilot
@@ -25,15 +24,27 @@ win:
   target:
     - target: msi
       arch: x64
+    - target: portable
+      arch: x64
 msi:
   artifactName: ${productName}-v${version}-Windows.${ext}
+portable:
+  artifactName: ${productName}-v${version}-Windows-Portable.${ext}
 mac:
   icon: build/icon.icns
   target:
     - target: dmg
       arch: arm64
+    - target: dmg
+      arch: x64
     - target: zip
       arch: arm64
+    - target: zip
+      arch: x64
+    - target: tar.gz
+      arch: arm64
+    - target: tar.gz
+      arch: x64
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
@@ -49,9 +60,12 @@ linux:
   target:
     - AppImage
     - deb
+    - rpm
   maintainer: electronjs.org
   category: Utility
 deb:
+  artifactName: ${productName}-v${version}-Linux-${arch}.${ext}
+rpm:
   artifactName: ${productName}-v${version}-Linux-${arch}.${ext}
 appImage:
   artifactName: ${productName}-v${version}-Linux-${arch}.${ext}
