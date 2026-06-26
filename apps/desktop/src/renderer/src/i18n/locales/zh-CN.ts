@@ -81,6 +81,8 @@ export default {
     planRefTag: '引用计划: {title}',
     previewAttachment: '预览图片',
     showInFolder: '在访达中显示',
+    expandMessage: '展开全文',
+    collapseMessage: '收起',
     closePreview: '关闭预览',
     closePreviewHint: '按 Esc 关闭'
   },

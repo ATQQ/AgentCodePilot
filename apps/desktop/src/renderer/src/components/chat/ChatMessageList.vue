@@ -27,6 +27,7 @@ const props = defineProps<{
   layoutWidth: number
   isMessageStreaming: (messageId: string) => boolean
   hasPendingApproval: (messageId: string) => boolean
+  isUserMessageExpanded?: (messageId: string) => boolean
 }>()
 
 const emit = defineEmits<{
@@ -42,7 +43,8 @@ const savedThreadStates = new Map<string, MarkstreamThreadVirtualState>()
 const timelineItems = useChatTimelineItems({
   messages: () => props.messages,
   isMessageStreaming: (id) => props.isMessageStreaming(id),
-  hasPendingApproval: (id) => props.hasPendingApproval(id)
+  hasPendingApproval: (id) => props.hasPendingApproval(id),
+  isUserMessageExpanded: (id) => props.isUserMessageExpanded?.(id) ?? false
 })
 
 const measurementKey = computed(
@@ -63,7 +65,9 @@ function onThreadStateChange(state: MarkstreamThreadVirtualState): void {
 }
 
 function estimateItemHeight(item: ChatTimelineItem): number {
-  return estimateTimelineItemHeight(item)
+  const expanded =
+    item.message.role === 'user' ? (props.isUserMessageExpanded?.(item.message.id) ?? false) : false
+  return estimateTimelineItemHeight(item, expanded)
 }
 
 watch(

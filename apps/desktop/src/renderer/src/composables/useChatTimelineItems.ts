@@ -3,6 +3,17 @@ import type { Message } from '@renderer/types'
 
 export type ChatTimelineKind = 'assistant-markdown' | 'assistant-empty' | 'user'
 
+export const USER_MESSAGE_COLLAPSE_LINE_THRESHOLD = 6
+export const USER_MESSAGE_COLLAPSE_CHAR_THRESHOLD = 280
+export const USER_MESSAGE_COLLAPSED_LINES = 6
+
+export function isLongUserMessage(content: string): boolean {
+  return (
+    content.split('\n').length > USER_MESSAGE_COLLAPSE_LINE_THRESHOLD ||
+    content.length > USER_MESSAGE_COLLAPSE_CHAR_THRESHOLD
+  )
+}
+
 export interface ChatTimelineItem {
   id: string
   kind: ChatTimelineKind
@@ -20,15 +31,17 @@ export function buildMessageRevision(msg: Message, hasPendingApproval: boolean):
 export function mapMessageToTimelineItem(
   msg: Message,
   isMessageStreaming: (id: string) => boolean,
-  hasPendingApproval: (id: string) => boolean
+  hasPendingApproval: (id: string) => boolean,
+  isUserMessageExpanded?: (id: string) => boolean
 ): ChatTimelineItem {
   if (msg.role === 'user') {
+    const expanded = isUserMessageExpanded?.(msg.id) ?? false
     return {
       id: msg.id,
       kind: 'user',
       text: msg.content,
       message: msg,
-      revision: buildMessageRevision(msg, false)
+      revision: `${buildMessageRevision(msg, false)}:exp=${expanded ? 1 : 0}`
     }
   }
 
@@ -56,7 +69,7 @@ export function mapMessageToTimelineItem(
   }
 }
 
-export function estimateTimelineItemHeight(item: ChatTimelineItem): number {
+export function estimateTimelineItemHeight(item: ChatTimelineItem, expanded = false): number {
   const msg = item.message
 
   if (msg.role === 'user') {
@@ -65,6 +78,10 @@ export function estimateTimelineItemHeight(item: ChatTimelineItem): number {
       height += 80 * msg.attachments.length
     }
     const lines = msg.content.split('\n').length
+    const long = isLongUserMessage(msg.content)
+    if (long && !expanded) {
+      return height + USER_MESSAGE_COLLAPSED_LINES * 20 + 28
+    }
     return Math.min(1200, height + lines * 20)
   }
 
@@ -89,11 +106,17 @@ export function useChatTimelineItems(options: {
   messages: MaybeRefOrGetter<Message[] | undefined>
   isMessageStreaming: (messageId: string) => boolean
   hasPendingApproval: (messageId: string) => boolean
+  isUserMessageExpanded?: (messageId: string) => boolean
 }): ComputedRef<ChatTimelineItem[]> {
   return computed(() => {
     const messages = toValue(options.messages) ?? []
     return messages.map((msg) =>
-      mapMessageToTimelineItem(msg, options.isMessageStreaming, options.hasPendingApproval)
+      mapMessageToTimelineItem(
+        msg,
+        options.isMessageStreaming,
+        options.hasPendingApproval,
+        options.isUserMessageExpanded
+      )
     )
   })
 }

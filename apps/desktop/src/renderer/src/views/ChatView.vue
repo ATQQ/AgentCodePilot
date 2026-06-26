@@ -12,6 +12,7 @@ import ModelSelector from '@renderer/components/home/ModelSelector.vue'
 import ToolCallsSection from '@renderer/components/chat/ToolCallsSection.vue'
 import ApprovalRequestCard from '@renderer/components/chat/ApprovalRequestCard.vue'
 import MessageAttachmentImage from '@renderer/components/chat/MessageAttachmentImage.vue'
+import CollapsibleUserMessageText from '@renderer/components/chat/CollapsibleUserMessageText.vue'
 import ChatMessageList from '@renderer/components/chat/ChatMessageList.vue'
 import { getAgentIcon } from '@renderer/utils/agentIcons'
 import type { Attachment, Message, PlanReference, ApprovalRequest } from '@renderer/types'
@@ -37,6 +38,7 @@ const { onScroll, scheduleScrollToBottom, forceScrollToBottom } = useAutoScroll(
 const chatViewRef = ref<HTMLElement | null>(null)
 const composerRef = ref<InstanceType<typeof PromptComposer> | null>(null)
 const copiedMessageId = ref<string | null>(null)
+const expandedUserMessages = ref(new Set<string>())
 const waitingSeconds = ref(0)
 const debugMode = ref(false)
 let debugClickCount = 0
@@ -340,6 +342,17 @@ function handleApprovalRespond(
 ): void {
   chatStore.respondToApproval(requestId, allowed, scope)
 }
+
+function isUserMessageExpanded(messageId: string): boolean {
+  return expandedUserMessages.value.has(messageId)
+}
+
+function toggleUserMessageExpanded(messageId: string): void {
+  const next = new Set(expandedUserMessages.value)
+  if (next.has(messageId)) next.delete(messageId)
+  else next.add(messageId)
+  expandedUserMessages.value = next
+}
 </script>
 
 <template>
@@ -373,6 +386,7 @@ function handleApprovalRespond(
             :layout-width="layoutStore.chatLayoutWidth"
             :is-message-streaming="chatStore.isMessageStreaming"
             :has-pending-approval="hasPendingApprovalForMessage"
+            :is-user-message-expanded="isUserMessageExpanded"
             @scroll="onScroll"
           >
             <template #message="{ msg, measureRef, markdownProps }">
@@ -515,7 +529,13 @@ function handleApprovalRespond(
                         </template>
                       </div>
                     </div>
-                    {{ msg.content }}
+                    <CollapsibleUserMessageText
+                      v-if="msg.content"
+                      :content="msg.content"
+                      :expanded="isUserMessageExpanded(msg.id)"
+                      :plan-mode="msg.planMode"
+                      @toggle="toggleUserMessageExpanded(msg.id)"
+                    />
                   </template>
                 </div>
                 <div class="message-actions">
