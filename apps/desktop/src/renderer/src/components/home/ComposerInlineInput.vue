@@ -14,6 +14,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   submit: []
   planTrigger: []
+  planModeToggle: []
   input: []
 }>()
 
@@ -197,6 +198,12 @@ function handleKeydown(e: KeyboardEvent): void {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
     emit('submit')
+    return
+  }
+
+  if (e.key === 'Tab' && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    e.preventDefault()
+    emit('planModeToggle')
     return
   }
 

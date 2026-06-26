@@ -33,8 +33,8 @@ export default {
       pursueGoals: '追求目标'
     },
     urlPlaceholder: '输入 URL 链接...',
-    planModeActive: '计划模式已开启，点击关闭',
-    planModeInactive: '计划模式未开启，点击开启',
+    planModeActive: '计划模式已开启，点击关闭 (⇧ Tab)',
+    planModeInactive: '计划模式未开启，点击开启 (⇧ Tab)',
     planModeClose: '关闭计划模式',
     planPicker: {
       title: '选择要引用的计划'

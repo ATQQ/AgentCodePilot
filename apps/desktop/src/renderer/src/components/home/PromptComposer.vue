@@ -382,6 +382,7 @@ defineExpose({
         :placeholder="t('home.placeholder')"
         @submit="handleSubmit"
         @plan-trigger="showPlanPicker = true"
+        @plan-mode-toggle="composerStore.togglePlanMode(props.conversationId)"
         @input="onInlineInput"
       />
     </div>
