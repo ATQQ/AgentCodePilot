@@ -111,3 +111,9 @@ export function supervisedStop(conversationId: string): void {
     agentRegistry.stopAll(conversationId)
   }
 }
+
+export function supervisedStopAll(): void {
+  for (const conversationId of [...activeRuns.keys()]) {
+    supervisedStop(conversationId)
+  }
+}

@@ -132,3 +132,9 @@ export function cleanupScopeTerminals(scopeKey: string): void {
   }
   sessionsByScope.delete(scopeKey)
 }
+
+export function cleanupAllTerminals(): void {
+  for (const scopeKey of [...sessionsByScope.keys()]) {
+    cleanupScopeTerminals(scopeKey)
+  }
+}

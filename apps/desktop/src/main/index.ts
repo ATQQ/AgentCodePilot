@@ -28,7 +28,7 @@ import type {
   OpenPathResult
 } from '../preload/types'
 import { agentRegistry, ensureAgentRegistry } from './runtime'
-import { supervisedRun, supervisedStop } from './runtime/supervisor'
+import { supervisedRun, supervisedStop, supervisedStopAll } from './runtime/supervisor'
 import { cloneForIpc } from '../shared/ipc-clone'
 import { parseMaxAgentTurnsSetting, clampMaxAgentTurns } from '../shared/agent-run-settings'
 import { getAgentConfig, getModelCatalog, saveAgentConfig } from './runtime/claude-model-catalog'
@@ -83,6 +83,7 @@ import {
   killTerminal,
   listTerminals,
   cleanupScopeTerminals,
+  cleanupAllTerminals,
   setTerminalWindow
 } from './terminal/pty-manager'
 
@@ -954,17 +955,37 @@ app.whenReady().then(() => {
   })
 })
 
+function shutdownResources(): void {
+  supervisedStopAll()
+  cleanupAllTerminals()
+  stopGateway()
+  closeDatabase()
+}
+
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  // Dev 模式下 macOS 也退出，避免 electron-vite 子进程一直挂起
+  if (is.dev || process.platform !== 'darwin') {
     app.quit()
   }
 })
 
 app.on('will-quit', () => {
-  stopGateway()
-  closeDatabase()
+  shutdownResources()
   logInfo('App', 'Application quit')
 })
+
+if (is.dev) {
+  let devShutdownHandled = false
+  const handleDevSignal = (signal: NodeJS.Signals): void => {
+    if (devShutdownHandled) return
+    devShutdownHandled = true
+    logInfo('App', `Received ${signal}, shutting down dev app`)
+    shutdownResources()
+    app.quit()
+  }
+  process.on('SIGINT', handleDevSignal)
+  process.on('SIGTERM', handleDevSignal)
+}
 
 process.on('uncaughtException', (error) => {
   logError('Process', 'Uncaught exception', error)
