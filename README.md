@@ -96,10 +96,27 @@ pnpm typecheck    # TypeScript 类型检查
 
 ### 未签名安装包说明
 
-当前版本尚未做代码签名与 macOS 公证：
+当前版本尚未做代码签名与 macOS 公证，首次安装可能遇到系统拦截，按平台处理即可。
 
-- **macOS**：首次打开若提示「无法验证开发者」，请右键应用 →「打开」，或在「系统设置 → 隐私与安全性」中点击「仍要打开」
-- **Windows**：若 SmartScreen 拦截，点击「更多信息」→「仍要运行」
+#### macOS
+
+1. **无法验证开发者**：不要双击，请 **右键应用 →「打开」**，在弹窗中确认；或到「系统设置 → 隐私与安全性」中点击「仍要打开」。
+2. **提示「已损坏，无法打开」**（常见于从浏览器下载的 `.dmg` / `.zip`）：在终端执行一次，清除下载隔离属性后再打开：
+
+```bash
+xattr -cr /Applications/AgentCodePilot.app
+```
+
+若 `.app` 不在默认路径，把命令中的路径换成实际安装位置。
+
+#### Windows
+
+若 SmartScreen 提示发布者未知，点击 **「更多信息」→「仍要运行」** 继续安装。
+
+#### 其他说明
+
+- 自动更新尚未启用，新版本请从 [Releases](https://github.com/ATQQ/AgentCodePilot/releases) 手动下载
+- 发版验证与 Release Notes 模板见 [docs/release-checklist.md](./docs/release-checklist.md)
 
 ## 从源码发布
 
@@ -133,9 +150,9 @@ Agent Runtime 通过统一 Adapter 接口接入不同 SDK；Gateway 将外部 HT
 
 - [x] 桌面 UI 与会话管理 MVP
 - [x] Claude Agent SDK 接入
-- [x] 本地 API Gateway
 - [x] CI 发布（GitHub Actions + Releases）
 - [x] Monaco Editor、终端集成
+- [ ] 本地 API Gateway
 - [ ] Codex / Cursor SDK 接入
 - [ ] MCP、Shell、Git 等工具能力
 - [ ] 代码签名与 macOS 公证
