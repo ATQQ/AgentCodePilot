@@ -5,9 +5,7 @@ export interface MockFolder {
 }
 
 export const mockAgents: AgentConfig[] = [
-  { id: 'claude-code', name: 'Claude Code', enabled: true },
-  { id: 'codex', name: 'Codex', enabled: true },
-  { id: 'cursor', name: 'Cursor', enabled: false }
+  { id: 'claude-code', name: 'Claude Code', enabled: true }
 ]
 
 export const mockModels: ModelConfig[] = [

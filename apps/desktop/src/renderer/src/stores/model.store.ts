@@ -4,6 +4,7 @@ import type { AgentModelOption, ModelCatalogSource } from '@renderer/types'
 import { DEFAULT_CLAUDE_MODEL_ID } from '@renderer/constants/claude-models'
 
 export const useModelStore = defineStore('model', () => {
+  const activeAgentId = ref('claude-code')
   const models = ref<AgentModelOption[]>([])
   const discoveredModels = ref<AgentModelOption[]>([])
   const defaultModelId = ref(DEFAULT_CLAUDE_MODEL_ID)
@@ -12,6 +13,7 @@ export const useModelStore = defineStore('model', () => {
   const loading = ref(false)
 
   async function fetchCatalog(agentId = 'claude-code', forceRefresh = false): Promise<void> {
+    activeAgentId.value = agentId
     loading.value = true
     try {
       const catalog = await window.agentAPI.agents.listModels(agentId, forceRefresh)
@@ -36,10 +38,10 @@ export const useModelStore = defineStore('model', () => {
     return models.value.find((model) => model.id === modelId)?.name ?? modelId
   }
 
-  async function selectDefaultModel(modelId: string): Promise<void> {
+  async function selectDefaultModel(modelId: string, agentId = activeAgentId.value): Promise<void> {
     if (!models.value.some((model) => model.id === modelId)) return
-    const config = await window.agentAPI.agents.getConfig('claude-code')
-    const catalog = await window.agentAPI.agents.updateConfig('claude-code', {
+    const config = await window.agentAPI.agents.getConfig(agentId)
+    const catalog = await window.agentAPI.agents.updateConfig(agentId, {
       ...config,
       defaultModelId: modelId
     })
@@ -50,11 +52,14 @@ export const useModelStore = defineStore('model', () => {
     discoveredSource.value = catalog.discoveredSource
   }
 
-  async function saveAgentConfig(config: {
-    defaultModelId?: string
-    models?: AgentModelOption[]
-  }): Promise<void> {
-    const catalog = await window.agentAPI.agents.updateConfig('claude-code', config)
+  async function saveAgentConfig(
+    config: {
+      defaultModelId?: string
+      models?: AgentModelOption[]
+    },
+    agentId = activeAgentId.value
+  ): Promise<void> {
+    const catalog = await window.agentAPI.agents.updateConfig(agentId, config)
     models.value = catalog.models
     discoveredModels.value = catalog.discoveredModels
     defaultModelId.value = catalog.defaultModelId
@@ -62,8 +67,8 @@ export const useModelStore = defineStore('model', () => {
     discoveredSource.value = catalog.discoveredSource
   }
 
-  async function resetToDiscovered(): Promise<void> {
-    const config = await window.agentAPI.agents.getConfig('claude-code')
+  async function resetToDiscovered(agentId = activeAgentId.value): Promise<void> {
+    const config = await window.agentAPI.agents.getConfig(agentId)
     await saveAgentConfig({
       defaultModelId: config.defaultModelId,
       models: []
@@ -77,6 +82,7 @@ export const useModelStore = defineStore('model', () => {
     catalogSource,
     discoveredSource,
     loading,
+    activeAgentId,
     fetchCatalog,
     getEffectiveModelId,
     getModelName,

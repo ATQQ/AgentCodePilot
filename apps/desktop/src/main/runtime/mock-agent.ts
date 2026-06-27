@@ -1,6 +1,6 @@
 import type { AgentEvent, TokenUsage } from '../../preload/types'
 import type { AgentAdapter, AgentRunInput } from './types'
-import { getAgentConfig } from './claude-model-catalog'
+import { getAgentConfig } from './agent-config'
 import { pickRandomMockResponse, resolveMockAgentConfig } from '../../shared/mock-agent-defaults'
 
 const MOCK_USAGE: TokenUsage = {

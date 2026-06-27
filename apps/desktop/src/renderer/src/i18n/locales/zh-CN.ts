@@ -191,6 +191,9 @@ export default {
       discoveredSource: '当前检测来源',
       sourceSdk: 'Claude Agent SDK',
       sourceClaudeSettings: 'Claude Code 设置 (~/.claude/settings.json)',
+      sourceCodexConfig: 'Codex CLI 配置 (~/.codex/config.toml)',
+      sourceCodexProvider: 'Codex Provider API（~/.codex/config.toml 中的 provider）',
+      sourceCursorSdk: 'Cursor SDK（CURSOR_API_KEY 或 CLI 登录）',
       sourceAppConfig: '应用内自定义配置',
       sourceFallback: '内置默认列表',
       refresh: '重新检测',
@@ -220,7 +223,24 @@ export default {
         responsesDesc: '可配置多条 Markdown，每次对话随机返回其中一条',
         addResponse: '添加响应',
         responseItem: '响应 #{index}'
-      }
+      },
+      apiKey: 'API Key',
+      apiKeyPlaceholder: '输入 API Key',
+      apiKeyConfigured: '已配置（留空保持不变）',
+      codexApiKeyDesc: '可选。留空时将复用本地 Codex CLI 的 ~/.codex 配置（config.toml / auth.json）；也可通过 OPENAI_API_KEY 提供',
+      cursorApiKeyDesc:
+        '可选。留空时将复用本地 Cursor CLI 登录（~/.cursor/cli-config.json）；也可通过 CURSOR_API_KEY 环境变量提供',
+      codexSandbox: '沙箱模式',
+      codexSandboxDesc: '控制 Codex Agent 的文件系统访问范围',
+      sandboxReadOnly: '只读',
+      sandboxWorkspaceWrite: '工作区可写',
+      sandboxFullAccess: '完全访问',
+      cursorMode: '默认对话模式',
+      cursorModeDesc: 'Cursor Agent 首次运行的模式',
+      cursorModeAgent: 'Agent（直接执行）',
+      cursorModePlan: 'Plan（先规划）',
+      cursorAutoReview: 'Auto-review',
+      cursorAutoReviewDesc: '启用后，本地工具调用会经过 Cursor Auto-review 分类器'
     },
     aiFeatures: {
       title: 'AI 功能',

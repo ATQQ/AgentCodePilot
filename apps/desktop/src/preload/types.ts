@@ -292,13 +292,46 @@ export interface MockAgentConfig {
   responses?: string[]
 }
 
+export interface AgentAuthConfigPublic {
+  hasApiKey?: boolean
+}
+
+export interface CodexAgentConfigPublic extends AgentAuthConfigPublic {
+  defaultModelId?: string
+  sandbox?: 'read_only' | 'workspace_write' | 'full_access'
+}
+
+export interface CursorAgentConfigPublic extends AgentAuthConfigPublic {
+  defaultModelId?: string
+  mode?: 'agent' | 'plan'
+  autoReview?: boolean
+  settingSources?: Array<'project' | 'user' | 'team' | 'mdm' | 'plugins' | 'all'>
+}
+
 export interface AgentConfigSettings {
   defaultModelId?: string
   models?: AgentModelOption[]
   mock?: MockAgentConfig
+  codex?: CodexAgentConfigPublic & { apiKey?: string }
+  cursor?: CursorAgentConfigPublic & { apiKey?: string }
 }
 
-export type ModelCatalogSource = 'sdk' | 'claude-settings' | 'app-config' | 'fallback'
+export interface AgentConfigUpdatePayload {
+  defaultModelId?: string
+  models?: AgentModelOption[]
+  mock?: MockAgentConfig
+  codex?: CodexAgentConfigPublic & { apiKey?: string }
+  cursor?: CursorAgentConfigPublic & { apiKey?: string }
+}
+
+export type ModelCatalogSource =
+  | 'sdk'
+  | 'claude-settings'
+  | 'codex-config'
+  | 'codex-provider'
+  | 'cursor-sdk'
+  | 'app-config'
+  | 'fallback'
 
 export interface ModelCatalogResult {
   agentId: string
@@ -473,7 +506,7 @@ export interface AgentAPI {
     list: () => Promise<AgentInfo[]>
     listModels: (agentId: string, forceRefresh?: boolean) => Promise<ModelCatalogResult>
     getConfig: (agentId: string) => Promise<AgentConfigSettings>
-    updateConfig: (agentId: string, config: AgentConfigSettings) => Promise<ModelCatalogResult>
+    updateConfig: (agentId: string, config: AgentConfigUpdatePayload) => Promise<ModelCatalogResult>
   }
   chat: {
     createConversation: (payload: CreateConversationPayload) => Promise<ConversationInfo>

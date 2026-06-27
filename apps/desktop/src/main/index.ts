@@ -31,7 +31,12 @@ import { agentRegistry, ensureAgentRegistry } from './runtime'
 import { supervisedRun, supervisedStop, supervisedStopAll } from './runtime/supervisor'
 import { cloneForIpc } from '../shared/ipc-clone'
 import { parseMaxAgentTurnsSetting, clampMaxAgentTurns } from '../shared/agent-run-settings'
-import { getAgentConfig, getModelCatalog, saveAgentConfig } from './runtime/claude-model-catalog'
+import {
+  getAgentConfig,
+  getModelCatalog,
+  saveAgentConfig,
+  sanitizeAgentConfigForRenderer
+} from './runtime/model-catalog'
 import { respondToApproval, cancelApprovalsForConversation } from './runtime/approval-manager'
 import type { ApprovalRespondPayload } from '../preload/types'
 import { startGateway, stopGateway, getGatewayConfig, isGatewayRunning } from './gateway'
@@ -319,7 +324,9 @@ function registerIpcHandlers(): void {
     getModelCatalog(agentId, forceRefresh ?? false)
   )
 
-  ipcMain.handle(IPC_CHANNELS.AGENTS_CONFIG_GET, (_e, agentId: string) => getAgentConfig(agentId))
+  ipcMain.handle(IPC_CHANNELS.AGENTS_CONFIG_GET, (_e, agentId: string) =>
+    sanitizeAgentConfigForRenderer(getAgentConfig(agentId))
+  )
 
   ipcMain.handle(
     IPC_CHANNELS.AGENTS_CONFIG_UPDATE,
