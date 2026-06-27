@@ -97,7 +97,10 @@ watch(
   () => chatStore.isStreaming,
   (streaming, wasStreaming) => {
     if (wasStreaming && !streaming) {
-      void loadAssistantPlanMap()
+      void (async () => {
+        await loadAssistantPlanMap()
+        await maybeAutoOpenPlansPanelAfterPlanRun()
+      })()
     }
   }
 )
@@ -209,8 +212,36 @@ function getPlanIdForMessage(messageId: string): string | undefined {
   return assistantPlanMap.value.get(messageId)
 }
 
+function findLatestPlanModePlanId(): string | null {
+  const conv = chatStore.activeConversation
+  if (!conv?.messages.length) return null
+
+  const messages = conv.messages
+  let lastAssistantIdx = -1
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'assistant') {
+      lastAssistantIdx = i
+      break
+    }
+  }
+  if (lastAssistantIdx <= 0) return null
+
+  const assistant = messages[lastAssistantIdx]
+  const prev = messages[lastAssistantIdx - 1]
+  if (prev.role !== 'user' || !prev.planMode) return null
+
+  return assistantPlanMap.value.get(assistant.id) ?? null
+}
+
 function openPlansPanel(planId?: string): void {
   layoutStore.openPlansPanel(planId)
+}
+
+async function maybeAutoOpenPlansPanelAfterPlanRun(): Promise<void> {
+  const planId = findLatestPlanModePlanId()
+  if (!planId) return
+  openPlansPanel(planId)
+  await planStore.selectPlan(planId)
 }
 
 const conversationPlanCount = computed(() => planStore.plans.length)
