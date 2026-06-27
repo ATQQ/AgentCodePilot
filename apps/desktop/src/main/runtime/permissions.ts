@@ -248,8 +248,7 @@ function createPostToolUseHook(context: PermissionContext): HookCallback {
       conversationId: context.conversationId,
       messageId: context.messageId,
       toolUseId: hookInput.tool_use_id,
-      elapsedSeconds:
-        hookInput.duration_ms != null ? hookInput.duration_ms / 1000 : undefined,
+      elapsedSeconds: hookInput.duration_ms != null ? hookInput.duration_ms / 1000 : undefined,
       status: 'completed'
     })
     return {}

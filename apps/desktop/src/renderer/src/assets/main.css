@@ -14,17 +14,13 @@ body {
   overflow: hidden;
   user-select: none;
   font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    'PingFang SC',
-    'Hiragino Sans GB',
-    'Microsoft YaHei',
-    'Segoe UI',
-    Roboto,
-    sans-serif;
+    -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
+    'Segoe UI', Roboto, sans-serif;
   background: var(--content-bg);
   color: var(--content-text);
-  transition: background 0.2s, color 0.2s;
+  transition:
+    background 0.2s,
+    color 0.2s;
 }
 
 #app {
@@ -95,7 +91,12 @@ html.dark .el-popper.is-light .el-popper__arrow::before {
 }
 
 .elegant-scroll:hover {
-  scrollbar-color: color-mix(in srgb, var(--scroll-thumb, var(--content-text-tertiary)) 35%, transparent) transparent;
+  scrollbar-color: color-mix(
+      in srgb,
+      var(--scroll-thumb, var(--content-text-tertiary)) 35%,
+      transparent
+    )
+    transparent;
 }
 
 .elegant-scroll::-webkit-scrollbar {
@@ -113,11 +114,19 @@ html.dark .el-popper.is-light .el-popper__arrow::before {
 }
 
 .elegant-scroll:hover::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--scroll-thumb, var(--content-text-tertiary)) 35%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--scroll-thumb, var(--content-text-tertiary)) 35%,
+    transparent
+  );
 }
 
 .elegant-scroll:hover::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--scroll-thumb, var(--content-text-tertiary)) 55%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--scroll-thumb, var(--content-text-tertiary)) 55%,
+    transparent
+  );
 }
 
 /* xterm — only viewport scrolls; screen must not show a second OS scrollbar */
@@ -166,4 +175,3 @@ html.dark .el-popper.is-light .el-popper__arrow::before {
 .xterm .xterm-viewport::-webkit-scrollbar-corner {
   background: var(--content-bg);
 }
-

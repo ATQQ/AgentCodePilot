@@ -76,7 +76,11 @@ function handleTextClick(): void {
   right: 0;
   bottom: 0;
   height: 1.6em;
-  background: linear-gradient(to bottom, transparent, var(--user-message-fade-color, var(--btn-primary-bg)));
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--user-message-fade-color, var(--btn-primary-bg))
+  );
   pointer-events: none;
 }
 
