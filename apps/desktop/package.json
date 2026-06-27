@@ -16,7 +16,7 @@
     "dev": "electron-vite dev",
     "build": "pnpm typecheck && electron-vite build",
     "analyze": "ANALYZE=1 electron-vite build",
-    "postinstall": "electron-builder install-app-deps && electron-rebuild -f -w better-sqlite3",
+    "postinstall": "electron-builder install-app-deps && electron-rebuild -f -w better-sqlite3,node-pty",
     "build:unpack": "pnpm build && electron-builder --dir",
     "build:win": "pnpm build && electron-builder --win --x64",
     "build:win:release": "pnpm build && electron-builder --config electron-builder.release.yml --win --x64",

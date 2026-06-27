@@ -19,7 +19,7 @@ jobs:
           - os: macos-latest
             platform: mac
             args: --arm64 --x64
-          - os: windows-latest
+          - os: windows-2022
             platform: win
             args: --x64
           - os: ubuntu-latest
@@ -31,6 +31,7 @@ jobs:
       npm_config_registry: https://registry.npmjs.org/
       npm_config_electron_mirror: ''
       npm_config_electron_builder_binaries_mirror: ''
+      npm_config_msvs_version: '2022'
       ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
     steps:
       - name: Checkout
@@ -56,6 +57,13 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+
+      # windows-latest ships VS 2026 (v18) which node-gyp 11.x cannot detect yet.
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
