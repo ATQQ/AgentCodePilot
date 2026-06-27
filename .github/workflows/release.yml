@@ -1,5 +1,5 @@
 # Official releases only: push an annotated tag on main (e.g. v1.0.0) after merge.
-# Do not tag feature branches — CI pack-smoke on PR covers pre-merge packaging checks.
+# Optional pre-release packaging check: Actions → Pack Smoke → Run workflow
 name: Release
 
 on:
@@ -90,7 +90,6 @@ jobs:
           path: |
             apps/desktop/dist/*.dmg
             apps/desktop/dist/*.zip
-            apps/desktop/dist/*.tar.gz
             apps/desktop/dist/*.msi
             apps/desktop/dist/*Portable*
             apps/desktop/dist/*.AppImage

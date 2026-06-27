@@ -1,6 +1,5 @@
 # Full release packaging for CI / GitHub Releases.
-# Matches CC-Switch coverage:
-# - mac: dmg + zip + tar.gz × arm64/x64
+# - mac: dmg + zip × arm64/x64
 # - win: msi + portable
 # - linux: AppImage + deb + rpm × x64/arm64
 
@@ -42,10 +41,6 @@ mac:
     - target: zip
       arch: arm64
     - target: zip
-      arch: x64
-    - target: tar.gz
-      arch: arm64
-    - target: tar.gz
       arch: x64
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:

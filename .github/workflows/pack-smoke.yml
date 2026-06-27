@@ -1,0 +1,77 @@
+# Manual packaging smoke test — not run on PR.
+# GitHub → Actions → Pack Smoke → Run workflow
+name: Pack Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to smoke-pack (release config, no publish)
+        required: true
+        default: linux
+        type: choice
+        options:
+          - linux
+          - win
+          - mac
+
+jobs:
+  pack-smoke:
+    runs-on: ${{ inputs.platform == 'mac' && 'macos-latest' || inputs.platform == 'win' && 'windows-2022' || 'ubuntu-latest' }}
+    env:
+      npm_config_registry: https://registry.npmjs.org/
+      npm_config_electron_mirror: ''
+      npm_config_electron_builder_binaries_mirror: ''
+      npm_config_msvs_version: '2022'
+      ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup MSVC (Windows)
+        if: inputs.platform == 'win'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build app
+        run: pnpm -C apps/desktop build
+
+      - name: Smoke-pack Linux (AppImage + deb, x64)
+        if: inputs.platform == 'linux'
+        run: pnpm -C apps/desktop exec electron-builder --config electron-builder.release.yml --linux AppImage deb --x64 --publish never
+
+      - name: Smoke-pack Windows (msi, x64)
+        if: inputs.platform == 'win'
+        run: pnpm -C apps/desktop exec electron-builder --config electron-builder.release.yml --win --x64 --publish never
+
+      - name: Smoke-pack macOS (dmg + zip, arm64)
+        if: inputs.platform == 'mac'
+        run: pnpm -C apps/desktop exec electron-builder --config electron-builder.release.yml --mac dmg zip --arm64 --publish never
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pack-smoke-${{ inputs.platform }}-${{ github.run_number }}
+          path: |
+            apps/desktop/dist/*.dmg
+            apps/desktop/dist/*.zip
+            apps/desktop/dist/*.msi
+            apps/desktop/dist/*Portable*
+            apps/desktop/dist/*.AppImage
+            apps/desktop/dist/*.deb
+          if-no-files-found: warn
