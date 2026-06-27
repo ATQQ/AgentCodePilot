@@ -398,6 +398,7 @@ export interface ToolUseInfo {
   status: 'pending' | 'running' | 'completed' | 'error'
   summary?: string
   elapsedSeconds?: number
+  startedAt?: string
 }
 
 export interface ApprovalRequestInfo {
@@ -453,6 +454,8 @@ export type AgentEvent =
       messageId: string
       toolUseId: string
       summary?: string
+      elapsedSeconds?: number
+      status?: 'completed' | 'error'
     }
   | { type: 'session.updated'; conversationId: string; sessionId: string }
   | { type: 'session.cleared'; conversationId: string }

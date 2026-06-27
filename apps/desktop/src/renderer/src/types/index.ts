@@ -59,6 +59,7 @@ export interface ToolCall {
   status: 'pending' | 'running' | 'completed' | 'error'
   summary?: string
   elapsedSeconds?: number
+  startedAt?: string
 }
 
 export interface Message {

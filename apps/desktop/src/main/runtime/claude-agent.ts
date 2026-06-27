@@ -245,6 +245,7 @@ export class ClaudeAgentAdapter implements AgentAdapter {
             elapsedSeconds: toolMsg.elapsed_time_seconds
           })
         } else if (message.type === 'tool_use_summary') {
+          // PostToolUse hooks emit per-tool completion; this backfills summary text only.
           const summaryMsg = message as { summary: string; preceding_tool_use_ids: string[] }
           for (const toolId of summaryMsg.preceding_tool_use_ids) {
             emit({

@@ -1,7 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import type { ToolCall } from '@renderer/types'
-import { getToolLabel, getToolDetailLines } from '@renderer/utils/toolCall'
+import {
+  getToolLabel,
+  getToolDetailLines,
+  formatToolStartTime,
+  formatToolElapsedSeconds,
+  getLiveElapsedSeconds
+} from '@renderer/utils/toolCall'
 
 const props = defineProps<{
   toolCall: ToolCall
@@ -10,6 +16,33 @@ const props = defineProps<{
 
 const label = computed(() => getToolLabel(props.toolCall.toolName))
 const detailLines = computed(() => getToolDetailLines(props.toolCall))
+
+const nowMs = ref(Date.now())
+let timer: ReturnType<typeof setInterval> | null = null
+
+function startTimer(): void {
+  stopTimer()
+  if (props.toolCall.status !== 'running') return
+  timer = setInterval(() => {
+    nowMs.value = Date.now()
+  }, 100)
+}
+
+function stopTimer(): void {
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
+}
+
+watch(
+  () => props.toolCall.status,
+  () => startTimer(),
+  { immediate: true }
+)
+
+onMounted(() => startTimer())
+onUnmounted(() => stopTimer())
 
 const statusIcon = computed(() => {
   switch (props.toolCall.status) {
@@ -25,6 +58,17 @@ const statusIcon = computed(() => {
       return '◷'
   }
 })
+
+const startTimeLabel = computed(() =>
+  props.toolCall.startedAt ? formatToolStartTime(props.toolCall.startedAt) : null
+)
+
+const elapsedLabel = computed(() => {
+  const seconds = getLiveElapsedSeconds(props.toolCall, nowMs.value)
+  return seconds != null ? formatToolElapsedSeconds(seconds) : null
+})
+
+const showMeta = computed(() => startTimeLabel.value || elapsedLabel.value)
 </script>
 
 <template>
@@ -37,9 +81,11 @@ const statusIcon = computed(() => {
       <span class="tool-status-icon" :title="toolCall.status">{{ statusIcon }}</span>
       <span class="tool-name-badge">{{ toolCall.toolName }}</span>
       <span class="tool-label">{{ label }}</span>
-      <span v-if="toolCall.elapsedSeconds" class="tool-elapsed">
-        {{ toolCall.elapsedSeconds.toFixed(1) }}s
-      </span>
+    </div>
+    <div v-if="showMeta" class="tool-meta">
+      <span v-if="startTimeLabel">开始 {{ startTimeLabel }}</span>
+      <span v-if="startTimeLabel && elapsedLabel" class="tool-meta-sep">·</span>
+      <span v-if="elapsedLabel">耗时 {{ elapsedLabel }}</span>
     </div>
     <div v-if="detailLines.length" class="tool-details">
       <div v-for="(line, idx) in detailLines" :key="idx" class="tool-detail-row">
@@ -106,6 +152,17 @@ const statusIcon = computed(() => {
   gap: 6px;
 }
 
+.tool-meta {
+  margin-top: 4px;
+  padding-left: 22px;
+  color: var(--content-text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
+.tool-meta-sep {
+  margin: 0 4px;
+}
+
 .tool-status-icon {
   font-size: 12px;
   width: 16px;
@@ -156,12 +213,6 @@ const statusIcon = computed(() => {
   font-family: var(--font-mono, monospace);
   font-weight: 600;
   letter-spacing: 0.02em;
-}
-
-.tool-elapsed {
-  margin-left: auto;
-  color: var(--content-text-tertiary);
-  font-size: var(--font-size-xs);
 }
 
 .tool-details {

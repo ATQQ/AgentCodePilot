@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Attachment, ApprovalRequest, Conversation, Message } from '@renderer/types'
+import type { Attachment, ApprovalRequest, Conversation, Message, ToolCall } from '@renderer/types'
 import type { AgentEvent, AttachmentPayload, PlanReference } from '../../../preload/types'
 import type { ApprovalLevel } from '@renderer/types'
 import { useWorkspaceStore } from './workspace.store'
@@ -288,6 +288,15 @@ export const useChatStore = defineStore('chat', () => {
     const next = new Map(toolUseIdAliases.value)
     next.set(`${messageId}:${toolUseId}`, canonicalToolUseId)
     toolUseIdAliases.value = next
+  }
+
+  function markToolRunning(tc: ToolCall): void {
+    if (tc.status === 'pending') {
+      tc.status = 'running'
+    }
+    if (!tc.startedAt) {
+      tc.startedAt = new Date().toISOString()
+    }
   }
 
   function dedupeToolCallByFingerprint(
@@ -755,7 +764,7 @@ export const useChatStore = defineStore('chat', () => {
               (t) => t.toolUseId !== resolvedToolUseId && t.status === 'running'
             )
             if (!hasRunning) {
-              activeTool.status = 'running'
+              markToolRunning(activeTool)
             }
           }
         }
@@ -769,7 +778,7 @@ export const useChatStore = defineStore('chat', () => {
         const resolvedToolUseId = resolveToolUseId(event.messageId, event.toolUseId)
         const tc = msg.toolCalls.find((t) => t.toolUseId === resolvedToolUseId)
         if (tc) {
-          tc.status = 'running'
+          markToolRunning(tc)
           tc.elapsedSeconds = event.elapsedSeconds
         }
         break
@@ -782,12 +791,18 @@ export const useChatStore = defineStore('chat', () => {
         const resolvedToolUseId = resolveToolUseId(event.messageId, event.toolUseId)
         const tc = msg.toolCalls.find((t) => t.toolUseId === resolvedToolUseId)
         if (tc) {
-          tc.status = 'completed'
+          const wasFinished = tc.status === 'completed' || tc.status === 'error'
+          tc.status = event.status ?? 'completed'
           if (event.summary) tc.summary = event.summary
-          const nextPending = msg.toolCalls.find((t) => t.status === 'pending')
-          if (nextPending) {
-            const hasRunning = msg.toolCalls.some((t) => t.status === 'running')
-            if (!hasRunning) nextPending.status = 'running'
+          if (event.elapsedSeconds != null) tc.elapsedSeconds = event.elapsedSeconds
+          if (!wasFinished) {
+            const nextPending = msg.toolCalls.find((t) => t.status === 'pending')
+            if (nextPending) {
+              const hasRunning = msg.toolCalls.some((t) => t.status === 'running')
+              if (!hasRunning) {
+                markToolRunning(nextPending)
+              }
+            }
           }
         }
         break

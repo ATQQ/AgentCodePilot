@@ -138,6 +138,37 @@ function truncateText(text: string, maxLen: number): string {
   return text.slice(0, maxLen) + '…'
 }
 
+export function formatToolStartTime(dateStr: string): string {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const isToday =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  const timeOpts = { hour: '2-digit', minute: '2-digit', second: '2-digit' } as const
+  if (isToday) {
+    return date.toLocaleTimeString([], timeOpts)
+  }
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${date.toLocaleTimeString([], timeOpts)}`
+}
+
+export function formatToolElapsedSeconds(seconds: number): string {
+  return `${seconds.toFixed(1)}s`
+}
+
+export function getLiveElapsedSeconds(toolCall: ToolCall, nowMs: number): number | null {
+  if (toolCall.status === 'completed' || toolCall.status === 'error') {
+    return toolCall.elapsedSeconds ?? null
+  }
+  if (toolCall.status === 'running') {
+    if (toolCall.elapsedSeconds != null) return toolCall.elapsedSeconds
+    if (toolCall.startedAt) {
+      return Math.max(0, (nowMs - new Date(toolCall.startedAt).getTime()) / 1000)
+    }
+  }
+  return null
+}
+
 export function getToolCallHeader(toolCall: ToolCall): string {
   return getToolDetailPreview(toolCall, 40)
 }
