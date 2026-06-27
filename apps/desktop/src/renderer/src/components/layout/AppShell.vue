@@ -177,6 +177,7 @@ provide('openSearch', () => uiStore.openSearch())
   display: flex;
   align-items: center;
   z-index: 2000;
+  background: transparent;
   -webkit-app-region: drag;
 }
 
@@ -223,7 +224,6 @@ provide('openSearch', () => uiStore.openSearch())
   display: flex;
   flex: 1;
   overflow: hidden;
-  padding-top: var(--topbar-height);
 }
 
 .center-column {
@@ -239,6 +239,8 @@ provide('openSearch', () => uiStore.openSearch())
   flex: 1;
   overflow: hidden;
   min-height: 0;
+  box-sizing: border-box;
+  padding-top: var(--topbar-height);
 }
 
 .extension-wrapper {

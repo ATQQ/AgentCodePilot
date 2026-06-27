@@ -157,6 +157,8 @@ const isTerminalTab = computed(() => layoutStore.activeExtensionTab === 'termina
   display: flex;
   flex-direction: column;
   height: 100%;
+  box-sizing: border-box;
+  padding-top: var(--topbar-height);
   background: var(--content-bg);
   border-left: 1px solid var(--sidebar-border);
   overflow: hidden;
