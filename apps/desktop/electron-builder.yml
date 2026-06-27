@@ -47,6 +47,7 @@ mac:
 dmg:
   writeUpdateInfo: false
 linux:
+  executableName: AgentCodePilot
   icon: build/icon.png
   target:
     - AppImage

@@ -1,3 +1,5 @@
+# Official releases only: push an annotated tag on main (e.g. v1.0.0) after merge.
+# Do not tag feature branches — CI pack-smoke on PR covers pre-merge packaging checks.
 name: Release
 
 on:
@@ -33,6 +35,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify release tag is on main
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::Release tag must point to a commit on main. Merge the PR first, then tag on main."
+            exit 1
+          fi
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4

@@ -37,3 +37,37 @@ jobs:
 
       - name: Run quality checks
         run: pnpm check
+
+  # Validates release electron-builder config (e.g. linux executableName, AppImage).
+  # Uses a single Linux AppImage on PR/main — full multi-platform release runs on tag only.
+  pack-smoke:
+    needs: check
+    runs-on: ubuntu-latest
+    env:
+      npm_config_registry: https://registry.npmjs.org/
+      npm_config_electron_mirror: ''
+      npm_config_electron_builder_binaries_mirror: ''
+      ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build app
+        run: pnpm -C apps/desktop build
+
+      - name: Smoke-pack Linux AppImage (release config, no publish)
+        run: pnpm -C apps/desktop exec electron-builder --config electron-builder.release.yml --linux AppImage --x64 --publish never
