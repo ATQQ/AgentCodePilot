@@ -144,9 +144,7 @@ export async function getChangedFiles(cwd: string, scope: GitDiffScope): Promise
   const paths =
     scope === 'staged'
       ? status.files.filter((f) => f.index !== ' ' && f.index !== '?').map((f) => f.path)
-      : status.files
-          .filter((f) => f.working_dir !== ' ' || f.index === '?')
-          .map((f) => f.path)
+      : status.files.filter((f) => f.working_dir !== ' ' || f.index === '?').map((f) => f.path)
 
   const unique = [...new Set(paths)]
   const result: GitChangedFile[] = []
@@ -174,7 +172,7 @@ export async function getChangedFiles(cwd: string, scope: GitDiffScope): Promise
       const summary = await git.diffSummary(args)
       const file = summary.files[0] as { insertions?: number; deletions?: number } | undefined
       let additions = file?.insertions ?? 0
-      let deletions = file?.deletions ?? 0
+      const deletions = file?.deletions ?? 0
 
       if (additions === 0 && deletions === 0 && scope === 'staged' && fileStatus?.index === 'A') {
         try {
@@ -230,9 +228,7 @@ export async function getGitDiff(
     }
   }
 
-  const unified = staged
-    ? await git.diff(['--cached', '--', file])
-    : await git.diff(['--', file])
+  const unified = staged ? await git.diff(['--cached', '--', file]) : await git.diff(['--', file])
 
   let original = ''
   try {

@@ -1,12 +1,15 @@
-import { defineComponent, h, type PropType } from 'vue'
+import { defineComponent, h, type PropType, type VNode } from 'vue'
 import { RefreshLeft, Plus } from '@element-plus/icons-vue'
 import type { PathTreeNode } from '@renderer/utils/pathTree'
-import { analyzeSingleBranchCompression } from '@renderer/utils/treeCompression'
+import {
+  analyzeSingleBranchCompression,
+  type CompressibleTreeNode
+} from '@renderer/utils/treeCompression'
 import { getFileLanguageIconHtml } from '@renderer/utils/fileLanguageIcon'
 
 const actionIconStyle = { width: '14px', height: '14px' }
 
-function toCompressibleNode(node: PathTreeNode) {
+function toCompressibleNode(node: PathTreeNode): CompressibleTreeNode {
   return {
     name: node.name,
     path: node.path,
@@ -35,7 +38,7 @@ export const GitTreeNode = defineComponent({
   },
   emits: ['toggleDir', 'select', 'stage', 'unstage', 'discard'],
   setup(props, { emit }) {
-    function renderCompressedPrefix(label: string, depth: number) {
+    function renderCompressedPrefix(label: string, depth: number): VNode {
       return h(
         'div',
         {
@@ -47,7 +50,7 @@ export const GitTreeNode = defineComponent({
       )
     }
 
-    function renderFileRow(node: PathTreeNode, depth: number) {
+    function renderFileRow(node: PathTreeNode, depth: number): VNode {
       const isActive = props.selectedFile === node.path
       return h(
         'button',
@@ -120,7 +123,7 @@ export const GitTreeNode = defineComponent({
       )
     }
 
-    function renderDirRow(node: PathTreeNode, depth: number) {
+    function renderDirRow(node: PathTreeNode, depth: number): VNode {
       const expanded = props.isExpanded(node.path)
       const children = expanded ? node.children : []
       const isActive = false

@@ -29,6 +29,7 @@ export default defineConfig({
     }
   },
   renderer: {
+    publicDir: resolve(__dirname, '../../resources/icons/webapp'),
     server: {
       port: 5273
     },

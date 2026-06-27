@@ -68,18 +68,43 @@ provide('openSearch', () => uiStore.openSearch())
           :title="`收起/展开侧边栏 (${formatShortcutKey('s')})`"
           @click="uiStore.toggleSidebar()"
         >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
             <rect x="2" y="3" width="12" height="10" rx="1.5" />
             <line x1="6" y1="3" x2="6" y2="13" />
           </svg>
         </button>
         <button class="control-btn" title="后退" @click="router.back()">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
             <polyline points="10,3 5,8 10,13" />
           </svg>
         </button>
         <button class="control-btn" title="前进" @click="router.forward()">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
             <polyline points="6,3 11,8 6,13" />
           </svg>
         </button>
@@ -152,6 +177,7 @@ provide('openSearch', () => uiStore.openSearch())
   display: flex;
   align-items: center;
   z-index: 2000;
+  background: transparent;
   -webkit-app-region: drag;
 }
 
@@ -184,7 +210,9 @@ provide('openSearch', () => uiStore.openSearch())
   background: transparent;
   color: var(--sidebar-text);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .control-btn:hover {
@@ -196,7 +224,6 @@ provide('openSearch', () => uiStore.openSearch())
   display: flex;
   flex: 1;
   overflow: hidden;
-  padding-top: var(--topbar-height);
 }
 
 .center-column {
@@ -212,6 +239,8 @@ provide('openSearch', () => uiStore.openSearch())
   flex: 1;
   overflow: hidden;
   min-height: 0;
+  box-sizing: border-box;
+  padding-top: var(--topbar-height);
 }
 
 .extension-wrapper {
@@ -224,7 +253,10 @@ provide('openSearch', () => uiStore.openSearch())
 /* Sidebar slide animation */
 .sidebar-slide-enter-active,
 .sidebar-slide-leave-active {
-  transition: width 0.2s ease, min-width 0.2s ease, opacity 0.2s ease;
+  transition:
+    width 0.2s ease,
+    min-width 0.2s ease,
+    opacity 0.2s ease;
 }
 
 .sidebar-slide-enter-from,
@@ -237,7 +269,9 @@ provide('openSearch', () => uiStore.openSearch())
 /* Bottom panel slide animation */
 .panel-slide-v-enter-active,
 .panel-slide-v-leave-active {
-  transition: height 0.2s ease, opacity 0.2s ease;
+  transition:
+    height 0.2s ease,
+    opacity 0.2s ease;
 }
 
 .panel-slide-v-enter-from,

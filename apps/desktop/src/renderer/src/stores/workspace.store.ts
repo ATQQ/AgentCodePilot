@@ -7,12 +7,12 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const workspaces = ref<Workspace[]>([])
   const selectedProjectId = ref<string | null>(null)
 
-  const currentProject = computed(() =>
-    projects.value.find((p) => p.id === selectedProjectId.value) ?? null
+  const currentProject = computed(
+    () => projects.value.find((p) => p.id === selectedProjectId.value) ?? null
   )
 
-  const currentWorkspace = computed(() =>
-    workspaces.value.find((w) => w.id === selectedProjectId.value) ?? null
+  const currentWorkspace = computed(
+    () => workspaces.value.find((w) => w.id === selectedProjectId.value) ?? null
   )
 
   const currentCwd = computed<string | undefined>(() => {
@@ -25,9 +25,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   const workspaceProjects = computed<Project[]>(() => {
     if (!currentWorkspace.value) return []
-    return projects.value.filter((p) =>
-      currentWorkspace.value!.folders.includes(p.path)
-    )
+    return projects.value.filter((p) => currentWorkspace.value!.folders.includes(p.path))
   })
 
   const allWorkspaceFolders = computed<Set<string>>(() => {

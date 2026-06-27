@@ -12,9 +12,7 @@ import { resolveFileKind, getFileExtension } from '@renderer/utils/fileKind'
 import { getLanguageFromPath, PREVIEW_LANGUAGE_OPTIONS } from '@renderer/utils/monaco'
 import { CODE_BLOCK_PROPS } from '@renderer/constants/codeBlockTheme'
 
-const FileCodeBlockPreview = defineAsyncComponent(
-  () => import('./FileCodeBlockPreview.vue')
-)
+const FileCodeBlockPreview = defineAsyncComponent(() => import('./FileCodeBlockPreview.vue'))
 
 const props = defineProps<{
   filePath: string
@@ -193,22 +191,28 @@ onUnmounted(() => {
   <div class="file-preview">
     <div class="fp-toolbar">
       <div class="fp-actions">
-        <button class="action-btn" @click="addToChat">{{ t('workspace.filePreview.addToChat') }}</button>
-        <button v-if="isEditable" class="action-btn" @click="toggleEdit">
-          {{ fileStore.editMode ? t('workspace.filePreview.readOnly') : t('workspace.filePreview.edit') }}
+        <button class="action-btn" @click="addToChat">
+          {{ t('workspace.filePreview.addToChat') }}
         </button>
-        <button
-          v-if="fileStore.editMode"
-          class="action-btn primary"
-          @click="saveFile"
-        >{{ t('workspace.filePreview.save') }}</button>
+        <button v-if="isEditable" class="action-btn" @click="toggleEdit">
+          {{
+            fileStore.editMode
+              ? t('workspace.filePreview.readOnly')
+              : t('workspace.filePreview.edit')
+          }}
+        </button>
+        <button v-if="fileStore.editMode" class="action-btn primary" @click="saveFile">
+          {{ t('workspace.filePreview.save') }}
+        </button>
         <button
           v-if="isMarkdown && isEditable && !fileStore.editMode"
           class="action-btn"
           :class="{ active: mdPreviewMode }"
           @click="toggleMdPreview"
         >
-          {{ mdPreviewMode ? t('workspace.filePreview.source') : t('workspace.filePreview.preview') }}
+          {{
+            mdPreviewMode ? t('workspace.filePreview.source') : t('workspace.filePreview.preview')
+          }}
         </button>
       </div>
       <span class="fp-name" :title="filePath">{{ fileName }}</span>
@@ -264,7 +268,7 @@ onUnmounted(() => {
           :read-only="!fileStore.editMode"
           :is-dark="isDark"
           :language-override="fileStore.previewLanguageOverride ?? undefined"
-          @update:value="(v) => fileStore.dirtyContent = v"
+          @update:value="(v) => (fileStore.dirtyContent = v)"
           @add-selection-to-chat="addSelectionToChat"
         />
         <template #fallback>
@@ -290,7 +294,9 @@ onUnmounted(() => {
     </div>
 
     <div v-if="showAddExtensionPrompt && fileExtension" class="extension-prompt">
-      <span>预览正常？可将 <code>.{{ fileExtension }}</code> 加入文本预览列表</span>
+      <span
+        >预览正常？可将 <code>.{{ fileExtension }}</code> 加入文本预览列表</span
+      >
       <div class="prompt-actions">
         <button class="action-btn" @click="showAddExtensionPrompt = false">取消</button>
         <button class="action-btn primary" @click="confirmAddExtension">确认添加</button>

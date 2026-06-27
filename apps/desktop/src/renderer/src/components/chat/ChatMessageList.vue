@@ -1,78 +1,136 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, nextTick } from 'vue'
-import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
-import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import {
+  MarkstreamVirtualTimeline,
+  type MarkstreamThreadVirtualState,
+  type MarkstreamVirtualMarkdownProps
+} from 'markstream-vue'
 import type { Message } from '@renderer/types'
+import {
+  useChatTimelineItems,
+  estimateTimelineItemHeight,
+  layoutWidthBucket,
+  type ChatTimelineItem
+} from '@renderer/composables/useChatTimelineItems'
+
+interface TimelineExpose {
+  $el: HTMLElement
+  scrollToBottom: () => void
+  captureThreadState: () => MarkstreamThreadVirtualState
+  restoreThreadState: (state: MarkstreamThreadVirtualState | null | undefined) => void
+}
 
 const props = defineProps<{
   messages: Message[]
-  showStandaloneThinking: boolean
-  pendingApprovalMessageIds: Set<string>
+  conversationId: string | null
+  isDark: boolean
+  layoutWidth: number
+  isMessageStreaming: (messageId: string) => boolean
+  hasPendingApproval: (messageId: string) => boolean
+  isUserMessageExpanded?: (messageId: string) => boolean
 }>()
 
 const emit = defineEmits<{
   scroll: []
 }>()
 
-const scrollerRef = ref<{ $el: HTMLElement } | null>(null)
+const timelineRef = ref<TimelineExpose | null>(null)
 const scrollContainer = ref<HTMLElement | null>(null)
+const initialThreadState = ref<MarkstreamThreadVirtualState | null>(null)
+const lastThreadState = ref<MarkstreamThreadVirtualState | null>(null)
+const savedThreadStates = new Map<string, MarkstreamThreadVirtualState>()
+
+const timelineItems = useChatTimelineItems({
+  messages: () => props.messages,
+  isMessageStreaming: (id) => props.isMessageStreaming(id),
+  hasPendingApproval: (id) => props.hasPendingApproval(id),
+  isUserMessageExpanded: (id) => props.isUserMessageExpanded?.(id) ?? false
+})
+
+const measurementKey = computed(
+  () => `chat:${props.isDark ? 'dark' : 'light'}:${layoutWidthBucket(props.layoutWidth)}`
+)
 
 function syncScrollContainer(): void {
-  scrollContainer.value = scrollerRef.value?.$el ?? null
-}
-
-function sizeDependencies(msg: Message): unknown[] {
-  return [
-    msg.content,
-    msg.toolCalls?.length ?? 0,
-    msg.attachments?.length ?? 0,
-    props.pendingApprovalMessageIds.has(msg.id) ? 1 : 0,
-    msg.stopped ? 1 : 0
-  ]
+  const el = timelineRef.value?.$el
+  scrollContainer.value = el instanceof HTMLElement ? el : null
 }
 
 function onScroll(): void {
   emit('scroll')
 }
 
+function onThreadStateChange(state: MarkstreamThreadVirtualState): void {
+  lastThreadState.value = state
+}
+
+function estimateItemHeight(item: ChatTimelineItem): number {
+  const expanded =
+    item.message.role === 'user' ? (props.isUserMessageExpanded?.(item.message.id) ?? false) : false
+  return estimateTimelineItemHeight(item, expanded)
+}
+
+watch(
+  () => props.conversationId,
+  (newId, oldId) => {
+    if (oldId) {
+      const state = lastThreadState.value ?? timelineRef.value?.captureThreadState?.()
+      if (state) {
+        savedThreadStates.set(oldId, state)
+      }
+    }
+    const restored = newId ? (savedThreadStates.get(newId) ?? null) : null
+    initialThreadState.value = restored
+    void nextTick(() => {
+      timelineRef.value?.restoreThreadState(restored)
+      syncScrollContainer()
+    })
+  }
+)
+
+watch(timelineRef, () => syncScrollContainer(), { flush: 'post' })
+
 onMounted(() => {
   syncScrollContainer()
 })
 
-watch(
-  () => props.messages.length,
-  () => {
-    nextTick(syncScrollContainer)
-  }
-)
-
-defineExpose({ scrollContainer })
+defineExpose({
+  scrollContainer,
+  scrollToBottom: () => timelineRef.value?.scrollToBottom()
+})
 </script>
 
 <template>
-  <DynamicScroller
-    ref="scrollerRef"
-    :items="messages"
-    :min-item-size="120"
-    key-field="id"
+  <MarkstreamVirtualTimeline
+    ref="timelineRef"
     class="messages-container elegant-scroll"
+    :items="timelineItems"
+    :thread-key="conversationId ?? undefined"
+    :measurement-key="measurementKey"
+    markdown-mode="chat"
+    markdown-code-renderer="monaco"
+    :markdown-fade="false"
+    stick-to-bottom="auto"
+    :overscan-px="1200"
+    :initial-thread-state="initialThreadState"
+    :estimate-item-height="estimateItemHeight"
     @scroll="onScroll"
+    @thread-state-change="onThreadStateChange"
   >
-    <template #default="{ item, index, active }">
-      <DynamicScrollerItem
+    <template #default="{ item, markdownProps, measureRef }">
+      <slot
+        name="message"
         :item="item"
-        :active="active"
-        :data-index="index"
-        :size-dependencies="sizeDependencies(item)"
-        class="message-scroller-item"
-      >
-        <slot name="message" :msg="item" />
-      </DynamicScrollerItem>
+        :msg="item.message"
+        :markdown-props="markdownProps as MarkstreamVirtualMarkdownProps"
+        :measure-ref="measureRef"
+      />
     </template>
+
     <template #after>
       <slot name="after" />
     </template>
-  </DynamicScroller>
+  </MarkstreamVirtualTimeline>
 </template>
 
 <style scoped>
@@ -81,7 +139,7 @@ defineExpose({ scrollContainer })
   min-height: 0;
 }
 
-.message-scroller-item {
+.messages-container :deep(.markstream-virtual-timeline__item) {
   padding-bottom: var(--spacing-lg);
 }
 </style>

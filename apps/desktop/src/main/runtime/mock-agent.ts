@@ -111,12 +111,14 @@ async function simulateToolCalls(
     await delay(200)
     if (signal.aborted) return
 
+    const finalElapsed = step.progressSeconds[step.progressSeconds.length - 1] ?? 0.1
     emit({
       type: 'tool.completed',
       conversationId: input.conversationId,
       messageId: input.messageId,
       toolUseId: step.toolUseId,
-      summary: step.summary
+      summary: step.summary,
+      elapsedSeconds: finalElapsed
     })
 
     await delay(150)

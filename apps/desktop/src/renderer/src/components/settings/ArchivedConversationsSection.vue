@@ -210,15 +210,25 @@ function deleteConversation(convId: string): void {
     </div>
 
     <div v-else class="archived-groups">
-      <div v-for="group in groupedConversations" :key="group.projectId ?? '__none__'" class="archived-group">
+      <div
+        v-for="group in groupedConversations"
+        :key="group.projectId ?? '__none__'"
+        class="archived-group"
+      >
         <div class="group-header">
           <div class="group-info">
             <el-icon :size="14"><FolderOpened /></el-icon>
             <span class="group-name">{{ group.name }}</span>
           </div>
           <div class="group-actions">
-            <span class="group-count">{{ t('archived.chatCount', { count: group.conversations.length }) }}</span>
-            <button type="button" class="menu-btn" @click.stop="showGroupMenu($event, group.projectId)">
+            <span class="group-count">{{
+              t('archived.chatCount', { count: group.conversations.length })
+            }}</span>
+            <button
+              type="button"
+              class="menu-btn"
+              @click.stop="showGroupMenu($event, group.projectId)"
+            >
               <el-icon :size="14"><MoreFilled /></el-icon>
             </button>
           </div>
@@ -262,7 +272,10 @@ function deleteConversation(convId: string): void {
         :style="{ left: convMenu.x + 'px', top: convMenu.y + 'px' }"
         @click.stop
       >
-        <button class="menu-item" @click="convMenu.convId && unarchiveConversation(convMenu.convId)">
+        <button
+          class="menu-item"
+          @click="convMenu.convId && unarchiveConversation(convMenu.convId)"
+        >
           {{ t('archived.unarchive') }}
         </button>
         <button

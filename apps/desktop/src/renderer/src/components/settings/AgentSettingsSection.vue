@@ -193,7 +193,13 @@ async function resetConfig(): Promise<void> {
         <div>
           <div class="setting-label">{{ t('settings.agentConfig.maxTurns') }}</div>
           <div class="setting-desc">
-            {{ t('settings.agentConfig.maxTurnsDesc', { min: MIN_MAX_AGENT_TURNS, max: MAX_MAX_AGENT_TURNS, default: DEFAULT_MAX_AGENT_TURNS }) }}
+            {{
+              t('settings.agentConfig.maxTurnsDesc', {
+                min: MIN_MAX_AGENT_TURNS,
+                max: MAX_MAX_AGENT_TURNS,
+                default: DEFAULT_MAX_AGENT_TURNS
+              })
+            }}
           </div>
         </div>
         <input

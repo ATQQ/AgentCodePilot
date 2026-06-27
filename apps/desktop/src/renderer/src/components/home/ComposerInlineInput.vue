@@ -14,6 +14,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   submit: []
   planTrigger: []
+  planModeToggle: []
   input: []
 }>()
 
@@ -200,6 +201,12 @@ function handleKeydown(e: KeyboardEvent): void {
     return
   }
 
+  if (e.key === 'Tab' && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    e.preventDefault()
+    emit('planModeToggle')
+    return
+  }
+
   if (e.key !== 'Backspace' && e.key !== 'Delete') return
 
   const editor = getEditor()
@@ -250,7 +257,8 @@ function findAdjacentChip(
   }
 
   if (!(container instanceof HTMLElement)) return null
-  const child = direction === 'before' ? container.childNodes[offset - 1] : container.childNodes[offset]
+  const child =
+    direction === 'before' ? container.childNodes[offset - 1] : container.childNodes[offset]
   if (child instanceof HTMLElement && child.classList.contains('inline-file-ref')) return child
   return null
 }

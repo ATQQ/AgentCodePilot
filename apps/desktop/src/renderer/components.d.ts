@@ -21,6 +21,7 @@ declare module 'vue' {
     BottomPanel: typeof import('./src/components/layout/BottomPanel.vue')['default']
     BrowserView: typeof import('./src/components/workspace/BrowserView.vue')['default']
     ChatMessageList: typeof import('./src/components/chat/ChatMessageList.vue')['default']
+    CollapsibleUserMessageText: typeof import('./src/components/chat/CollapsibleUserMessageText.vue')['default']
     ComposerInlineInput: typeof import('./src/components/home/ComposerInlineInput.vue')['default']
     DiffViewer: typeof import('./src/components/workspace/DiffViewer.vue')['default']
     EditorFileTabs: typeof import('./src/components/workspace/EditorFileTabs.vue')['default']

@@ -1,4 +1,4 @@
-import { defineComponent, h, type PropType } from 'vue'
+import { defineComponent, h, type PropType, type VNode } from 'vue'
 import type { FileEntry } from '@renderer/types'
 import { analyzeFileEntryCompression } from '@renderer/utils/treeCompression'
 import { getFileLanguageIconHtml } from '@renderer/utils/fileLanguageIcon'
@@ -32,7 +32,7 @@ export const FileTreeNode = defineComponent({
       })
     }
 
-    function renderCompressedPrefix(label: string, depth: number) {
+    function renderCompressedPrefix(label: string, depth: number): VNode {
       return h(
         'div',
         {
@@ -44,15 +44,11 @@ export const FileTreeNode = defineComponent({
       )
     }
 
-    function renderFileRow(entry: FileEntry, depth: number) {
+    function renderFileRow(entry: FileEntry, depth: number): VNode {
       return h(
         'button',
         {
-          class: [
-            'file-row',
-            'leaf',
-            { active: props.activeFilePath === entry.path }
-          ],
+          class: ['file-row', 'leaf', { active: props.activeFilePath === entry.path }],
           style: { paddingLeft: `${8 + depth * 14}px` },
           onClick: () => emit('clickEntry', entry),
           onContextmenu: (e: MouseEvent) => emit('contextMenu', e, entry)
@@ -67,7 +63,7 @@ export const FileTreeNode = defineComponent({
       )
     }
 
-    function renderDirRow(entry: FileEntry, depth: number) {
+    function renderDirRow(entry: FileEntry, depth: number): VNode {
       const expanded = props.isExpanded(entry.path)
       const children = expanded ? props.getItems(entry.path) : []
 
@@ -107,11 +103,7 @@ export const FileTreeNode = defineComponent({
         return h('div', { class: 'file-tree-node' }, [renderFileRow(entry, props.depth)])
       }
 
-      const compression = analyzeFileEntryCompression(
-        entry,
-        props.getItems,
-        props.isExpanded
-      )
+      const compression = analyzeFileEntryCompression(entry, props.getItems, props.isExpanded)
 
       if (compression) {
         const childDepth = props.depth + 1

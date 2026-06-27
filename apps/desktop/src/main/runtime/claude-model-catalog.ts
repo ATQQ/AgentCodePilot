@@ -2,6 +2,8 @@ import { homedir } from 'os'
 import { app } from 'electron'
 import type { ModelInfo } from '@anthropic-ai/claude-agent-sdk'
 import { loadClaudeAgentSdk } from './claude-sdk-loader'
+import { resolveClaudeCodeExecutablePath } from './claude-executable'
+import { getShellEnvironment } from '../shell/shell-env'
 import * as repo from '../database/repositories'
 import {
   type AgentConfigSettings,
@@ -68,10 +70,7 @@ function buildModelsFromClaudeEnv(env: Record<string, string>): AgentModelOption
     const displayName = env[`ANTHROPIC_DEFAULT_${envPrefix}_MODEL_NAME`]
     const resolvedModel = env[`ANTHROPIC_DEFAULT_${envPrefix}_MODEL`]
     const name = displayName || meta.label
-    const description =
-      resolvedModel && resolvedModel !== name
-        ? resolvedModel
-        : meta.description
+    const description = resolvedModel && resolvedModel !== name ? resolvedModel : meta.description
 
     models.push({ id: alias, name, description })
   }
@@ -85,11 +84,14 @@ async function fetchSdkModels(): Promise<AgentModelOption[] | null> {
 
   try {
     const { query } = await loadClaudeAgentSdk()
+    const claudeExecutable = resolveClaudeCodeExecutablePath()
     const q = query({
       prompt: '',
       options: {
         abortController: controller,
         cwd: app.getPath('home') || homedir(),
+        env: getShellEnvironment(),
+        ...(claudeExecutable ? { pathToClaudeCodeExecutable: claudeExecutable } : {}),
         maxTurns: 1,
         permissionMode: 'plan'
       }
@@ -211,7 +213,10 @@ async function discoverModels(forceRefresh: boolean): Promise<{
   return snapshot
 }
 
-export async function getModelCatalog(agentId: string, forceRefresh = false): Promise<ModelCatalogResult> {
+export async function getModelCatalog(
+  agentId: string,
+  forceRefresh = false
+): Promise<ModelCatalogResult> {
   if (agentId !== 'claude-code') {
     return {
       agentId,
@@ -224,14 +229,9 @@ export async function getModelCatalog(agentId: string, forceRefresh = false): Pr
   }
 
   const appConfig = readAgentConfig(agentId)
-  const { discoveredModels, discoveredDefault, discoveredSource } = await discoverModels(forceRefresh)
-  return finalizeCatalog(
-    agentId,
-    discoveredModels,
-    discoveredDefault,
-    discoveredSource,
-    appConfig
-  )
+  const { discoveredModels, discoveredDefault, discoveredSource } =
+    await discoverModels(forceRefresh)
+  return finalizeCatalog(agentId, discoveredModels, discoveredDefault, discoveredSource, appConfig)
 }
 
 export function invalidateModelCatalog(agentId?: string): void {

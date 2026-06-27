@@ -42,10 +42,13 @@ watch(
   }
 )
 
-watch(() => panelContext.effectivePanelCwd, async () => {
-  fileStore.clearCache()
-  await fileStore.ensureRootLoaded()
-})
+watch(
+  () => panelContext.effectivePanelCwd,
+  async () => {
+    fileStore.clearCache()
+    await fileStore.ensureRootLoaded()
+  }
+)
 
 async function onEntryClick(entry: FileEntry): Promise<void> {
   if (entry.isDirectory) {
@@ -134,11 +137,7 @@ function onCloseAll(): void {
           @update:width="layoutStore.sideTreeWidth = $event"
         >
           <template #header>
-            <input
-              v-model="fileStore.filter"
-              class="filter-input"
-              placeholder="筛选文件…"
-            />
+            <input v-model="fileStore.filter" class="filter-input" placeholder="筛选文件…" />
           </template>
 
           <template v-if="fileStore.filter">
@@ -150,15 +149,8 @@ function onCloseAll(): void {
               @click="onEntryClick(entry)"
               @contextmenu="showContextMenu($event, entry)"
             >
-              <span
-                v-if="entry.isDirectory"
-                class="expand-icon"
-              >▸</span>
-              <span
-                v-else
-                class="file-lang-icon"
-                v-html="getFileLanguageIconHtml(entry.path)"
-              />
+              <span v-if="entry.isDirectory" class="expand-icon">▸</span>
+              <span v-else class="file-lang-icon" v-html="getFileLanguageIconHtml(entry.path)" />
               <span class="file-name" :title="entry.relativePath">{{ entry.name }}</span>
             </button>
           </template>

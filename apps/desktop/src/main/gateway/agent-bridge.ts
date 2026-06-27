@@ -42,7 +42,8 @@ export async function runAgentForGateway(
           content: prompt,
           agentId,
           cwd: app.getPath('home'),
-          approvalLevel: (getSetting('approvalLevel') as 'request' | 'auto' | 'full' | undefined) ?? 'auto'
+          approvalLevel:
+            (getSetting('approvalLevel') as 'request' | 'auto' | 'full' | undefined) ?? 'auto'
         },
         emit
       )

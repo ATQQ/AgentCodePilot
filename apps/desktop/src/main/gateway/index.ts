@@ -1,6 +1,11 @@
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http'
 import { randomBytes } from 'crypto'
-import type { GatewayConfig, OpenAIChatRequest, UnifiedChatRequest, AnthropicRequest } from './types'
+import type {
+  GatewayConfig,
+  OpenAIChatRequest,
+  UnifiedChatRequest,
+  AnthropicRequest
+} from './types'
 import { handleOpenAICompletion } from './openai-handler'
 import { handleAnthropicMessages } from './anthropic-handler'
 import { agentRegistry } from '../runtime'
@@ -35,7 +40,12 @@ function sendJson(res: ServerResponse, status: number, data: unknown): void {
   res.end(body)
 }
 
-function sendError(res: ServerResponse, status: number, message: string, type = 'invalid_request_error'): void {
+function sendError(
+  res: ServerResponse,
+  status: number,
+  message: string,
+  type = 'invalid_request_error'
+): void {
   sendJson(res, status, { error: { message, type, code: null } })
 }
 
@@ -56,7 +66,7 @@ function handleCors(req: IncomingMessage, res: ServerResponse): boolean {
 function validateToken(req: IncomingMessage): boolean {
   if (!config.token) return true
   const auth = req.headers['authorization'] || ''
-  const apiKey = req.headers['x-api-key'] as string || ''
+  const apiKey = (req.headers['x-api-key'] as string) || ''
   if (auth.startsWith('Bearer ') && auth.slice(7) === config.token) return true
   if (apiKey === config.token) return true
   return false

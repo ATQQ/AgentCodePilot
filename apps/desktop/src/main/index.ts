@@ -3,6 +3,9 @@ import { join } from 'path'
 import { existsSync, mkdirSync, writeFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import iconDev from '../../resources/icon.dev.png?asset'
+import macDockIcon from '../../resources/icon-mac.png?asset'
+import macDockIconDev from '../../resources/icon-mac.dev.png?asset'
 import { IPC_CHANNELS } from '../preload/types'
 import type {
   AgentEvent,
@@ -25,14 +28,10 @@ import type {
   OpenPathResult
 } from '../preload/types'
 import { agentRegistry, ensureAgentRegistry } from './runtime'
-import { supervisedRun, supervisedStop } from './runtime/supervisor'
+import { supervisedRun, supervisedStop, supervisedStopAll } from './runtime/supervisor'
 import { cloneForIpc } from '../shared/ipc-clone'
 import { parseMaxAgentTurnsSetting, clampMaxAgentTurns } from '../shared/agent-run-settings'
-import {
-  getAgentConfig,
-  getModelCatalog,
-  saveAgentConfig
-} from './runtime/claude-model-catalog'
+import { getAgentConfig, getModelCatalog, saveAgentConfig } from './runtime/claude-model-catalog'
 import { respondToApproval, cancelApprovalsForConversation } from './runtime/approval-manager'
 import type { ApprovalRespondPayload } from '../preload/types'
 import { startGateway, stopGateway, getGatewayConfig, isGatewayRunning } from './gateway'
@@ -68,6 +67,7 @@ import {
   parseExternalAppsSetting
 } from './settings/defaults'
 import { openPathWithApp } from './shell/open-external-app'
+import { initShellEnvironment } from './shell/shell-env'
 import type { GitDiffScope } from '../preload/types'
 import {
   listDirectory,
@@ -83,6 +83,7 @@ import {
   killTerminal,
   listTerminals,
   cleanupScopeTerminals,
+  cleanupAllTerminals,
   setTerminalWindow
 } from './terminal/pty-manager'
 
@@ -192,7 +193,11 @@ function mapPlanRow(r: repo.PlanRow): PlanInfo {
 function emitAgentEvent(event: AgentEvent): void {
   if (event.type === 'message.started') {
     if (!streamingMessages.has(event.messageId)) {
-      streamingMessages.set(event.messageId, { conversationId: event.conversationId, content: '', rawInput: '' })
+      streamingMessages.set(event.messageId, {
+        conversationId: event.conversationId,
+        content: '',
+        rawInput: ''
+      })
     }
   } else if (event.type === 'message.delta') {
     const entry = streamingMessages.get(event.messageId)
@@ -290,7 +295,9 @@ function mapConversationRow(r: repo.ConversationRow): ConversationListItem {
     cwd: r.cwd ?? null,
     pinned: r.pinned === 1,
     archived: r.archived === 1,
-    approvalLevel: (r.approval_level === 'request' || r.approval_level === 'auto' || r.approval_level === 'full'
+    approvalLevel: (r.approval_level === 'request' ||
+    r.approval_level === 'auto' ||
+    r.approval_level === 'full'
       ? r.approval_level
       : 'auto') as 'request' | 'auto' | 'full',
     createdAt: r.created_at,
@@ -308,9 +315,8 @@ function registerIpcHandlers(): void {
     }))
   })
 
-  ipcMain.handle(
-    IPC_CHANNELS.AGENTS_MODELS_LIST,
-    (_e, agentId: string, forceRefresh?: boolean) => getModelCatalog(agentId, forceRefresh ?? false)
+  ipcMain.handle(IPC_CHANNELS.AGENTS_MODELS_LIST, (_e, agentId: string, forceRefresh?: boolean) =>
+    getModelCatalog(agentId, forceRefresh ?? false)
   )
 
   ipcMain.handle(IPC_CHANNELS.AGENTS_CONFIG_GET, (_e, agentId: string) => getAgentConfig(agentId))
@@ -327,12 +333,8 @@ function registerIpcHandlers(): void {
     IPC_CHANNELS.CHAT_CREATE,
     (_e, payload: CreateConversationPayload): ConversationInfo => {
       const id = `conv-${Date.now()}`
-      const titleSource =
-        payload.firstMessage.trim() ||
-        payload.planRefs?.[0]?.title ||
-        '新对话'
-      const title =
-        titleSource.slice(0, 30) + (titleSource.length > 30 ? '...' : '')
+      const titleSource = payload.firstMessage.trim() || payload.planRefs?.[0]?.title || '新对话'
+      const title = titleSource.slice(0, 30) + (titleSource.length > 30 ? '...' : '')
       const now = new Date().toISOString()
 
       let cwd: string | null = null
@@ -413,9 +415,7 @@ function registerIpcHandlers(): void {
     supervisedRun(runInput, emitAgentEvent)
   })
 
-  ipcMain.handle(
-    IPC_CHANNELS.CHAT_SEND,
-    (_e, payload: SendMessagePayload): SendMessageResult => {
+  ipcMain.handle(IPC_CHANNELS.CHAT_SEND, (_e, payload: SendMessagePayload): SendMessageResult => {
     const userMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
     const assistantMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-a`
     const now = new Date().toISOString()
@@ -484,26 +484,19 @@ function registerIpcHandlers(): void {
     supervisedStop(conversationId)
   })
 
-  ipcMain.handle(
-    IPC_CHANNELS.APPROVAL_RESPOND,
-    (_e, payload: ApprovalRespondPayload): boolean => {
-      const result = respondToApproval(
-        payload.requestId,
-        payload.allowed,
-        payload.scope ?? 'once'
-      )
-      if (!result.resolved || !result.conversationId) return false
+  ipcMain.handle(IPC_CHANNELS.APPROVAL_RESPOND, (_e, payload: ApprovalRespondPayload): boolean => {
+    const result = respondToApproval(payload.requestId, payload.allowed, payload.scope ?? 'once')
+    if (!result.resolved || !result.conversationId) return false
 
-      emitAgentEvent({
-        type: 'approval.resolved',
-        requestId: payload.requestId,
-        conversationId: result.conversationId,
-        allowed: payload.allowed,
-        scope: payload.scope
-      })
-      return true
-    }
-  )
+    emitAgentEvent({
+      type: 'approval.resolved',
+      requestId: payload.requestId,
+      conversationId: result.conversationId,
+      allowed: payload.allowed,
+      scope: payload.scope
+    })
+    return true
+  })
 
   // --- Conversations ---
 
@@ -544,7 +537,11 @@ function registerIpcHandlers(): void {
           }
         }
         if (r.attachments) {
-          try { msg.attachments = JSON.parse(r.attachments) } catch {}
+          try {
+            msg.attachments = JSON.parse(r.attachments)
+          } catch {
+            /* ignore */
+          }
         }
         if (r.input_tokens != null && r.output_tokens != null) {
           msg.usage = {
@@ -612,11 +609,14 @@ function registerIpcHandlers(): void {
     repo.deleteProject(id)
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROJECTS_RESTORE_BY_PATH, (_e, path: string): ProjectPayload | null => {
-    const restored = repo.restoreProjectByPath(path)
-    if (!restored) return null
-    return { id: restored.id, name: restored.name, path: restored.path }
-  })
+  ipcMain.handle(
+    IPC_CHANNELS.PROJECTS_RESTORE_BY_PATH,
+    (_e, path: string): ProjectPayload | null => {
+      const restored = repo.restoreProjectByPath(path)
+      if (!restored) return null
+      return { id: restored.id, name: restored.name, path: restored.path }
+    }
+  )
 
   // --- Workspaces ---
 
@@ -679,13 +679,13 @@ function registerIpcHandlers(): void {
       )
     }
     if (payload.browserAutoExtractLinks !== undefined) {
-      repo.setSetting(
-        'browserAutoExtractLinks',
-        payload.browserAutoExtractLinks ? 'true' : 'false'
-      )
+      repo.setSetting('browserAutoExtractLinks', payload.browserAutoExtractLinks ? 'true' : 'false')
     }
     if (payload.permissionNotificationsEnabled !== undefined) {
-      repo.setSetting('permissionNotificationsEnabled', payload.permissionNotificationsEnabled ? 'true' : 'false')
+      repo.setSetting(
+        'permissionNotificationsEnabled',
+        payload.permissionNotificationsEnabled ? 'true' : 'false'
+      )
     }
     if (payload.filePreview) {
       repo.setSetting('filePreview', JSON.stringify(payload.filePreview))
@@ -701,14 +701,17 @@ function registerIpcHandlers(): void {
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.SHELL_OPEN_PATH, async (_e, payload: OpenPathPayload): Promise<OpenPathResult> => {
-    return openPathWithApp({
-      path: payload.path,
-      kind: payload.kind,
-      protocol: payload.protocol,
-      appName: payload.appName
-    })
-  })
+  ipcMain.handle(
+    IPC_CHANNELS.SHELL_OPEN_PATH,
+    async (_e, payload: OpenPathPayload): Promise<OpenPathResult> => {
+      return openPathWithApp({
+        path: payload.path,
+        kind: payload.kind,
+        protocol: payload.protocol,
+        appName: payload.appName
+      })
+    }
+  )
 
   // --- Gateway ---
 
@@ -768,15 +771,12 @@ function registerIpcHandlers(): void {
     }
   )
 
-  ipcMain.handle(
-    IPC_CHANNELS.FILE_GET_IMAGE_DATA_URL,
-    (_e, filePath: string): string | null => {
-      if (!existsSync(filePath)) return null
-      const image = nativeImage.createFromPath(filePath)
-      if (image.isEmpty()) return null
-      return image.toDataURL()
-    }
-  )
+  ipcMain.handle(IPC_CHANNELS.FILE_GET_IMAGE_DATA_URL, (_e, filePath: string): string | null => {
+    if (!existsSync(filePath)) return null
+    const image = nativeImage.createFromPath(filePath)
+    if (image.isEmpty()) return null
+    return image.toDataURL()
+  })
 
   // --- Git ---
 
@@ -786,10 +786,8 @@ function registerIpcHandlers(): void {
     getChangedFiles(cwd, scope)
   )
 
-  ipcMain.handle(
-    IPC_CHANNELS.GIT_DIFF,
-    (_e, cwd: string, file: string, staged?: boolean) =>
-      getGitDiff(cwd, { file, staged: staged ?? false })
+  ipcMain.handle(IPC_CHANNELS.GIT_DIFF, (_e, cwd: string, file: string, staged?: boolean) =>
+    getGitDiff(cwd, { file, staged: staged ?? false })
   )
 
   ipcMain.handle(IPC_CHANNELS.GIT_STAGE, (_e, cwd: string, paths: string[]) =>
@@ -838,16 +836,15 @@ function registerIpcHandlers(): void {
     deleteWorkspaceFile(filePath, roots)
   )
 
-  ipcMain.handle(
-    IPC_CHANNELS.FILE_COPY,
-    (_e, srcPath: string, destPath: string, roots: string[]) =>
-      copyWorkspaceFile(srcPath, destPath, roots)
+  ipcMain.handle(IPC_CHANNELS.FILE_COPY, (_e, srcPath: string, destPath: string, roots: string[]) =>
+    copyWorkspaceFile(srcPath, destPath, roots)
   )
 
   // --- Terminal ---
 
-  ipcMain.handle(IPC_CHANNELS.TERMINAL_CREATE, (_e, scopeKey: string, cwd: string, title?: string) =>
-    createTerminal(scopeKey, cwd, title)
+  ipcMain.handle(
+    IPC_CHANNELS.TERMINAL_CREATE,
+    (_e, scopeKey: string, cwd: string, title?: string) => createTerminal(scopeKey, cwd, title)
   )
 
   ipcMain.handle(IPC_CHANNELS.TERMINAL_WRITE, (_e, terminalId: string, data: string) => {
@@ -865,24 +862,19 @@ function registerIpcHandlers(): void {
     killTerminal(terminalId)
   })
 
-  ipcMain.handle(IPC_CHANNELS.TERMINAL_LIST, (_e, scopeKey: string) =>
-    listTerminals(scopeKey)
-  )
+  ipcMain.handle(IPC_CHANNELS.TERMINAL_LIST, (_e, scopeKey: string) => listTerminals(scopeKey))
 
   // --- Plans ---
 
-  ipcMain.handle(
-    IPC_CHANNELS.PLANS_LIST,
-    (_e, payload: PlansListPayload): PlanInfo[] => {
-      if (payload.ownerType && payload.ownerId) {
-        return repo.listPlansByOwner(payload.ownerType, payload.ownerId).map(mapPlanRow)
-      }
-      if (payload.conversationId) {
-        return repo.listPlansByConversation(payload.conversationId).map(mapPlanRow)
-      }
-      return []
+  ipcMain.handle(IPC_CHANNELS.PLANS_LIST, (_e, payload: PlansListPayload): PlanInfo[] => {
+    if (payload.ownerType && payload.ownerId) {
+      return repo.listPlansByOwner(payload.ownerType, payload.ownerId).map(mapPlanRow)
     }
-  )
+    if (payload.conversationId) {
+      return repo.listPlansByConversation(payload.conversationId).map(mapPlanRow)
+    }
+    return []
+  })
 
   ipcMain.handle(IPC_CHANNELS.PLANS_GET, (_e, planId: string): PlanDetail | null => {
     const row = repo.getPlanById(planId)
@@ -907,7 +899,7 @@ function createWindow(): void {
     autoHideMenuBar: true,
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 12, y: 12 },
-    ...(process.platform === 'linux' ? { icon } : {}),
+    ...(process.platform !== 'darwin' ? { icon: is.dev ? iconDev : icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -939,7 +931,12 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.agentcodepilot.app')
+  initShellEnvironment()
   registerLocalFileProtocol()
+
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.setIcon(nativeImage.createFromPath(is.dev ? macDockIconDev : macDockIcon))
+  }
 
   logInfo('App', `Starting AgentCodePilot v${app.getVersion()}`)
   cleanOldLogs()
@@ -958,17 +955,37 @@ app.whenReady().then(() => {
   })
 })
 
+function shutdownResources(): void {
+  supervisedStopAll()
+  cleanupAllTerminals()
+  stopGateway()
+  closeDatabase()
+}
+
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  // Dev 模式下 macOS 也退出，避免 electron-vite 子进程一直挂起
+  if (is.dev || process.platform !== 'darwin') {
     app.quit()
   }
 })
 
 app.on('will-quit', () => {
-  stopGateway()
-  closeDatabase()
+  shutdownResources()
   logInfo('App', 'Application quit')
 })
+
+if (is.dev) {
+  let devShutdownHandled = false
+  const handleDevSignal = (signal: NodeJS.Signals): void => {
+    if (devShutdownHandled) return
+    devShutdownHandled = true
+    logInfo('App', `Received ${signal}, shutting down dev app`)
+    shutdownResources()
+    app.quit()
+  }
+  process.on('SIGINT', handleDevSignal)
+  process.on('SIGTERM', handleDevSignal)
+}
 
 process.on('uncaughtException', (error) => {
   logError('Process', 'Uncaught exception', error)

@@ -146,7 +146,12 @@ async function requestToolApproval(
     params.decisionReason ? params.decisionReason : undefined
   ].filter(Boolean)
   const detail = detailParts.join('\n') || 'Claude Code 请求执行一项操作，请确认是否允许。'
-  const approvalKey = buildApprovalKey(context.conversationId, params.toolUseId, params.toolName, params.input)
+  const approvalKey = buildApprovalKey(
+    context.conversationId,
+    params.toolUseId,
+    params.toolName,
+    params.input
+  )
 
   let pending = activeApprovalByToolUse.get(approvalKey)
   if (!pending) {
@@ -231,6 +236,51 @@ function createPermissionRequestHook(context: PermissionContext): HookCallback {
   }
 }
 
+function createPostToolUseHook(context: PermissionContext): HookCallback {
+  return async (input) => {
+    if (input.hook_event_name !== 'PostToolUse') {
+      return {}
+    }
+
+    const hookInput = input as { tool_use_id: string; duration_ms?: number }
+    context.emit({
+      type: 'tool.completed',
+      conversationId: context.conversationId,
+      messageId: context.messageId,
+      toolUseId: hookInput.tool_use_id,
+      elapsedSeconds: hookInput.duration_ms != null ? hookInput.duration_ms / 1000 : undefined,
+      status: 'completed'
+    })
+    return {}
+  }
+}
+
+function createPostToolUseFailureHook(context: PermissionContext): HookCallback {
+  return async (input) => {
+    if (input.hook_event_name !== 'PostToolUseFailure') {
+      return {}
+    }
+
+    const hookInput = input as { tool_use_id: string; error: string }
+    context.emit({
+      type: 'tool.completed',
+      conversationId: context.conversationId,
+      messageId: context.messageId,
+      toolUseId: hookInput.tool_use_id,
+      summary: hookInput.error,
+      status: 'error'
+    })
+    return {}
+  }
+}
+
+function buildToolLifecycleHooks(context: PermissionContext): NonNullable<Options['hooks']> {
+  return {
+    PostToolUse: [{ hooks: [createPostToolUseHook(context)] }],
+    PostToolUseFailure: [{ hooks: [createPostToolUseFailureHook(context)] }]
+  }
+}
+
 export function buildPermissionOptions(
   level: ApprovalLevel = 'auto',
   context?: PermissionContext,
@@ -246,11 +296,13 @@ export function buildPermissionOptions(
   }
 
   const permissionMode = mapApprovalToPermissionMode(level)
+  const lifecycleHooks = context ? buildToolLifecycleHooks(context) : undefined
 
   if (level === 'full') {
     return {
       permissionMode,
-      allowDangerouslySkipPermissions: true
+      allowDangerouslySkipPermissions: true,
+      ...(lifecycleHooks ? { hooks: lifecycleHooks } : {})
     }
   }
 
@@ -259,6 +311,7 @@ export function buildPermissionOptions(
       permissionMode,
       canUseTool: createCanUseToolHandler(context),
       hooks: {
+        ...lifecycleHooks,
         PermissionRequest: [{ hooks: [createPermissionRequestHook(context)] }]
       }
     }

@@ -46,7 +46,7 @@ export function extractPlanTitle(content: string): string {
   const headingMatch = content.match(/^#\s+(.+)$/m)
   if (headingMatch) return headingMatch[1].trim()
 
-  const plain = content.replace(/[#*_`>\[\]()]/g, '').trim()
+  const plain = content.replace(/[#*_`>[\]()]/g, '').trim()
   if (!plain) return '未命名计划'
   return plain.length > 40 ? `${plain.slice(0, 40)}…` : plain
 }

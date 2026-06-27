@@ -4,7 +4,10 @@ import { useTerminalStore } from './terminal.store'
 import { useChatStore } from './chat.store'
 import { useSettingsStore } from './settings.store'
 import { extractHttpUrlsFromTexts } from '@renderer/utils/extractUrls'
-import { getAllTerminalTexts, terminalOutputRevision } from '@renderer/utils/terminal-session-manager'
+import {
+  getAllTerminalTexts,
+  terminalOutputRevision
+} from '@renderer/utils/terminal-session-manager'
 
 const STORAGE_KEY = 'browser-state'
 const MAX_RECENT = 20
@@ -41,7 +44,9 @@ export const useBrowserStore = defineStore('browser', () => {
 
   const scopeKey = computed(() => terminalStore.currentScopeKey ?? 'global')
 
-  const scopeState = computed(() => stateByScope.value[scopeKey.value] ?? { currentUrl: null, recentUrls: [] })
+  const scopeState = computed(
+    () => stateByScope.value[scopeKey.value] ?? { currentUrl: null, recentUrls: [] }
+  )
 
   const currentUrl = computed(() => scopeState.value.currentUrl)
 

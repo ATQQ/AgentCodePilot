@@ -61,7 +61,8 @@ async function handleSubmit(
     modelId: modelStore.getEffectiveModelId(),
     cwd,
     workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
-    attachments: attachmentPayloads && attachmentPayloads.length > 0 ? attachmentPayloads : undefined,
+    attachments:
+      attachmentPayloads && attachmentPayloads.length > 0 ? attachmentPayloads : undefined,
     planMode: effectivePlanMode,
     planRefs: plainPlanRefs
   })

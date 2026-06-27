@@ -51,7 +51,11 @@ function defaultScope(): 'conversation' | 'owner' {
 async function loadPlans(): Promise<void> {
   loading.value = true
   try {
-    if (scope.value === 'owner' && ownerContext.value && ownerContext.value.ownerType !== 'conversation') {
+    if (
+      scope.value === 'owner' &&
+      ownerContext.value &&
+      ownerContext.value.ownerType !== 'conversation'
+    ) {
       plans.value = await window.agentAPI.plans.list({
         ownerType: ownerContext.value.ownerType,
         ownerId: ownerContext.value.ownerId
@@ -115,7 +119,9 @@ function formatTime(dateStr: string): string {
       <div class="plan-picker-toolbar">
         <select v-model="scope" class="scope-select">
           <option v-if="hasOwnerScope" value="owner">{{ ownerScopeLabel }}</option>
-          <option v-if="hasConversationScope" value="conversation">{{ t('plans.scopeConversation') }}</option>
+          <option v-if="hasConversationScope" value="conversation">
+            {{ t('plans.scopeConversation') }}
+          </option>
         </select>
       </div>
 

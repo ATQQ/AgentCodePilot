@@ -189,7 +189,12 @@ async function resetPrompt(key: PromptKey): Promise<void> {
         <textarea v-model="editDraft" class="dialog-textarea" rows="14" spellcheck="false" />
       </template>
       <template #footer>
-        <button v-if="dialogMode === 'preview'" class="secondary-btn" type="button" @click="closeDialog">
+        <button
+          v-if="dialogMode === 'preview'"
+          class="secondary-btn"
+          type="button"
+          @click="closeDialog"
+        >
           {{ t('common.close') }}
         </button>
         <template v-else>
@@ -296,7 +301,9 @@ async function resetPrompt(key: PromptKey): Promise<void> {
   color: var(--content-text-secondary);
   cursor: pointer;
   border-radius: var(--radius-md);
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .icon-action-btn {

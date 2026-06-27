@@ -81,8 +81,7 @@ function reconcileTabs(
   const next = tabs
     .map((tab) => ({ ...tab, panes: tab.panes.filter((id) => validIds.has(id)) }))
     .filter((tab) => tab.panes.length > 0)
-  const active =
-    next.find((t) => t.id === activeTabId)?.id ?? next[0]?.id ?? ''
+  const active = next.find((t) => t.id === activeTabId)?.id ?? next[0]?.id ?? ''
   return { tabs: next, activeTabId: active }
 }
 
@@ -323,9 +322,7 @@ export const useTerminalStore = defineStore('terminal', () => {
     const cwd = savedPane?.cwd || defaultCwd
 
     const created = await spawnTerminal(scopeKey, cwd)
-    const nextTabs = tabs.map((t) =>
-      t.id === tabId ? { ...t, panes: [created.id] } : t
-    )
+    const nextTabs = tabs.map((t) => (t.id === tabId ? { ...t, panes: [created.id] } : t))
     const meta = { ...(terminalMetaByScope.value[scopeKey] ?? {}), [created.id]: created }
     setScopeState(scopeKey, nextTabs, tabId, meta)
   }
@@ -340,8 +337,7 @@ export const useTerminalStore = defineStore('terminal', () => {
       return
     }
 
-    const activeSaved =
-      layout.tabs.find((t) => t.id === layout.activeTabId) ?? layout.tabs[0]
+    const activeSaved = layout.tabs.find((t) => t.id === layout.activeTabId) ?? layout.tabs[0]
     const meta: Record<string, TerminalInfo> = {}
     const tabs: TerminalTab[] = []
 
@@ -460,7 +456,9 @@ export const useTerminalStore = defineStore('terminal', () => {
     bindListeners()
 
     if (readyScopes.value.has(scopeKey) && (terminalTabsByScope.value[scopeKey]?.length ?? 0) > 0) {
-      const hasLivePanes = (terminalTabsByScope.value[scopeKey] ?? []).some((t) => t.panes.length > 0)
+      const hasLivePanes = (terminalTabsByScope.value[scopeKey] ?? []).some(
+        (t) => t.panes.length > 0
+      )
       if (hasLivePanes) return
       markScopeNotReady(scopeKey)
     }

@@ -5,6 +5,7 @@ import {
   attachTerminalSession,
   detachTerminalSession,
   refitTerminalSession,
+  focusTerminalSession,
   applyThemeToAllTerminalSessions
 } from '@renderer/utils/terminal-session-manager'
 import '@xterm/xterm/css/xterm.css'
@@ -21,9 +22,14 @@ function refit(): void {
   refitTerminalSession(props.terminalId)
 }
 
+function focus(): void {
+  focusTerminalSession(props.terminalId)
+}
+
 onMounted(() => {
   if (containerRef.value) {
     attachTerminalSession(props.terminalId, containerRef.value)
+    if (props.active) nextTick(() => focus())
   }
 })
 
@@ -39,7 +45,11 @@ watch(
 watch(
   () => props.active,
   (isActive) => {
-    if (isActive) nextTick(() => refit())
+    if (!isActive) return
+    nextTick(() => {
+      refit()
+      focus()
+    })
   }
 )
 
@@ -51,11 +61,11 @@ watch(
   }
 )
 
-defineExpose({ refit })
+defineExpose({ refit, focus })
 </script>
 
 <template>
-  <div ref="containerRef" class="terminal-view" />
+  <div ref="containerRef" class="terminal-view" @mousedown="focus" />
 </template>
 
 <style scoped>
@@ -83,9 +93,5 @@ defineExpose({ refit })
 .terminal-view :deep(.xterm-screen) {
   background-color: var(--content-bg) !important;
   overflow: hidden;
-}
-
-.terminal-view :deep(.xterm-rows) {
-  color: var(--content-text);
 }
 </style>

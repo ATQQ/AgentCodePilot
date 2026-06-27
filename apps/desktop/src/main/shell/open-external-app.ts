@@ -29,7 +29,9 @@ async function openUrl(url: string): Promise<OpenPathResult> {
       return ok()
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      if (/Unable to find application|kLSApplicationNotFoundErr|does not appear to be/i.test(message)) {
+      if (
+        /Unable to find application|kLSApplicationNotFoundErr|does not appear to be/i.test(message)
+      ) {
         return fail('NOT_INSTALLED', message)
       }
       return fail('UNKNOWN', message)

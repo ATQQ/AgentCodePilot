@@ -31,10 +31,7 @@ function formatRunContext(input: AgentRunInput, attempt = 0): string {
   return parts.join(', ')
 }
 
-export function supervisedRun(
-  input: AgentRunInput,
-  emit: (event: AgentEvent) => void
-): void {
+export function supervisedRun(input: AgentRunInput, emit: (event: AgentEvent) => void): void {
   void ensureAgentRegistry().then(() => {
     const adapter = agentRegistry.get(input.agentId)
     if (!adapter) {
@@ -69,26 +66,29 @@ function runWithRetry(
       }
     })
     .catch((error: unknown) => {
-    const entry = activeRuns.get(input.conversationId)
-    if (!entry || entry.messageId !== input.messageId) return
+      const entry = activeRuns.get(input.conversationId)
+      if (!entry || entry.messageId !== input.messageId) return
 
-    const errMsg = error instanceof Error ? error.message : String(error)
-    logError('Supervisor', `Run failed (attempt ${attempt + 1}): ${errMsg}`, error)
+      const errMsg = error instanceof Error ? error.message : String(error)
+      logError('Supervisor', `Run failed (attempt ${attempt + 1}): ${errMsg}`, error)
 
-    if (attempt < MAX_RETRIES && isRetryable(error)) {
-      logInfo('Supervisor', `Retrying (${attempt + 1}/${MAX_RETRIES}): ${formatRunContext(input, attempt + 1)}`)
-      entry.retries = attempt + 1
-      setTimeout(() => runWithRetry(adapter, input, emit, attempt + 1), 1000 * (attempt + 1))
-    } else {
-      activeRuns.delete(input.conversationId)
-      emit({
-        type: 'message.error',
-        conversationId: input.conversationId,
-        messageId: input.messageId,
-        error: `Agent crashed after ${attempt + 1} attempt(s): ${errMsg}`
-      })
-    }
-  })
+      if (attempt < MAX_RETRIES && isRetryable(error)) {
+        logInfo(
+          'Supervisor',
+          `Retrying (${attempt + 1}/${MAX_RETRIES}): ${formatRunContext(input, attempt + 1)}`
+        )
+        entry.retries = attempt + 1
+        setTimeout(() => runWithRetry(adapter, input, emit, attempt + 1), 1000 * (attempt + 1))
+      } else {
+        activeRuns.delete(input.conversationId)
+        emit({
+          type: 'message.error',
+          conversationId: input.conversationId,
+          messageId: input.messageId,
+          error: `Agent crashed after ${attempt + 1} attempt(s): ${errMsg}`
+        })
+      }
+    })
 }
 
 function isRetryable(error: unknown): boolean {
@@ -109,5 +109,11 @@ export function supervisedStop(conversationId: string): void {
     logInfo('Supervisor', `Stopped run: conv=${conversationId}`)
   } else {
     agentRegistry.stopAll(conversationId)
+  }
+}
+
+export function supervisedStopAll(): void {
+  for (const conversationId of [...activeRuns.keys()]) {
+    supervisedStop(conversationId)
   }
 }

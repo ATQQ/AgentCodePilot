@@ -33,8 +33,8 @@ export default {
       pursueGoals: '追求目标'
     },
     urlPlaceholder: '输入 URL 链接...',
-    planModeActive: '计划模式已开启，点击关闭',
-    planModeInactive: '计划模式未开启，点击开启',
+    planModeActive: '计划模式已开启，点击关闭 (⇧ Tab)',
+    planModeInactive: '计划模式未开启，点击开启 (⇧ Tab)',
     planModeClose: '关闭计划模式',
     planPicker: {
       title: '选择要引用的计划'
@@ -81,6 +81,8 @@ export default {
     planRefTag: '引用计划: {title}',
     previewAttachment: '预览图片',
     showInFolder: '在访达中显示',
+    expandMessage: '展开全文',
+    collapseMessage: '收起',
     closePreview: '关闭预览',
     closePreviewHint: '按 Esc 关闭'
   },
@@ -184,7 +186,8 @@ export default {
       title: 'Agent 配置',
       desc: '按 Agent 分别管理模型与可选列表。Claude Code 优先读取 SDK 与 ~/.claude/settings.json，应用内配置作为兜底覆盖。',
       maxTurns: '单次最大回合数',
-      maxTurnsDesc: '每条用户消息允许 Agent 调用的最大工具回合数。范围 {min}–{max}，默认 {default}。复杂任务可适当调高。',
+      maxTurnsDesc:
+        '每条用户消息允许 Agent 调用的最大工具回合数。范围 {min}–{max}，默认 {default}。复杂任务可适当调高。',
       discoveredSource: '当前检测来源',
       sourceSdk: 'Claude Agent SDK',
       sourceClaudeSettings: 'Claude Code 设置 (~/.claude/settings.json)',
@@ -192,7 +195,8 @@ export default {
       sourceFallback: '内置默认列表',
       refresh: '重新检测',
       defaultModel: '默认模型',
-      defaultModelDesc: '新建对话时使用的默认模型，也会读取 Claude Code settings.json 中的 model 字段',
+      defaultModelDesc:
+        '新建对话时使用的默认模型，也会读取 Claude Code settings.json 中的 model 字段',
       customModels: '自定义可选模型',
       customModelsDesc: '开启后可覆盖自动检测到的模型列表，用于 Agent 旁的下拉选择',
       modelId: '模型 ID（如 sonnet / opus）',
@@ -257,7 +261,8 @@ export default {
       visibility: '是否在菜单中显示',
       showInMenu: '显示',
       customTitle: '自定义协议',
-      customDesc: '协议模板需包含 {path} 占位符，例如 myapp://open?folder={path}。可设置图标链接或 SVG 内容。',
+      customDesc:
+        '协议模板需包含 {path} 占位符，例如 myapp://open?folder={path}。可设置图标链接或 SVG 内容。',
       protocolHintReveal: '系统文件管理器（showItemInFolder）',
       protocolHintTerminal: '系统终端（macOS Terminal / Windows cmd）',
       namePlaceholder: '显示名称',

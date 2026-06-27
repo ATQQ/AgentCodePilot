@@ -96,7 +96,9 @@ function removeFolderFromWorkspace(folder: string): void {
 
 async function saveWorkspace(): Promise<void> {
   if (workspaceName.value.trim() && workspaceFolders.value.length) {
-    const wsId = await workspaceStore.createWorkspace(workspaceName.value.trim(), [...workspaceFolders.value])
+    const wsId = await workspaceStore.createWorkspace(workspaceName.value.trim(), [
+      ...workspaceFolders.value
+    ])
     for (const folder of workspaceFolders.value) {
       await workspaceStore.ensureProjectForPath(folder)
     }
@@ -112,7 +114,12 @@ function closeWorkspacePanel(): void {
 
 <template>
   <div class="workspace-selector">
-    <button v-if="selectedDisplayName" ref="triggerRef" class="selected-project-btn" @click="toggleDropdown">
+    <button
+      v-if="selectedDisplayName"
+      ref="triggerRef"
+      class="selected-project-btn"
+      @click="toggleDropdown"
+    >
       <el-icon :size="14"><FolderOpened /></el-icon>
       <span>{{ selectedDisplayName }}</span>
       <span class="chevron">&#x25BE;</span>
@@ -125,7 +132,12 @@ function closeWorkspacePanel(): void {
     </button>
 
     <Transition name="fade">
-      <div v-if="showDropdown" ref="dropdownRef" class="project-dropdown" :class="{ 'drop-above': dropAbove }">
+      <div
+        v-if="showDropdown"
+        ref="dropdownRef"
+        class="project-dropdown"
+        :class="{ 'drop-above': dropAbove }"
+      >
         <div class="dropdown-search">
           <el-icon :size="14" class="search-icon"><Search /></el-icon>
           <input
@@ -154,7 +166,9 @@ function closeWorkspacePanel(): void {
         </div>
 
         <div v-if="filteredWorkspaces.length" class="dropdown-divider"></div>
-        <div v-if="filteredWorkspaces.length" class="dropdown-group-title">{{ t('sidebar.workspaces') }}</div>
+        <div v-if="filteredWorkspaces.length" class="dropdown-group-title">
+          {{ t('sidebar.workspaces') }}
+        </div>
         <div v-if="filteredWorkspaces.length" class="dropdown-list elegant-scroll">
           <button
             v-for="ws in filteredWorkspaces"
@@ -199,7 +213,11 @@ function closeWorkspacePanel(): void {
         </button>
 
         <div v-if="workspaceStore.selectedProjectId" class="dropdown-divider"></div>
-        <button v-if="workspaceStore.selectedProjectId" class="dropdown-item" @click="selectProject(null)">
+        <button
+          v-if="workspaceStore.selectedProjectId"
+          class="dropdown-item"
+          @click="selectProject(null)"
+        >
           <el-icon :size="14"><Close /></el-icon>
           <span class="item-label">{{ t('project.noProject') }}</span>
         </button>
@@ -216,17 +234,17 @@ function closeWorkspacePanel(): void {
             :placeholder="t('project.workspaceNamePlaceholder')"
             class="workspace-name-input"
           />
-          <button v-if="workspaceName.trim() && workspaceFolders.length" class="panel-save" @click="saveWorkspace">
+          <button
+            v-if="workspaceName.trim() && workspaceFolders.length"
+            class="panel-save"
+            @click="saveWorkspace"
+          >
             &#x2713;
           </button>
         </div>
 
         <div v-if="workspaceFolders.length" class="workspace-folders">
-          <div
-            v-for="folder in workspaceFolders"
-            :key="folder"
-            class="workspace-folder-item"
-          >
+          <div v-for="folder in workspaceFolders" :key="folder" class="workspace-folder-item">
             <el-icon :size="14"><Folder /></el-icon>
             <span class="folder-path">{{ folder }}</span>
             <button class="folder-remove" @click="removeFolderFromWorkspace(folder)">
@@ -262,7 +280,9 @@ function closeWorkspacePanel(): void {
   color: var(--content-text-secondary);
   font-size: var(--font-size-sm);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
 
 .enter-project-btn:hover,
@@ -526,7 +546,9 @@ function closeWorkspacePanel(): void {
 
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.15s, transform 0.15s;
+  transition:
+    opacity 0.15s,
+    transform 0.15s;
 }
 
 .fade-enter-from,

@@ -56,9 +56,7 @@ const showDiffEmptyLoading = computed(
 
 const showDiffLoadFailed = computed(() => !!gitStore.diffError)
 
-const bulkActionsDisabled = computed(
-  () => filesLoading.value || gitStore.changedFiles.length === 0
-)
+const bulkActionsDisabled = computed(() => filesLoading.value || gitStore.changedFiles.length === 0)
 
 const activeFileMeta = computed(() =>
   gitStore.changedFiles.find((f) => f.path === gitStore.selectedFile)
@@ -259,7 +257,9 @@ watch(
           />
 
           <div v-if="gitStore.selectedFile && activeFileMeta" class="file-meta-bar">
-            <span class="file-path" :title="gitStore.selectedFile">{{ gitStore.selectedFile }}</span>
+            <span class="file-path" :title="gitStore.selectedFile">{{
+              gitStore.selectedFile
+            }}</span>
             <span class="file-stat">
               <span class="add">+{{ activeFileMeta.additions }}</span>
               <span class="del">-{{ activeFileMeta.deletions }}</span>
@@ -298,11 +298,7 @@ watch(
           @update:width="layoutStore.sideTreeWidth = $event"
         >
           <template #header>
-            <input
-              v-model="treeFilter"
-              class="filter-input"
-              placeholder="筛选文件…"
-            />
+            <input v-model="treeFilter" class="filter-input" placeholder="筛选文件…" />
           </template>
 
           <div v-if="showFilesEmptyLoading" class="empty-msg">加载中…</div>
@@ -473,8 +469,12 @@ watch(
   font-size: var(--font-size-xs);
 }
 
-.file-stat .add { color: #16a34a; }
-.file-stat .del { color: #dc2626; }
+.file-stat .add {
+  color: #16a34a;
+}
+.file-stat .del {
+  color: #dc2626;
+}
 
 .diff-area {
   position: relative;

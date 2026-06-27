@@ -108,17 +108,41 @@ onUnmounted(() => {
   <div class="browser-view">
     <div class="bv-toolbar">
       <button class="nav-btn" title="后退" :disabled="!hasPage" @click="back">
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 12 12"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+        >
           <polyline points="7,2 3,6 7,10" />
         </svg>
       </button>
       <button class="nav-btn" title="前进" :disabled="!hasPage" @click="forward">
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 12 12"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+        >
           <polyline points="5,2 9,6 5,10" />
         </svg>
       </button>
       <button class="nav-btn" title="刷新" :disabled="!hasPage" @click="reload">
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 12 12"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+        >
           <path d="M10 4a5 5 0 1 0 .5 3.5" />
           <polyline points="10,1 10,4 7,4" />
         </svg>
@@ -138,7 +162,14 @@ onUnmounted(() => {
           :disabled="!hasSuggestedLinks"
           @click.stop="toggleLinksMenu"
         >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
             <path d="M6.5 8.5a3.5 3.5 0 0 1 5 0l1.5 1.5a3.5 3.5 0 0 1-5 5L6.5 13" />
             <path d="M9.5 7.5a3.5 3.5 0 0 1-5 0L3 6a3.5 3.5 0 0 1 5-5l1.5 1.5" />
           </svg>
@@ -172,7 +203,14 @@ onUnmounted(() => {
 
     <div v-if="!hasPage" class="empty-state">
       <div class="empty-icon">
-        <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.2">
+        <svg
+          width="48"
+          height="48"
+          viewBox="0 0 48 48"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.2"
+        >
           <circle cx="24" cy="24" r="18" />
           <ellipse cx="24" cy="24" rx="8" ry="18" />
           <line x1="6" y1="24" x2="42" y2="24" />
@@ -191,7 +229,14 @@ onUnmounted(() => {
             class="suggestion-item"
             @click="navigateTo(link)"
           >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
               <path d="M6.5 8.5a3.5 3.5 0 0 1 5 0l1.5 1.5a3.5 3.5 0 0 1-5 5L6.5 13" />
               <path d="M9.5 7.5a3.5 3.5 0 0 1-5 0L3 6a3.5 3.5 0 0 1 5-5l1.5 1.5" />
             </svg>
@@ -206,7 +251,14 @@ onUnmounted(() => {
             class="suggestion-item"
             @click="navigateTo(link)"
           >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
               <circle cx="8" cy="8" r="6" />
               <polyline points="8,4 8,8 11,9" />
             </svg>

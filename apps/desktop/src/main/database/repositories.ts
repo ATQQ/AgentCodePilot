@@ -112,7 +112,9 @@ export function deleteAllArchivedConversations(): void {
 
 export function getConversationById(id: string): ConversationRow | undefined {
   const db = getDatabase()
-  return db.prepare('SELECT * FROM conversations WHERE id = ?').get(id) as ConversationRow | undefined
+  return db.prepare('SELECT * FROM conversations WHERE id = ?').get(id) as
+    | ConversationRow
+    | undefined
 }
 
 export function setConversationSessionId(id: string, sessionId: string | null): void {
@@ -167,7 +169,13 @@ export function resolveWorkspaceFoldersForProjectId(projectId: string): string[]
 
 export function updateConversation(
   id: string,
-  fields: { title?: string; pinned?: boolean; archived?: boolean; approvalLevel?: string; modelId?: string }
+  fields: {
+    title?: string
+    pinned?: boolean
+    archived?: boolean
+    approvalLevel?: string
+    modelId?: string
+  }
 ): void {
   const db = getDatabase()
   const sets: string[] = []
@@ -299,9 +307,7 @@ export function getRecentMessagesByConversation(
   if (limit <= 0) return getMessagesByConversation(conversationId)
   const db = getDatabase()
   const rows = db
-    .prepare(
-      'SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT ?'
-    )
+    .prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT ?')
     .all(conversationId, limit) as MessageRow[]
   return rows.reverse()
 }
@@ -350,9 +356,7 @@ export function saveProject(proj: { id: string; name: string; path: string }): v
 
 export function getAllProjects(): ProjectRow[] {
   const db = getDatabase()
-  return db
-    .prepare('SELECT * FROM projects WHERE deleted_at IS NULL')
-    .all() as ProjectRow[]
+  return db.prepare('SELECT * FROM projects WHERE deleted_at IS NULL').all() as ProjectRow[]
 }
 
 export function restoreProjectByPath(path: string): ProjectRow | null {
@@ -380,9 +384,11 @@ export interface WorkspaceRow {
 
 export function saveWorkspace(ws: { id: string; name: string; folders: string[] }): void {
   const db = getDatabase()
-  db.prepare(
-    `INSERT OR REPLACE INTO workspaces (id, name, folders) VALUES (?, ?, ?)`
-  ).run(ws.id, ws.name, JSON.stringify(ws.folders))
+  db.prepare(`INSERT OR REPLACE INTO workspaces (id, name, folders) VALUES (?, ?, ?)`).run(
+    ws.id,
+    ws.name,
+    JSON.stringify(ws.folders)
+  )
 }
 
 export function getAllWorkspaces(): WorkspaceRow[] {
@@ -555,4 +561,3 @@ export function getPlanByAssistantMessageIds(messageIds: string[]): Map<string, 
   }
   return result
 }
-

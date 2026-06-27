@@ -1,0 +1,94 @@
+# Official releases only: push an annotated tag on main (e.g. v1.0.0) after merge.
+# Do not tag feature branches — CI pack-smoke on PR covers pre-merge packaging checks.
+name: Release
+
+on:
+  push:
+    tags:
+      - v*
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+            args: --arm64 --x64
+          - os: windows-2022
+            platform: win
+            args: --x64
+          - os: ubuntu-latest
+            platform: linux
+            args: --x64 --arm64
+
+    runs-on: ${{ matrix.os }}
+    env:
+      npm_config_registry: https://registry.npmjs.org/
+      npm_config_electron_mirror: ''
+      npm_config_electron_builder_binaries_mirror: ''
+      npm_config_msvs_version: '2022'
+      ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify release tag is on main
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::Release tag must point to a commit on main. Merge the PR first, then tag on main."
+            exit 1
+          fi
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # windows-latest ships VS 2026 (v18) which node-gyp 11.x cannot detect yet.
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build app
+        run: pnpm -C apps/desktop build
+
+      - name: Package and publish
+        run: pnpm -C apps/desktop exec electron-builder --config electron-builder.release.yml --${{ matrix.platform }} ${{ matrix.args }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AgentCodePilot-${{ matrix.platform }}-${{ github.ref_name }}
+          path: |
+            apps/desktop/dist/*.dmg
+            apps/desktop/dist/*.zip
+            apps/desktop/dist/*.tar.gz
+            apps/desktop/dist/*.msi
+            apps/desktop/dist/*Portable*
+            apps/desktop/dist/*.AppImage
+            apps/desktop/dist/*.deb
+            apps/desktop/dist/*.rpm
+            apps/desktop/dist/*.yml
+            apps/desktop/dist/*.blockmap
+          if-no-files-found: warn

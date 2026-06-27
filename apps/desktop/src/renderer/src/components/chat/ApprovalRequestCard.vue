@@ -62,7 +62,9 @@ function truncatePath(path: string, max = 48): string {
     <div v-if="request.status === 'pending'" class="approval-actions">
       <div class="scope-wrapper">
         <button class="scope-btn" type="button" @click="showScopeMenu = !showScopeMenu">
-          <span>{{ scope === 'conversation' ? t('approval.scopeConversation') : t('approval.scopeOnce') }}</span>
+          <span>{{
+            scope === 'conversation' ? t('approval.scopeConversation') : t('approval.scopeOnce')
+          }}</span>
           <span class="chevron">▾</span>
         </button>
         <div v-if="showScopeMenu" class="scope-menu">
@@ -84,7 +86,9 @@ function truncatePath(path: string, max = 48): string {
       </div>
       <div class="action-buttons">
         <button class="btn-deny" type="button" @click="handleDeny">{{ t('approval.deny') }}</button>
-        <button class="btn-allow" type="button" @click="handleAllow">{{ t('approval.allow') }}</button>
+        <button class="btn-allow" type="button" @click="handleAllow">
+          {{ t('approval.allow') }}
+        </button>
       </div>
     </div>
 
@@ -239,7 +243,9 @@ function truncatePath(path: string, max = 48): string {
   font-size: var(--font-size-xs);
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .btn-deny {

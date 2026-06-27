@@ -9,7 +9,9 @@ const { running, error: aiError, generateCommitMessage } = useAiUtility()
 const showMenu = ref(false)
 
 const branchName = computed(() => gitStore.status?.branch || '当前分支')
-const canCommit = computed(() => gitStore.changedFiles.length > 0 && gitStore.commitMessage.trim().length > 0)
+const canCommit = computed(
+  () => gitStore.changedFiles.length > 0 && gitStore.commitMessage.trim().length > 0
+)
 const placeholder = computed(() => `消息 (⌘↵ 在「${branchName.value}」提交)`)
 
 async function onGenerate(): Promise<void> {
@@ -67,12 +69,7 @@ function onClickOutside(): void {
 
     <div class="action-row">
       <div class="commit-split">
-        <button
-          class="commit-btn"
-          type="button"
-          :disabled="!canCommit"
-          @click="onCommit"
-        >
+        <button class="commit-btn" type="button" :disabled="!canCommit" @click="onCommit">
           ✓ 提交
         </button>
         <button
@@ -85,9 +82,7 @@ function onClickOutside(): void {
           ▾
         </button>
         <div v-if="showMenu" class="commit-menu" @mouseleave="onClickOutside">
-          <button type="button" class="menu-item" @click="onCommitAndPush">
-            提交并推送
-          </button>
+          <button type="button" class="menu-item" @click="onCommitAndPush">提交并推送</button>
         </div>
       </div>
     </div>

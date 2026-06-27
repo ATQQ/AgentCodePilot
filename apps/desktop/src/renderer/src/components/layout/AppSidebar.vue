@@ -354,7 +354,6 @@ onUnmounted(() => {
 
 <template>
   <aside class="sidebar">
-    <div class="sidebar-drag-area"></div>
     <div class="sidebar-content elegant-scroll">
       <nav class="sidebar-nav">
         <button
@@ -799,16 +798,11 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-.sidebar-drag-area {
-  height: var(--topbar-height);
-  flex-shrink: 0;
-}
-
 .sidebar-content {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 var(--spacing-sm);
+  padding: var(--topbar-height) var(--spacing-sm) 0;
   --scroll-thumb: var(--sidebar-section-title);
 }
 
@@ -816,7 +810,9 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
+  margin-bottom: var(--spacing-xs);
+  border-bottom: 1px solid var(--sidebar-border);
 }
 
 .sidebar-section {

@@ -19,11 +19,7 @@ function writePlanToAllScopes(
 ): void {
   writePlanFile(filePath, content)
   if (ownerType !== 'conversation') {
-    const scopePath = getScopedPlanFilePath(
-      ownerType as 'project' | 'workspace',
-      ownerId,
-      planId
-    )
+    const scopePath = getScopedPlanFilePath(ownerType as 'project' | 'workspace', ownerId, planId)
     writePlanFile(scopePath, content)
   }
 }

@@ -78,7 +78,7 @@ function getXtermTheme(): ITheme {
     blue: '#2563eb',
     magenta: '#9333ea',
     cyan: '#0891b2',
-    white: '#f3f4f6',
+    white: '#4b5563',
     brightBlack: '#6b7280',
     brightRed: '#ef4444',
     brightGreen: '#22c55e',
@@ -186,6 +186,12 @@ export function refitTerminalSession(terminalId: string): void {
   const session = sessions.get(terminalId)
   if (!session) return
   scheduleRefit(session)
+}
+
+export function focusTerminalSession(terminalId: string): void {
+  const session = sessions.get(terminalId)
+  if (!session?.host) return
+  session.term.focus()
 }
 
 export function disposeTerminalSession(terminalId: string): void {

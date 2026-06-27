@@ -47,7 +47,7 @@ agent-desktop-app/
 ### 环境要求
 
 - Node.js >= 18
-- pnpm >= 9
+- pnpm >= 10
 - macOS / Windows / Linux
 
 ### 安装依赖
@@ -74,18 +74,61 @@ pnpm build
 pnpm build:mac
 
 # Windows 安装包
-pnpm -C apps/desktop build:win
+pnpm build:win
 
 # Linux 安装包
-pnpm -C apps/desktop build:linux
+pnpm build:linux
 ```
 
-### 其他命令
+### 质量检查
 
 ```bash
-pnpm lint        # ESLint 检查
-pnpm format      # Prettier 格式化
-pnpm typecheck   # TypeScript 类型检查
+pnpm check        # typecheck + lint + format:check + build
+pnpm lint         # ESLint 检查
+pnpm format       # Prettier 格式化
+pnpm format:check # Prettier 只检查不改写
+pnpm typecheck    # TypeScript 类型检查
+```
+
+## 下载安装
+
+预编译安装包见 [GitHub Releases](https://github.com/ATQQ/AgentCodePilot/releases)。
+
+### 未签名安装包说明
+
+当前版本尚未做代码签名与 macOS 公证，首次安装可能遇到系统拦截，按平台处理即可。
+
+#### macOS
+
+1. **无法验证开发者**：不要双击，请 **右键应用 →「打开」**，在弹窗中确认；或到「系统设置 → 隐私与安全性」中点击「仍要打开」。
+2. **提示「已损坏，无法打开」**（常见于从浏览器下载的 `.dmg` / `.zip`）：在终端执行一次，清除下载隔离属性后再打开：
+
+```bash
+xattr -cr /Applications/AgentCodePilot.app
+```
+
+若 `.app` 不在默认路径，把命令中的路径换成实际安装位置。
+
+#### Windows
+
+若 SmartScreen 提示发布者未知，点击 **「更多信息」→「仍要运行」** 继续安装。
+
+#### 其他说明
+
+- 自动更新尚未启用，新版本请从 [Releases](https://github.com/ATQQ/AgentCodePilot/releases) 手动下载
+- 发版验证与 Release Notes 模板见 [docs/release-checklist.md](./docs/release-checklist.md)
+
+## 从源码发布
+
+发版前请参考 [docs/release-checklist.md](./docs/release-checklist.md) 完成验证。
+
+```bash
+pnpm check
+pnpm build:mac   # 本地最终确认目标平台产物
+
+git commit -m "chore: release v1.0.0"
+git tag v1.0.0
+git push origin main --tags   # 触发 Release 工作流，自动构建三平台并上传 GitHub Releases
 ```
 
 ## 架构概览
@@ -107,11 +150,13 @@ Agent Runtime 通过统一 Adapter 接口接入不同 SDK；Gateway 将外部 HT
 
 - [x] 桌面 UI 与会话管理 MVP
 - [x] Claude Agent SDK 接入
-- [x] 本地 API Gateway
+- [x] CI 发布（GitHub Actions + Releases）
+- [x] Monaco Editor、终端集成
+- [ ] 本地 API Gateway
 - [ ] Codex / Cursor SDK 接入
 - [ ] MCP、Shell、Git 等工具能力
-- [ ] Monaco Editor、终端集成
-- [ ] 自动更新与签名发布
+- [ ] 代码签名与 macOS 公证
+- [ ] 自动更新
 
 ## 许可证
 

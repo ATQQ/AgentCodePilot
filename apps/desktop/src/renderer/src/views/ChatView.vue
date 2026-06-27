@@ -12,6 +12,7 @@ import ModelSelector from '@renderer/components/home/ModelSelector.vue'
 import ToolCallsSection from '@renderer/components/chat/ToolCallsSection.vue'
 import ApprovalRequestCard from '@renderer/components/chat/ApprovalRequestCard.vue'
 import MessageAttachmentImage from '@renderer/components/chat/MessageAttachmentImage.vue'
+import CollapsibleUserMessageText from '@renderer/components/chat/CollapsibleUserMessageText.vue'
 import ChatMessageList from '@renderer/components/chat/ChatMessageList.vue'
 import { getAgentIcon } from '@renderer/utils/agentIcons'
 import type { Attachment, Message, PlanReference, ApprovalRequest } from '@renderer/types'
@@ -37,6 +38,7 @@ const { onScroll, scheduleScrollToBottom, forceScrollToBottom } = useAutoScroll(
 const chatViewRef = ref<HTMLElement | null>(null)
 const composerRef = ref<InstanceType<typeof PromptComposer> | null>(null)
 const copiedMessageId = ref<string | null>(null)
+const expandedUserMessages = ref(new Set<string>())
 const waitingSeconds = ref(0)
 const debugMode = ref(false)
 let debugClickCount = 0
@@ -95,7 +97,10 @@ watch(
   () => chatStore.isStreaming,
   (streaming, wasStreaming) => {
     if (wasStreaming && !streaming) {
-      void loadAssistantPlanMap()
+      void (async () => {
+        await loadAssistantPlanMap()
+        await maybeAutoOpenPlansPanelAfterPlanRun()
+      })()
     }
   }
 )
@@ -179,6 +184,10 @@ const pendingApprovalMessageIds = computed(() => {
   return ids
 })
 
+function hasPendingApprovalForMessage(messageId: string): boolean {
+  return pendingApprovalMessageIds.value.has(messageId)
+}
+
 const assistantPlanMap = ref<Map<string, string>>(new Map())
 
 async function loadAssistantPlanMap(): Promise<void> {
@@ -203,8 +212,36 @@ function getPlanIdForMessage(messageId: string): string | undefined {
   return assistantPlanMap.value.get(messageId)
 }
 
+function findLatestPlanModePlanId(): string | null {
+  const conv = chatStore.activeConversation
+  if (!conv?.messages.length) return null
+
+  const messages = conv.messages
+  let lastAssistantIdx = -1
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'assistant') {
+      lastAssistantIdx = i
+      break
+    }
+  }
+  if (lastAssistantIdx <= 0) return null
+
+  const assistant = messages[lastAssistantIdx]
+  const prev = messages[lastAssistantIdx - 1]
+  if (prev.role !== 'user' || !prev.planMode) return null
+
+  return assistantPlanMap.value.get(assistant.id) ?? null
+}
+
 function openPlansPanel(planId?: string): void {
   layoutStore.openPlansPanel(planId)
+}
+
+async function maybeAutoOpenPlansPanelAfterPlanRun(): Promise<void> {
+  const planId = findLatestPlanModePlanId()
+  if (!planId) return
+  openPlansPanel(planId)
+  await planStore.selectPlan(planId)
 }
 
 const conversationPlanCount = computed(() => planStore.plans.length)
@@ -336,6 +373,17 @@ function handleApprovalRespond(
 ): void {
   chatStore.respondToApproval(requestId, allowed, scope)
 }
+
+function isUserMessageExpanded(messageId: string): boolean {
+  return expandedUserMessages.value.has(messageId)
+}
+
+function toggleUserMessageExpanded(messageId: string): void {
+  const next = new Set(expandedUserMessages.value)
+  if (next.has(messageId)) next.delete(messageId)
+  else next.add(messageId)
+  expandedUserMessages.value = next
+}
 </script>
 
 <template>
@@ -362,15 +410,19 @@ function handleApprovalRespond(
           </div>
 
           <ChatMessageList
-            v-if="chatStore.activeConversation"
             ref="messageListRef"
             :messages="chatStore.activeConversation.messages"
-            :show-standalone-thinking="showStandaloneThinking"
-            :pending-approval-message-ids="pendingApprovalMessageIds"
+            :conversation-id="chatStore.activeConversationId"
+            :is-dark="isDark"
+            :layout-width="layoutStore.chatLayoutWidth"
+            :is-message-streaming="chatStore.isMessageStreaming"
+            :has-pending-approval="hasPendingApprovalForMessage"
+            :is-user-message-expanded="isUserMessageExpanded"
             @scroll="onScroll"
           >
-            <template #message="{ msg }">
+            <template #message="{ msg, measureRef, markdownProps }">
               <div
+                :ref="measureRef"
                 class="message"
                 :class="[msg.role, { 'message--plan': msg.role === 'user' && msg.planMode }]"
               >
@@ -423,24 +475,18 @@ function handleApprovalRespond(
                       >
                     </div>
                     <MarkdownRender
-                      v-else-if="msg.content.trim()"
-                      mode="chat"
+                      v-if="msg.content.trim() && !isThinkingMessage(msg)"
+                      v-bind="markdownProps"
                       custom-id="chat"
-                      :content="msg.content"
-                      :final="!chatStore.isMessageStreaming(msg.id)"
                       :smooth-streaming="chatStore.isMessageStreaming(msg.id) ? 'auto' : false"
                       :fade="
                         !chatStore.isMessageStreaming(msg.id) &&
                         !chatStore.wasMessageStreamed(msg.id)
                       "
                       :typewriter="chatStore.isMessageStreaming(msg.id)"
-                      :max-live-nodes="chatStore.isMessageStreaming(msg.id) ? 0 : undefined"
-                      :render-code-blocks-as-pre="true"
+                      :max-live-nodes="chatStore.isMessageStreaming(msg.id) ? 0 : 280"
+                      :render-code-blocks-as-pre="false"
                       :is-dark="isDark"
-                      :batch-rendering="true"
-                      :render-batch-size="16"
-                      :render-batch-delay="8"
-                      :render-batch-budget-ms="4"
                       :code-block-props="CODE_BLOCK_PROPS"
                     />
                     <button
@@ -464,7 +510,7 @@ function handleApprovalRespond(
                     </span>
                     <div v-if="msg.attachments?.length" class="message-attachments">
                       <div
-                        v-for="(att, idx) in msg.attachments"
+                        v-for="(att, attachmentIndex) in msg.attachments"
                         :key="att.id"
                         class="msg-attachment"
                       >
@@ -488,7 +534,7 @@ function handleApprovalRespond(
                         <template v-else-if="att.type === 'url'">
                           <span class="msg-attachment-chip msg-attachment-url">
                             <span class="msg-url-label"
-                              >&#x1F517; #{{ idx + 1 }} {{ att.url }}</span
+                              >&#x1F517; #{{ Number(attachmentIndex) + 1 }} {{ att.url }}</span
                             >
                             <span class="msg-attachment-tooltip">
                               <button class="tooltip-copy" @click.stop="copyText(att.url)">
@@ -514,7 +560,13 @@ function handleApprovalRespond(
                         </template>
                       </div>
                     </div>
-                    {{ msg.content }}
+                    <CollapsibleUserMessageText
+                      v-if="msg.content"
+                      :content="msg.content"
+                      :expanded="isUserMessageExpanded(msg.id)"
+                      :plan-mode="msg.planMode"
+                      @toggle="toggleUserMessageExpanded(msg.id)"
+                    />
                   </template>
                 </div>
                 <div class="message-actions">
@@ -745,10 +797,6 @@ function handleApprovalRespond(
   -webkit-user-select: text;
   user-select: text;
   --scroll-thumb: var(--content-text-tertiary);
-}
-
-.messages-container :deep(.vue-recycle-scroller__item-wrapper) {
-  overflow: visible;
 }
 
 .message {

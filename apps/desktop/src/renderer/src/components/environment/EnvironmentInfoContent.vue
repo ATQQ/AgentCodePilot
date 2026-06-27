@@ -47,7 +47,14 @@ async function copyBranch(): Promise<void> {
     <div v-if="showTitle !== false" class="env-header">
       <span class="env-title">环境信息</span>
       <button class="icon-btn" title="设置" disabled>
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+        >
           <circle cx="8" cy="8" r="2.5" />
           <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2" />
         </svg>
@@ -97,11 +104,29 @@ async function copyBranch(): Promise<void> {
             :title="branchCopied ? t('env.copied') : t('env.copyBranch')"
             @click="copyBranch"
           >
-            <svg v-if="!branchCopied" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <svg
+              v-if="!branchCopied"
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
               <rect x="5" y="5" width="8" height="8" rx="1.5" />
-              <path d="M5 10.5H4a1.5 1.5 0 0 1-1.5-1.5V4A1.5 1.5 0 0 1 4 2.5h5A1.5 1.5 0 0 1 10.5 4V5" />
+              <path
+                d="M5 10.5H4a1.5 1.5 0 0 1-1.5-1.5V4A1.5 1.5 0 0 1 4 2.5h5A1.5 1.5 0 0 1 10.5 4V5"
+              />
             </svg>
-            <svg v-else width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <svg
+              v-else
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
               <path d="M4 8.5l2.5 2.5L12 5" />
             </svg>
           </button>
@@ -109,7 +134,9 @@ async function copyBranch(): Promise<void> {
       </div>
 
       <div v-if="gitStore.status.isRepo" class="env-row">
-        <button class="action-btn action-btn--enabled" @click="handleCommitClick">提交或推送</button>
+        <button class="action-btn action-btn--enabled" @click="handleCommitClick">
+          提交或推送
+        </button>
       </div>
 
       <div v-if="!gitStore.status.gitAvailable" class="env-hint muted">Git 不可用</div>

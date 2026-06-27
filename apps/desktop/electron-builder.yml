@@ -1,3 +1,10 @@
+# Local / smoke packaging (fast).
+# - mac: dmg + zip, arm64 only (no tar.gz, no x64 cross-build)
+# - win: msi only
+# - linux: AppImage + deb, single arch via CLI flags
+#
+# Full multi-format release builds use electron-builder.release.yml (CI + *:release scripts).
+
 appId: com.agentcodepilot.app
 productName: AgentCodePilot
 directories:
@@ -11,14 +18,24 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+  - node_modules/@anthropic-ai/**
+  - node_modules/node-pty/**
+icon: build/icon.png
 win:
   executableName: AgentCodePilot
-nsis:
-  artifactName: ${name}-${version}-setup.${ext}
-  shortcutName: ${productName}
-  uninstallDisplayName: ${productName}
-  createDesktopShortcut: always
+  icon: build/icon.ico
+  target:
+    - target: msi
+      arch: x64
+msi:
+  artifactName: ${productName}-v${version}-Windows.${ext}
 mac:
+  icon: build/icon.icns
+  target:
+    - target: dmg
+      arch: arm64
+    - target: zip
+      arch: arm64
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
@@ -26,20 +43,25 @@ mac:
     - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
   notarize: false
+  artifactName: ${productName}-v${version}-macOS-${arch}.${ext}
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  writeUpdateInfo: false
 linux:
+  executableName: AgentCodePilot
+  icon: build/icon.png
   target:
     - AppImage
-    - snap
     - deb
   maintainer: electronjs.org
   category: Utility
+deb:
+  artifactName: ${productName}-v${version}-Linux-${arch}.${ext}
 appImage:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${productName}-v${version}-Linux-${arch}.${ext}
 npmRebuild: false
 publish:
-  provider: generic
-  url: https://example.com/auto-updates
+  provider: github
+  owner: ATQQ
+  repo: AgentCodePilot
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/

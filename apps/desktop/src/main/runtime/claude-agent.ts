@@ -5,8 +5,19 @@ import type { AgentAdapter, AgentRunInput } from './types'
 import type { ApprovalLevel } from './permissions'
 import { buildPermissionOptions, buildToolAccessOptions } from './permissions'
 import { DEFAULT_MAX_AGENT_TURNS } from '../../shared/agent-run-settings'
+import { getShellEnvironment } from '../shell/shell-env'
+import { resolveClaudeCodeExecutablePath } from './claude-executable'
 
-const AGENT_TOOLS = ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'WebFetch', 'WebSearch'] as const
+const AGENT_TOOLS = [
+  'Read',
+  'Write',
+  'Edit',
+  'Bash',
+  'Glob',
+  'Grep',
+  'WebFetch',
+  'WebSearch'
+] as const
 
 function formatMaxTurnsNotice(limit: number): string {
   return `\n\n---\n\n⚠️ 已达到单次 Agent 回合上限（${limit} 轮）。如需继续，请发送「继续」或把任务拆小后重试。`
@@ -123,9 +134,12 @@ export class ClaudeAgentAdapter implements AgentAdapter {
 
     const maxTurns = input.maxTurns ?? DEFAULT_MAX_AGENT_TURNS
 
+    const claudeExecutable = resolveClaudeCodeExecutablePath()
     const queryOptions: Options = {
       abortController: controller,
       cwd: input.cwd || app.getPath('home'),
+      env: getShellEnvironment(),
+      ...(claudeExecutable ? { pathToClaudeCodeExecutable: claudeExecutable } : {}),
       ...(input.attachmentDirectories?.length
         ? { additionalDirectories: input.attachmentDirectories }
         : {}),
@@ -159,7 +173,16 @@ export class ClaudeAgentAdapter implements AgentAdapter {
             sessionId: message.session_id
           })
         } else if (message.type === 'stream_event') {
-          const event = (message as { event: { type: string; index?: number; content_block?: { type: string; id?: string; name?: string; input?: unknown }; delta?: { type: string; text?: string; partial_json?: string } } }).event
+          const event = (
+            message as {
+              event: {
+                type: string
+                index?: number
+                content_block?: { type: string; id?: string; name?: string; input?: unknown }
+                delta?: { type: string; text?: string; partial_json?: string }
+              }
+            }
+          ).event
           if (event.type === 'content_block_start' && event.content_block?.type === 'tool_use') {
             const block = event.content_block
             const toolUseId = block.id || `tool-${Date.now()}`
@@ -187,9 +210,11 @@ export class ClaudeAgentAdapter implements AgentAdapter {
                 delta: event.delta.text
               })
             } else if (event.delta?.type === 'input_json_delta' && event.delta.partial_json) {
-              const toolUseId = event.index !== undefined ? blockIndexToToolId.get(event.index) : undefined
+              const toolUseId =
+                event.index !== undefined ? blockIndexToToolId.get(event.index) : undefined
               if (toolUseId) {
-                const accumulated = (toolInputBuffers.get(toolUseId) || '') + event.delta.partial_json
+                const accumulated =
+                  (toolInputBuffers.get(toolUseId) || '') + event.delta.partial_json
                 toolInputBuffers.set(toolUseId, accumulated)
                 try {
                   const parsed = JSON.parse(accumulated) as Record<string, unknown>
@@ -207,7 +232,11 @@ export class ClaudeAgentAdapter implements AgentAdapter {
             }
           }
         } else if (message.type === 'tool_progress') {
-          const toolMsg = message as { tool_use_id: string; tool_name: string; elapsed_time_seconds: number }
+          const toolMsg = message as {
+            tool_use_id: string
+            tool_name: string
+            elapsed_time_seconds: number
+          }
           emit({
             type: 'tool.progress',
             conversationId: input.conversationId,
@@ -216,6 +245,7 @@ export class ClaudeAgentAdapter implements AgentAdapter {
             elapsedSeconds: toolMsg.elapsed_time_seconds
           })
         } else if (message.type === 'tool_use_summary') {
+          // PostToolUse hooks emit per-tool completion; this backfills summary text only.
           const summaryMsg = message as { summary: string; preceding_tool_use_ids: string[] }
           for (const toolId of summaryMsg.preceding_tool_use_ids) {
             emit({
@@ -227,7 +257,20 @@ export class ClaudeAgentAdapter implements AgentAdapter {
             })
           }
         } else if (message.type === 'result') {
-          const result = message as { subtype?: string; errors?: string[]; modelUsage?: Record<string, { inputTokens?: number; outputTokens?: number; cacheReadInputTokens?: number; cacheCreationInputTokens?: number; costUSD?: number }> }
+          const result = message as {
+            subtype?: string
+            errors?: string[]
+            modelUsage?: Record<
+              string,
+              {
+                inputTokens?: number
+                outputTokens?: number
+                cacheReadInputTokens?: number
+                cacheCreationInputTokens?: number
+                costUSD?: number
+              }
+            >
+          }
           if (result.modelUsage) {
             let totalInput = 0
             let totalOutput = 0
@@ -249,10 +292,7 @@ export class ClaudeAgentAdapter implements AgentAdapter {
               costUSD: totalCost
             }
           }
-          if (
-            result.subtype === 'error_max_turns' ||
-            result.subtype === 'error_during_execution'
-          ) {
+          if (result.subtype === 'error_max_turns' || result.subtype === 'error_during_execution') {
             const errors = result.errors ?? []
             const errText = errors.join('\n') || 'Agent execution error'
             if (sessionId && isStaleSessionError({ message: errText })) {
@@ -282,14 +322,7 @@ export class ClaudeAgentAdapter implements AgentAdapter {
         }
       }
 
-      this.emitCompleted(
-        input,
-        emit,
-        usage,
-        rawMessages,
-        queryOptions,
-        controller.signal.aborted
-      )
+      this.emitCompleted(input, emit, usage, rawMessages, queryOptions, controller.signal.aborted)
     } catch (error: unknown) {
       if (controller.signal.aborted) {
         this.emitCompleted(input, emit, usage, rawMessages, queryOptions, true)
@@ -317,7 +350,10 @@ export class ClaudeAgentAdapter implements AgentAdapter {
         options: { ...queryOptions, abortController: undefined }
       })
     } catch {
-      debugInputStr = JSON.stringify({ prompt: input.content, error: 'Failed to serialize options' })
+      debugInputStr = JSON.stringify({
+        prompt: input.content,
+        error: 'Failed to serialize options'
+      })
     }
     try {
       debugOutputStr = JSON.stringify(rawMessages, (_key, value) => {
@@ -325,7 +361,10 @@ export class ClaudeAgentAdapter implements AgentAdapter {
         return value
       })
     } catch {
-      debugOutputStr = JSON.stringify({ error: 'Failed to serialize raw messages', count: rawMessages.length })
+      debugOutputStr = JSON.stringify({
+        error: 'Failed to serialize raw messages',
+        count: rawMessages.length
+      })
     }
     emit({
       type: 'message.completed',

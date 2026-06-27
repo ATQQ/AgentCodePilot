@@ -5,13 +5,20 @@ const panelContext = usePanelContextStore()
 </script>
 
 <template>
-  <div v-if="panelContext.isWorkspaceContext && panelContext.availableFolders.length > 1" class="folder-switcher">
+  <div
+    v-if="panelContext.isWorkspaceContext && panelContext.availableFolders.length > 1"
+    class="folder-switcher"
+  >
     <select
       class="folder-select"
       :value="panelContext.effectivePanelCwd"
       @change="panelContext.selectFolder(($event.target as HTMLSelectElement).value)"
     >
-      <option v-for="folder in panelContext.availableFolders" :key="folder.path" :value="folder.path">
+      <option
+        v-for="folder in panelContext.availableFolders"
+        :key="folder.path"
+        :value="folder.path"
+      >
         {{ folder.label }}
       </option>
     </select>

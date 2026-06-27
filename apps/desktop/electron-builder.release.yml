@@ -1,0 +1,81 @@
+# Full release packaging for CI / GitHub Releases.
+# Matches CC-Switch coverage:
+# - mac: dmg + zip + tar.gz × arm64/x64
+# - win: msi + portable
+# - linux: AppImage + deb + rpm × x64/arm64
+
+appId: com.agentcodepilot.app
+productName: AgentCodePilot
+directories:
+  buildResources: build
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+asarUnpack:
+  - resources/**
+  - node_modules/@anthropic-ai/**
+  - node_modules/node-pty/**
+icon: build/icon.png
+win:
+  executableName: AgentCodePilot
+  icon: build/icon.ico
+  target:
+    - target: msi
+      arch: x64
+    - target: portable
+      arch: x64
+msi:
+  artifactName: ${productName}-v${version}-Windows.${ext}
+portable:
+  artifactName: ${productName}-v${version}-Windows-Portable.${ext}
+mac:
+  icon: build/icon.icns
+  target:
+    - target: dmg
+      arch: arm64
+    - target: dmg
+      arch: x64
+    - target: zip
+      arch: arm64
+    - target: zip
+      arch: x64
+    - target: tar.gz
+      arch: arm64
+    - target: tar.gz
+      arch: x64
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    - NSCameraUsageDescription: Application requests access to the device's camera.
+    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
+    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
+    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+  notarize: false
+  artifactName: ${productName}-v${version}-macOS-${arch}.${ext}
+dmg:
+  writeUpdateInfo: false
+linux:
+  executableName: AgentCodePilot
+  icon: build/icon.png
+  target:
+    - AppImage
+    - deb
+    - rpm
+  maintainer: electronjs.org
+  category: Utility
+deb:
+  artifactName: ${productName}-v${version}-Linux-${arch}.${ext}
+rpm:
+  artifactName: ${productName}-v${version}-Linux-${arch}.${ext}
+appImage:
+  artifactName: ${productName}-v${version}-Linux-${arch}.${ext}
+npmRebuild: false
+publish:
+  provider: github
+  owner: ATQQ
+  repo: AgentCodePilot
+electronDownload:
+  mirror: https://npmmirror.com/mirrors/electron/

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Attachment, ApprovalRequest, Conversation, Message } from '@renderer/types'
+import type { Attachment, ApprovalRequest, Conversation, Message, ToolCall } from '@renderer/types'
 import type { AgentEvent, AttachmentPayload, PlanReference } from '../../../preload/types'
 import type { ApprovalLevel } from '@renderer/types'
 import { useWorkspaceStore } from './workspace.store'
@@ -22,7 +22,16 @@ export const useChatStore = defineStore('chat', () => {
   const streamingConversationIds = ref<Set<string>>(new Set())
   const waitingConversationIds = ref<Set<string>>(new Set())
   const pendingApprovals = ref<Map<string, ApprovalRequest>>(new Map())
-  const queuedMessages = ref<{ conversationId: string; content: string; agentId: string; modelId?: string; planMode?: boolean; planRefs?: PlanReference[] }[]>([])
+  const queuedMessages = ref<
+    {
+      conversationId: string
+      content: string
+      agentId: string
+      modelId?: string
+      planMode?: boolean
+      planRefs?: PlanReference[]
+    }[]
+  >([])
   const pendingAgentByConversation = ref<Map<string, string>>(new Map())
   const activeAssistantMessageIds = ref<Map<string, string>>(new Map())
   const thinkingStartedAtByConversation = ref<Map<string, number>>(new Map())
@@ -46,7 +55,10 @@ export const useChatStore = defineStore('chat', () => {
     return streamedMessageIds.value.has(messageId)
   }
 
-  function touchConversationSet(setRef: typeof streamingConversationIds, mutate: (set: Set<string>) => void): void {
+  function touchConversationSet(
+    setRef: typeof streamingConversationIds,
+    mutate: (set: Set<string>) => void
+  ): void {
     mutate(setRef.value)
     setRef.value = new Set(setRef.value)
   }
@@ -118,10 +130,7 @@ export const useChatStore = defineStore('chat', () => {
     const conv = conversations.value.find((c) => c.id === conversationId)
     const msg = conv?.messages.find((m) => m.id === activeId)
     return (
-      msg?.role === 'assistant' &&
-      !msg.content.trim() &&
-      !msg.toolCalls?.length &&
-      !msg.stopped
+      msg?.role === 'assistant' && !msg.content.trim() && !msg.toolCalls?.length && !msg.stopped
     )
   }
 
@@ -188,9 +197,7 @@ export const useChatStore = defineStore('chat', () => {
   })
 
   const orphanConversations = computed(() =>
-    sortSidebarConversations(
-      conversations.value.filter((c) => !c.projectId && !c.archived)
-    )
+    sortSidebarConversations(conversations.value.filter((c) => !c.projectId && !c.archived))
   )
 
   const archivedConversationsList = computed(() =>
@@ -205,9 +212,7 @@ export const useChatStore = defineStore('chat', () => {
       waitingConversationIds.value.has(activeConversationId.value)
   )
 
-  const isStoppable = computed(
-    () => isStreaming.value || isWaiting.value
-  )
+  const isStoppable = computed(() => isStreaming.value || isWaiting.value)
 
   const pendingApprovalConversationIds = computed(() => {
     const ids = new Set<string>()
@@ -250,7 +255,10 @@ export const useChatStore = defineStore('chat', () => {
     return activeAssistantMessageIds.value.get(conversationId)
   }
 
-  function ensureAssistantPlaceholder(conversationId: string, messageId: string): Message | undefined {
+  function ensureAssistantPlaceholder(
+    conversationId: string,
+    messageId: string
+  ): Message | undefined {
     const conv = conversations.value.find((c) => c.id === conversationId)
     if (!conv) return undefined
     let msg = conv.messages.find((m) => m.id === messageId)
@@ -280,6 +288,15 @@ export const useChatStore = defineStore('chat', () => {
     const next = new Map(toolUseIdAliases.value)
     next.set(`${messageId}:${toolUseId}`, canonicalToolUseId)
     toolUseIdAliases.value = next
+  }
+
+  function markToolRunning(tc: ToolCall): void {
+    if (tc.status === 'pending') {
+      tc.status = 'running'
+    }
+    if (!tc.startedAt) {
+      tc.startedAt = new Date().toISOString()
+    }
   }
 
   function dedupeToolCallByFingerprint(
@@ -428,7 +445,9 @@ export const useChatStore = defineStore('chat', () => {
 
     const persistedAttachments =
       result.attachments?.map((att) => attachmentFromPayload(att)) ??
-      (attachments && attachments.length > 0 ? attachments.map((att) => enrichAttachment(att)) : undefined)
+      (attachments && attachments.length > 0
+        ? attachments.map((att) => enrichAttachment(att))
+        : undefined)
 
     const now = new Date().toISOString()
     const msg: Message = {
@@ -521,7 +540,14 @@ export const useChatStore = defineStore('chat', () => {
     }
     setPendingAgent(conversationId, agentId)
     clearActiveAssistantMessage(conversationId)
-    addMessage(conversationId, 'user', content, attachments, effectivePlanMode, toPlainPlanRefs(planRefs))
+    addMessage(
+      conversationId,
+      'user',
+      content,
+      attachments,
+      effectivePlanMode,
+      toPlainPlanRefs(planRefs)
+    )
     markThinkingStarted(conversationId)
     addWaitingConversation(conversationId)
     const workspaceStore = useWorkspaceStore()
@@ -678,7 +704,11 @@ export const useChatStore = defineStore('chat', () => {
         const conv = conversations.value.find((c) => c.id === event.conversationId)
         if (conv) {
           const pendingAgent = getPendingAgent(event.conversationId)
-          addMessage(event.conversationId, 'assistant', `[Error] ${formatAgentErrorMessage(event.error)}`)
+          addMessage(
+            event.conversationId,
+            'assistant',
+            `[Error] ${formatAgentErrorMessage(event.error)}`
+          )
           const lastMsg = conv.messages[conv.messages.length - 1]
           if (lastMsg?.role === 'assistant' && pendingAgent) {
             lastMsg.agentId = pendingAgent
@@ -734,7 +764,7 @@ export const useChatStore = defineStore('chat', () => {
               (t) => t.toolUseId !== resolvedToolUseId && t.status === 'running'
             )
             if (!hasRunning) {
-              activeTool.status = 'running'
+              markToolRunning(activeTool)
             }
           }
         }
@@ -748,7 +778,7 @@ export const useChatStore = defineStore('chat', () => {
         const resolvedToolUseId = resolveToolUseId(event.messageId, event.toolUseId)
         const tc = msg.toolCalls.find((t) => t.toolUseId === resolvedToolUseId)
         if (tc) {
-          tc.status = 'running'
+          markToolRunning(tc)
           tc.elapsedSeconds = event.elapsedSeconds
         }
         break
@@ -761,12 +791,18 @@ export const useChatStore = defineStore('chat', () => {
         const resolvedToolUseId = resolveToolUseId(event.messageId, event.toolUseId)
         const tc = msg.toolCalls.find((t) => t.toolUseId === resolvedToolUseId)
         if (tc) {
-          tc.status = 'completed'
+          const wasFinished = tc.status === 'completed' || tc.status === 'error'
+          tc.status = event.status ?? 'completed'
           if (event.summary) tc.summary = event.summary
-          const nextPending = msg.toolCalls.find((t) => t.status === 'pending')
-          if (nextPending) {
-            const hasRunning = msg.toolCalls.some((t) => t.status === 'running')
-            if (!hasRunning) nextPending.status = 'running'
+          if (event.elapsedSeconds != null) tc.elapsedSeconds = event.elapsedSeconds
+          if (!wasFinished) {
+            const nextPending = msg.toolCalls.find((t) => t.status === 'pending')
+            if (nextPending) {
+              const hasRunning = msg.toolCalls.some((t) => t.status === 'running')
+              if (!hasRunning) {
+                markToolRunning(nextPending)
+              }
+            }
           }
         }
         break

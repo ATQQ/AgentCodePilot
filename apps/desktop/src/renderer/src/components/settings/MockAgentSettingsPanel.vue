@@ -102,11 +102,7 @@ async function resetConfig(): Promise<void> {
       </div>
 
       <div class="response-list">
-        <div
-          v-for="(response, index) in draftResponses"
-          :key="index"
-          class="response-item"
-        >
+        <div v-for="(response, index) in draftResponses" :key="index" class="response-item">
           <div class="response-header">
             <button
               type="button"
