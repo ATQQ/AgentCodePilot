@@ -2,6 +2,7 @@
   "name": "@agent-code-pilot/desktop",
   "version": "0.0.1",
   "description": "AgentCodePilot desktop application",
+  "homepage": "https://github.com/ATQQ/AgentCodePilot",
   "main": "./out/main/index.js",
   "author": "sugar",
   "scripts": {

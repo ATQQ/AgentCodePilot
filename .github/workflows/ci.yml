@@ -38,8 +38,8 @@ jobs:
       - name: Run quality checks
         run: pnpm check
 
-  # Validates release electron-builder config (e.g. linux executableName, AppImage).
-  # Uses a single Linux AppImage on PR/main — full multi-platform release runs on tag only.
+  # Validates release electron-builder config (executableName, AppImage, deb metadata).
+  # Uses Linux AppImage + deb on PR/main — full multi-platform release runs on tag only.
   pack-smoke:
     needs: check
     runs-on: ubuntu-latest
@@ -69,5 +69,5 @@ jobs:
       - name: Build app
         run: pnpm -C apps/desktop build
 
-      - name: Smoke-pack Linux AppImage (release config, no publish)
-        run: pnpm -C apps/desktop exec electron-builder --config electron-builder.release.yml --linux AppImage --x64 --publish never
+      - name: Smoke-pack Linux AppImage + deb (release config, no publish)
+        run: pnpm -C apps/desktop exec electron-builder --config electron-builder.release.yml --linux AppImage deb --x64 --publish never
