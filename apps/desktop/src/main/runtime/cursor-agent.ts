@@ -89,6 +89,8 @@ export class CursorAgentAdapter implements AgentAdapter {
   private agentHandles = new Map<string, SDKAgent>()
   private assistantTextEmitted = new Map<string, number>()
   private toolStarted = new Set<string>()
+  private toolStartedAt = new Map<string, string>()
+  private toolElapsedSeconds = new Map<string, number>()
   private cliProcesses = new Map<string, ChildProcess>()
 
   constructor() {
@@ -174,6 +176,8 @@ export class CursorAgentAdapter implements AgentAdapter {
     this.abortControllers.set(input.conversationId, controller)
     this.assistantTextEmitted.set(input.conversationId, 0)
     this.toolStarted.clear()
+    this.toolStartedAt.clear()
+    this.toolElapsedSeconds.clear()
 
     emit({
       type: 'message.started',
@@ -451,6 +455,8 @@ export class CursorAgentAdapter implements AgentAdapter {
 
     if (event.status === 'running' && !this.toolStarted.has(toolUseId)) {
       this.toolStarted.add(toolUseId)
+      const startedAt = new Date().toISOString()
+      this.toolStartedAt.set(toolUseId, startedAt)
       emit({
         type: 'tool.started',
         conversationId: input.conversationId,
@@ -459,13 +465,19 @@ export class CursorAgentAdapter implements AgentAdapter {
           toolUseId,
           toolName: event.name,
           input: (event.args as Record<string, unknown>) || {},
-          status: 'pending'
+          status: 'pending',
+          startedAt
         }
       })
       return
     }
 
     if (event.status === 'completed' || event.status === 'error') {
+      const startedAt = this.toolStartedAt.get(toolUseId)
+      let elapsedSeconds = this.toolElapsedSeconds.get(toolUseId)
+      if (elapsedSeconds == null && startedAt) {
+        elapsedSeconds = Math.max(0, (Date.now() - new Date(startedAt).getTime()) / 1000)
+      }
       emit({
         type: 'tool.completed',
         conversationId: input.conversationId,
@@ -476,7 +488,9 @@ export class CursorAgentAdapter implements AgentAdapter {
             ? JSON.stringify(event.result ?? 'Tool error')
             : typeof event.result === 'string'
               ? event.result
-              : JSON.stringify(event.result ?? {})
+              : JSON.stringify(event.result ?? {}),
+        status: event.status === 'error' ? 'error' : 'completed',
+        ...(elapsedSeconds != null ? { elapsedSeconds } : {})
       })
     }
   }

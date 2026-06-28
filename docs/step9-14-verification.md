@@ -384,6 +384,16 @@ await window.agentAPI.agents.listModels('cursor', true)
 
 发送「读取 package.json 内容」，应出现 ToolCallCard。
 
+### 验证 6：重启后工具调用与停止状态
+
+1. 用 Cursor 发送「列出当前目录文件」（或任意会触发 Read/Bash 的指令）
+2. ToolCallCard 应显示 **开始时间** 与 **耗时**
+3. 完全退出 App 并重启，打开同一会话 — 工具卡片与时间信息仍在
+4. 另开一轮对话，流式生成中点击 **Stop** — 应显示「已手动停止」徽章
+5. 重启 App 后该条 assistant 消息仍保留停止徽章
+
+> 工具调用写入 `messages.tool_calls`（JSON）；停止状态写入 `messages.stopped`。
+
 ### 验证 5：设置页
 
 - Codex / Cursor 标签页可配置 API Key、沙箱/模式

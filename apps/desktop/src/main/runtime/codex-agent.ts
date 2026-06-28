@@ -83,6 +83,7 @@ export class CodexAgentAdapter implements AgentAdapter {
   private threadIds = new Map<string, string>()
   private messageTextByItemId = new Map<string, string>()
   private emittedToolIds = new Set<string>()
+  private toolStartedAt = new Map<string, string>()
 
   async run(input: AgentRunInput, emit: (event: AgentEvent) => void): Promise<void> {
     const sessionId = input.agentSessionId ?? this.threadIds.get(input.conversationId) ?? undefined
@@ -124,6 +125,7 @@ export class CodexAgentAdapter implements AgentAdapter {
     this.abortControllers.set(input.conversationId, controller)
     this.messageTextByItemId.clear()
     this.emittedToolIds.clear()
+    this.toolStartedAt.clear()
 
     emit({
       type: 'message.started',
@@ -321,6 +323,8 @@ export class CodexAgentAdapter implements AgentAdapter {
 
     if ((phase === 'started' || phase === 'updated') && !this.emittedToolIds.has(toolUseId)) {
       this.emittedToolIds.add(toolUseId)
+      const startedAt = new Date().toISOString()
+      this.toolStartedAt.set(toolUseId, startedAt)
       emit({
         type: 'tool.started',
         conversationId: input.conversationId,
@@ -329,7 +333,8 @@ export class CodexAgentAdapter implements AgentAdapter {
           toolUseId,
           toolName,
           input: toolInputForItem(item),
-          status: item.status === 'failed' ? 'error' : 'pending'
+          status: item.status === 'failed' ? 'error' : 'pending',
+          startedAt
         }
       })
     }
@@ -346,6 +351,10 @@ export class CodexAgentAdapter implements AgentAdapter {
 
     if (phase === 'completed') {
       const failed = item.status === 'failed'
+      const startedAt = this.toolStartedAt.get(toolUseId)
+      const elapsedSeconds = startedAt
+        ? Math.max(0, (Date.now() - new Date(startedAt).getTime()) / 1000)
+        : undefined
 
       if (failed) {
         emit({
@@ -358,7 +367,9 @@ export class CodexAgentAdapter implements AgentAdapter {
               ? item.error?.message || 'Tool failed'
               : item.type === 'command_execution'
                 ? item.aggregated_output || 'Command failed'
-                : 'Operation failed'
+                : 'Operation failed',
+          status: 'error',
+          ...(elapsedSeconds != null ? { elapsedSeconds } : {})
         })
       } else {
         emit({
@@ -373,7 +384,9 @@ export class CodexAgentAdapter implements AgentAdapter {
                 ? item.changes.map((change) => `${change.kind} ${change.path}`).join('\n')
                 : item.type === 'mcp_tool_call'
                   ? JSON.stringify(item.result ?? item.arguments)
-                  : 'Completed'
+                  : 'Completed',
+          status: 'completed',
+          ...(elapsedSeconds != null ? { elapsedSeconds } : {})
         })
       }
     }

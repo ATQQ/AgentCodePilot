@@ -158,6 +158,35 @@ function resolveConversationWorkspaceFolders(
 
 const AGENT_HISTORY_LIMIT = 50
 const DELTA_BATCH_MS = 16
+const STOPPED_ASSISTANT_TEXT = '已手动终止 AI 回复'
+
+function finalizeToolCallsForSave(toolCalls: Map<string, ToolUseInfo>): ToolUseInfo[] {
+  const nowMs = Date.now()
+  return Array.from(toolCalls.values()).map((tool) => {
+    const finalized: ToolUseInfo = { ...tool }
+
+    if (!finalized.startedAt) {
+      finalized.startedAt = new Date(nowMs).toISOString()
+    }
+
+    if (
+      finalized.elapsedSeconds == null &&
+      finalized.startedAt &&
+      (finalized.status === 'completed' || finalized.status === 'error')
+    ) {
+      finalized.elapsedSeconds = Math.max(
+        0,
+        (nowMs - new Date(finalized.startedAt).getTime()) / 1000
+      )
+    }
+
+    if (finalized.status === 'pending' || finalized.status === 'running') {
+      finalized.status = 'completed'
+    }
+
+    return finalized
+  })
+}
 
 interface DeltaBatchEntry {
   conversationId: string
@@ -233,7 +262,10 @@ function emitAgentEvent(event: AgentEvent): void {
   } else if (event.type === 'tool.started') {
     const entry = streamingMessages.get(event.messageId)
     if (entry) {
-      entry.toolCalls.set(event.tool.toolUseId, { ...event.tool })
+      entry.toolCalls.set(event.tool.toolUseId, {
+        ...event.tool,
+        startedAt: event.tool.startedAt ?? new Date().toISOString()
+      })
     }
   } else if (event.type === 'tool.input_updated') {
     const entry = streamingMessages.get(event.messageId)
@@ -255,11 +287,17 @@ function emitAgentEvent(event: AgentEvent): void {
     const entry = streamingMessages.get(event.messageId)
     if (entry) {
       try {
+        const stopped = event.stopped === true
+        let content = entry.content
+        if (stopped && !content.trim()) {
+          content = STOPPED_ASSISTANT_TEXT
+        }
+        const finalizedTools = finalizeToolCallsForSave(entry.toolCalls)
         repo.addMessage({
           id: event.messageId,
           conversationId: entry.conversationId,
           role: 'assistant',
-          content: entry.content,
+          content,
           createdAt: new Date().toISOString(),
           agentId: entry.agentId ?? null,
           inputTokens: event.usage?.inputTokens ?? null,
@@ -270,12 +308,11 @@ function emitAgentEvent(event: AgentEvent): void {
           rawInput: entry.rawInput || null,
           debugInput: event.debugInput || null,
           debugOutput: event.debugOutput || null,
+          stopped,
           toolCalls:
-            entry.toolCalls.size > 0
-              ? JSON.stringify(Array.from(entry.toolCalls.values()))
-              : null
+            finalizedTools.length > 0 ? JSON.stringify(finalizedTools) : null
         })
-        savePlanFromAssistantMessage(entry.conversationId, event.messageId, entry.content)
+        savePlanFromAssistantMessage(entry.conversationId, event.messageId, content)
       } catch (e) {
         console.error('[emitAgentEvent] Failed to save message to db:', e)
       }
@@ -612,6 +649,9 @@ function registerIpcHandlers(): void {
           } catch {
             /* ignore */
           }
+        }
+        if (r.stopped === 1) {
+          msg.stopped = true
         }
         return msg
       })

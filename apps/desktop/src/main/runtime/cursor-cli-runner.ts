@@ -56,6 +56,64 @@ function truncateText(text: string, maxLen: number): string {
   return `${text.slice(0, maxLen)}…`
 }
 
+function readTimestampMs(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+  return undefined
+}
+
+function msToIso(ms: number | undefined): string | undefined {
+  if (ms == null) return undefined
+  return new Date(ms).toISOString()
+}
+
+function parseCliToolTiming(
+  event: Record<string, unknown>,
+  toolCall: Record<string, unknown>
+): { startedAt?: string; elapsedSeconds?: number } {
+  let startedMs = readTimestampMs(event.startedAtMs)
+  let completedMs = readTimestampMs(event.completedAtMs)
+  let elapsedSeconds: number | undefined
+
+  for (const key of Object.keys(toolCall)) {
+    if (!key.endsWith('ToolCall')) continue
+    const payload = toolCall[key]
+    if (!payload || typeof payload !== 'object') continue
+
+    startedMs =
+      startedMs ??
+      readTimestampMs((payload as { startedAtMs?: unknown }).startedAtMs)
+    completedMs =
+      completedMs ??
+      readTimestampMs((payload as { completedAtMs?: unknown }).completedAtMs)
+
+    const result = (payload as { result?: Record<string, unknown> }).result
+    if (result && typeof result === 'object' && 'success' in result) {
+      const success = result.success
+      if (success && typeof success === 'object') {
+        const executionMs =
+          readTimestampMs((success as { executionTime?: unknown }).executionTime) ??
+          readTimestampMs((success as { localExecutionTimeMs?: unknown }).localExecutionTimeMs)
+        if (executionMs != null) {
+          elapsedSeconds = executionMs / 1000
+        }
+      }
+    }
+  }
+
+  if (elapsedSeconds == null && startedMs != null && completedMs != null && completedMs >= startedMs) {
+    elapsedSeconds = (completedMs - startedMs) / 1000
+  }
+
+  return {
+    startedAt: msToIso(startedMs),
+    elapsedSeconds
+  }
+}
+
 function parseCliToolCompletion(toolCall: Record<string, unknown>): {
   summary: string
   status: 'completed' | 'error'
@@ -339,6 +397,7 @@ export async function runCursorViaCli(
           if (!callId || !toolCall) return
 
           if (event.subtype === 'started') {
+            const timing = parseCliToolTiming(event, toolCall)
             emit({
               type: 'tool.started',
               conversationId: input.conversationId,
@@ -347,7 +406,8 @@ export async function runCursorViaCli(
                 toolUseId: callId,
                 toolName: toolNameFromCliCall(toolCall),
                 input: toolInputFromCliCall(toolCall),
-                status: 'running'
+                status: 'running',
+                ...(timing.startedAt ? { startedAt: timing.startedAt } : {})
               }
             })
             return
@@ -355,13 +415,15 @@ export async function runCursorViaCli(
 
           if (event.subtype === 'completed') {
             const completion = parseCliToolCompletion(toolCall)
+            const timing = parseCliToolTiming(event, toolCall)
             emit({
               type: 'tool.completed',
               conversationId: input.conversationId,
               messageId: input.messageId,
               toolUseId: callId,
               summary: completion.summary,
-              status: completion.status
+              status: completion.status,
+              ...(timing.elapsedSeconds != null ? { elapsedSeconds: timing.elapsedSeconds } : {})
             })
           }
           return

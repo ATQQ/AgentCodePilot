@@ -377,6 +377,7 @@ export interface MessageInfo {
   usage?: TokenUsage
   debugInput?: string
   debugOutput?: string
+  stopped?: boolean
 }
 
 export type PlanOwnerType = 'conversation' | 'project' | 'workspace'

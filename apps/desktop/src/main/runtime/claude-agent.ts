@@ -118,6 +118,7 @@ export class ClaudeAgentAdapter implements AgentAdapter {
     const rawMessages: unknown[] = []
     const blockIndexToToolId = new Map<number, string>()
     const toolInputBuffers = new Map<string, string>()
+    const toolElapsedSeconds = new Map<string, number>()
     const prompt = withWorkspaceContext(buildPrompt(input, sessionId), input.workspaceFolders)
 
     const approvalLevel = (input.approvalLevel ?? 'auto') as ApprovalLevel
@@ -198,7 +199,8 @@ export class ClaudeAgentAdapter implements AgentAdapter {
                 toolUseId,
                 toolName: block.name || 'unknown',
                 input: (block.input as Record<string, unknown>) || {},
-                status: 'pending'
+                status: 'pending',
+                startedAt: new Date().toISOString()
               }
             })
           } else if (event.type === 'content_block_delta') {
@@ -244,6 +246,7 @@ export class ClaudeAgentAdapter implements AgentAdapter {
             toolUseId: toolMsg.tool_use_id,
             elapsedSeconds: toolMsg.elapsed_time_seconds
           })
+          toolElapsedSeconds.set(toolMsg.tool_use_id, toolMsg.elapsed_time_seconds)
         } else if (message.type === 'tool_use_summary') {
           // PostToolUse hooks emit per-tool completion; this backfills summary text only.
           const summaryMsg = message as { summary: string; preceding_tool_use_ids: string[] }
@@ -253,7 +256,8 @@ export class ClaudeAgentAdapter implements AgentAdapter {
               conversationId: input.conversationId,
               messageId: input.messageId,
               toolUseId: toolId,
-              summary: summaryMsg.summary
+              summary: summaryMsg.summary,
+              elapsedSeconds: toolElapsedSeconds.get(toolId)
             })
           }
         } else if (message.type === 'result') {

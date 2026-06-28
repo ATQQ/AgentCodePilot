@@ -404,7 +404,8 @@ export const useChatStore = defineStore('chat', () => {
       toolCalls: m.toolCalls,
       usage: m.usage,
       debugInput: m.debugInput,
-      debugOutput: m.debugOutput
+      debugOutput: m.debugOutput,
+      stopped: m.stopped
     }))
   }
 
