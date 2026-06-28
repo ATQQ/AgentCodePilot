@@ -313,12 +313,12 @@ function getMessageAgentName(msg: Message): string {
   return agentStore.getAgentName(getMessageAgentId(msg))
 }
 
-const waitingAgentIcon = computed(() => {
+const waitingAgentId = computed(() => {
   const convId = chatStore.activeConversationId
-  const agentId =
-    (convId ? chatStore.getPendingAgent(convId) : undefined) ?? agentStore.selectedAgentId
-  return getAgentIcon(agentId)
+  return (convId ? chatStore.getPendingAgent(convId) : undefined) ?? agentStore.selectedAgentId
 })
+
+const waitingAgentIcon = computed(() => getAgentIcon(waitingAgentId.value))
 
 const isArchived = computed(() => chatStore.activeConversation?.archived === true)
 
@@ -427,7 +427,7 @@ function toggleUserMessageExpanded(messageId: string): void {
                 :class="[msg.role, { 'message--plan': msg.role === 'user' && msg.planMode }]"
               >
                 <div v-if="msg.role === 'assistant'" class="message-role">
-                  <span class="agent-avatar">
+                  <span class="agent-avatar" :data-agent="getMessageAgentId(msg)">
                     <img :src="getMessageAgentIcon(msg)" width="14" height="14" alt="" />
                   </span>
                   <span class="message-role-name">{{ getMessageAgentName(msg) }}</span>
@@ -649,7 +649,7 @@ function toggleUserMessageExpanded(messageId: string): void {
             </template>
             <template #after>
               <div v-if="showStandaloneThinking" class="thinking-indicator">
-                <span class="agent-avatar">
+                <span class="agent-avatar" :data-agent="waitingAgentId">
                   <img :src="waitingAgentIcon" width="14" height="14" alt="" />
                 </span>
                 <div class="thinking-dots">
@@ -865,8 +865,41 @@ html.dark .approval-inline-tag {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #f5e6df;
+  background: color-mix(in srgb, var(--content-text) 6%, var(--content-bg));
+  border: 1px solid color-mix(in srgb, var(--content-text) 10%, transparent);
   flex-shrink: 0;
+}
+
+.agent-avatar[data-agent='claude-code'] {
+  background: #f5e6df;
+  border-color: transparent;
+}
+
+.agent-avatar[data-agent='cursor'] {
+  background: #eceef3;
+  border-color: transparent;
+}
+
+.agent-avatar[data-agent='codex'] {
+  background: #e8f5ee;
+  border-color: transparent;
+}
+
+html.dark .agent-avatar {
+  background: color-mix(in srgb, var(--content-text) 8%, transparent);
+  border-color: color-mix(in srgb, var(--content-text) 12%, transparent);
+}
+
+html.dark .agent-avatar[data-agent='claude-code'] {
+  background: rgba(245, 230, 223, 0.18);
+}
+
+html.dark .agent-avatar[data-agent='cursor'] {
+  background: rgba(236, 238, 243, 0.12);
+}
+
+html.dark .agent-avatar[data-agent='codex'] {
+  background: rgba(232, 245, 238, 0.12);
 }
 
 .message-content {

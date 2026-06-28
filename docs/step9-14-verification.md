@@ -376,8 +376,8 @@ await window.agentAPI.agents.listModels('cursor', true)
 
 1. 设置 → Agent 配置 → Cursor 填写 API Key（或设置 `CURSOR_API_KEY`，或已在终端 `agent login`）
 2. Composer 选择 **Cursor**，模型选 `composer-2.5`
-3. 发送「这个仓库是做什么的？」——应看到流式 assistant 文本
-4. 追问「重点看 apps/desktop」——上下文应保留
+3. 发送「这个仓库是做什么的？」——应看到流式 assistant 文本（优先走本机 `agent` CLI，日志分类 `[CursorCli]`）
+4. 追问「重点看 apps/desktop」——上下文应保留（CLI session UUID 写入 `agent_session_id`）
 5. Stop 按钮应正常中止
 
 ### 验证 4：工具调用（可选）

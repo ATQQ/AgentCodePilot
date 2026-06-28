@@ -373,6 +373,7 @@ export interface MessageInfo {
   planMode?: boolean
   planRefs?: PlanReference[]
   attachments?: AttachmentPayload[]
+  toolCalls?: ToolUseInfo[]
   usage?: TokenUsage
   debugInput?: string
   debugOutput?: string

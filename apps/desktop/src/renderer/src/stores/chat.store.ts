@@ -401,6 +401,7 @@ export const useChatStore = defineStore('chat', () => {
       planMode: m.planMode,
       planRefs: m.planRefs,
       attachments: m.attachments?.map((att) => enrichAttachment(att as Attachment)),
+      toolCalls: m.toolCalls,
       usage: m.usage,
       debugInput: m.debugInput,
       debugOutput: m.debugOutput

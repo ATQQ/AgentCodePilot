@@ -25,7 +25,8 @@ import type {
   SettingsInfo,
   SettingsPayload,
   OpenPathPayload,
-  OpenPathResult
+  OpenPathResult,
+  ToolUseInfo
 } from '../preload/types'
 import { agentRegistry, ensureAgentRegistry } from './runtime'
 import { supervisedRun, supervisedStop, supervisedStopAll } from './runtime/supervisor'
@@ -98,8 +99,34 @@ let mainWindow: BrowserWindow | null = null
 
 const streamingMessages = new Map<
   string,
-  { conversationId: string; content: string; rawInput: string; agentId?: string }
+  {
+    conversationId: string
+    content: string
+    rawInput: string
+    agentId?: string
+    toolCalls: Map<string, ToolUseInfo>
+  }
 >()
+
+function createStreamingEntry(
+  conversationId: string,
+  rawInput: string,
+  agentId?: string
+): {
+  conversationId: string
+  content: string
+  rawInput: string
+  agentId?: string
+  toolCalls: Map<string, ToolUseInfo>
+} {
+  return {
+    conversationId,
+    content: '',
+    rawInput,
+    agentId,
+    toolCalls: new Map()
+  }
+}
 
 function resolveConversationCwd(conversationId: string, payloadCwd?: string): string {
   const conv = repo.getConversationById(conversationId)
@@ -198,15 +225,32 @@ function mapPlanRow(r: repo.PlanRow): PlanInfo {
 function emitAgentEvent(event: AgentEvent): void {
   if (event.type === 'message.started') {
     if (!streamingMessages.has(event.messageId)) {
-      streamingMessages.set(event.messageId, {
-        conversationId: event.conversationId,
-        content: '',
-        rawInput: ''
-      })
+      streamingMessages.set(event.messageId, createStreamingEntry(event.conversationId, ''))
     }
   } else if (event.type === 'message.delta') {
     const entry = streamingMessages.get(event.messageId)
     if (entry) entry.content += event.delta
+  } else if (event.type === 'tool.started') {
+    const entry = streamingMessages.get(event.messageId)
+    if (entry) {
+      entry.toolCalls.set(event.tool.toolUseId, { ...event.tool })
+    }
+  } else if (event.type === 'tool.input_updated') {
+    const entry = streamingMessages.get(event.messageId)
+    const tool = entry?.toolCalls.get(event.toolUseId)
+    if (tool) tool.input = event.input
+  } else if (event.type === 'tool.progress') {
+    const entry = streamingMessages.get(event.messageId)
+    const tool = entry?.toolCalls.get(event.toolUseId)
+    if (tool) tool.elapsedSeconds = event.elapsedSeconds
+  } else if (event.type === 'tool.completed') {
+    const entry = streamingMessages.get(event.messageId)
+    const tool = entry?.toolCalls.get(event.toolUseId)
+    if (tool) {
+      if (event.summary) tool.summary = event.summary
+      if (event.elapsedSeconds != null) tool.elapsedSeconds = event.elapsedSeconds
+      tool.status = event.status ?? 'completed'
+    }
   } else if (event.type === 'message.completed') {
     const entry = streamingMessages.get(event.messageId)
     if (entry) {
@@ -225,7 +269,11 @@ function emitAgentEvent(event: AgentEvent): void {
           costUSD: event.usage?.costUSD ?? null,
           rawInput: entry.rawInput || null,
           debugInput: event.debugInput || null,
-          debugOutput: event.debugOutput || null
+          debugOutput: event.debugOutput || null,
+          toolCalls:
+            entry.toolCalls.size > 0
+              ? JSON.stringify(Array.from(entry.toolCalls.values()))
+              : null
         })
         savePlanFromAssistantMessage(entry.conversationId, event.messageId, entry.content)
       } catch (e) {
@@ -392,12 +440,7 @@ function registerIpcHandlers(): void {
       planMode: payload.planMode,
       conversationId: payload.conversationId
     })
-    streamingMessages.set(assistantMsgId, {
-      conversationId: payload.conversationId,
-      content: '',
-      rawInput: prompt,
-      agentId: payload.agentId
-    })
+    streamingMessages.set(assistantMsgId, createStreamingEntry(payload.conversationId, prompt, payload.agentId))
     const runContext = getConversationRunContext(payload.conversationId)
     const approvalLevel = getRunApprovalLevel(payload.conversationId)
     const runInput = {
@@ -450,12 +493,7 @@ function registerIpcHandlers(): void {
       planMode: payload.planMode,
       conversationId: payload.conversationId
     })
-    streamingMessages.set(assistantMsgId, {
-      conversationId: payload.conversationId,
-      content: '',
-      rawInput: prompt,
-      agentId: payload.agentId
-    })
+    streamingMessages.set(assistantMsgId, createStreamingEntry(payload.conversationId, prompt, payload.agentId))
     const runContext = getConversationRunContext(payload.conversationId)
     const approvalLevel = getRunApprovalLevel(payload.conversationId)
     const runInput = {
@@ -567,6 +605,13 @@ function registerIpcHandlers(): void {
         }
         if (r.agent_id) {
           msg.agentId = r.agent_id
+        }
+        if (r.tool_calls) {
+          try {
+            msg.toolCalls = JSON.parse(r.tool_calls) as MessageInfo['toolCalls']
+          } catch {
+            /* ignore */
+          }
         }
         return msg
       })
