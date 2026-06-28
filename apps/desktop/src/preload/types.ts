@@ -52,6 +52,8 @@ export const IPC_CHANNELS = {
   FILE_WRITE: 'file:write',
   FILE_DELETE: 'file:delete',
   FILE_COPY: 'file:copy',
+  FILE_MKDIR: 'file:mkdir',
+  FILE_RENAME: 'file:rename',
   TERMINAL_CREATE: 'terminal:create',
   TERMINAL_WRITE: 'terminal:write',
   TERMINAL_RESIZE: 'terminal:resize',
@@ -571,6 +573,8 @@ export interface AgentAPI {
     write: (filePath: string, content: string, roots: string[]) => Promise<void>
     delete: (filePath: string, roots: string[]) => Promise<void>
     copy: (srcPath: string, destPath: string, roots: string[]) => Promise<void>
+    mkdir: (dirPath: string, roots: string[]) => Promise<void>
+    rename: (oldPath: string, newPath: string, roots: string[]) => Promise<void>
   }
   git: {
     status: (cwd: string) => Promise<GitStatusResult>

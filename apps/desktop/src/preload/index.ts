@@ -120,7 +120,11 @@ const agentAPI = {
     delete: (filePath: string, roots: string[]) =>
       ipcRenderer.invoke(IPC_CHANNELS.FILE_DELETE, filePath, roots),
     copy: (srcPath: string, destPath: string, roots: string[]) =>
-      ipcRenderer.invoke(IPC_CHANNELS.FILE_COPY, srcPath, destPath, roots)
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_COPY, srcPath, destPath, roots),
+    mkdir: (dirPath: string, roots: string[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_MKDIR, dirPath, roots),
+    rename: (oldPath: string, newPath: string, roots: string[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.FILE_RENAME, oldPath, newPath, roots)
   },
   git: {
     status: (cwd: string) => ipcRenderer.invoke(IPC_CHANNELS.GIT_STATUS, cwd),

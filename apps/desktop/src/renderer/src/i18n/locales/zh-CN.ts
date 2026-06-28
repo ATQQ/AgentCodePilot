@@ -319,6 +319,32 @@ export default {
       saved: '已保存',
       saveFailed: '保存失败',
       enterEditMode: '已进入编辑模式'
+    },
+    fileTree: {
+      contextMenu: {
+        addToChat: '添加到对话',
+        copy: '复制',
+        cut: '剪切',
+        paste: '粘贴',
+        newFile: '新建文件',
+        newFolder: '新建文件夹',
+        copyAbsolutePath: '复制绝对路径',
+        copyRelativePath: '复制相对路径',
+        rename: '重命名',
+        delete: '删除',
+        deleteFileConfirm: '确定删除「{name}」？此操作不可撤销。',
+        deleteDirConfirm: '确定删除文件夹「{name}」及其全部内容？此操作不可撤销。',
+        pasteOverwriteConfirm: '目标已存在「{name}」，是否覆盖？',
+        pathCopied: '路径已复制',
+        copied: '已复制到剪贴板',
+        invalidName: '名称不能包含 / 或 \\',
+        emptyName: '名称不能为空',
+        nameExists: '名称已存在',
+        newFileTitle: '新建文件',
+        newFolderTitle: '新建文件夹',
+        renameTitle: '重命名',
+        namePlaceholder: '输入名称…'
+      }
     }
   },
   env: {

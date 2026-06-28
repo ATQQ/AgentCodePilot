@@ -80,7 +80,9 @@ import {
   readWorkspaceFile,
   writeWorkspaceFile,
   deleteWorkspaceFile,
-  copyWorkspaceFile
+  copyWorkspaceFile,
+  mkdirWorkspaceDir,
+  renameWorkspaceEntry
 } from './file/workspace-file-service'
 import {
   createTerminal,
@@ -930,6 +932,16 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.FILE_COPY, (_e, srcPath: string, destPath: string, roots: string[]) =>
     copyWorkspaceFile(srcPath, destPath, roots)
+  )
+
+  ipcMain.handle(IPC_CHANNELS.FILE_MKDIR, (_e, dirPath: string, roots: string[]) =>
+    mkdirWorkspaceDir(dirPath, roots)
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.FILE_RENAME,
+    (_e, oldPath: string, newPath: string, roots: string[]) =>
+      renameWorkspaceEntry(oldPath, newPath, roots)
   )
 
   // --- Terminal ---

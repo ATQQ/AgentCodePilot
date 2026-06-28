@@ -1,5 +1,5 @@
 import { existsSync, statSync } from 'fs'
-import { readdir, readFile, writeFile, unlink, copyFile, mkdir } from 'fs/promises'
+import { readdir, readFile, writeFile, unlink, copyFile, mkdir, rename, rm, cp } from 'fs/promises'
 import { join, resolve, relative, basename, extname } from 'path'
 
 const IGNORED_DIRS = new Set(['.git', 'node_modules', '.DS_Store'])
@@ -76,7 +76,38 @@ export async function writeWorkspaceFile(
 
 export async function deleteWorkspaceFile(filePath: string, roots: string[]): Promise<void> {
   const resolved = assertInsideWorkspace(filePath, roots)
-  await unlink(resolved)
+  if (!existsSync(resolved)) {
+    throw new Error('文件不存在')
+  }
+  if (statSync(resolved).isDirectory()) {
+    await rm(resolved, { recursive: true, force: true })
+  } else {
+    await unlink(resolved)
+  }
+}
+
+export async function mkdirWorkspaceDir(dirPath: string, roots: string[]): Promise<void> {
+  const resolved = assertInsideWorkspace(dirPath, roots)
+  if (existsSync(resolved)) {
+    throw new Error('目录已存在')
+  }
+  await mkdir(resolved)
+}
+
+export async function renameWorkspaceEntry(
+  oldPath: string,
+  newPath: string,
+  roots: string[]
+): Promise<void> {
+  const oldResolved = assertInsideWorkspace(oldPath, roots)
+  const newResolved = assertInsideWorkspace(newPath, roots)
+  if (!existsSync(oldResolved)) {
+    throw new Error('源路径不存在')
+  }
+  if (existsSync(newResolved)) {
+    throw new Error('目标已存在')
+  }
+  await rename(oldResolved, newResolved)
 }
 
 export async function copyWorkspaceFile(
@@ -86,11 +117,18 @@ export async function copyWorkspaceFile(
 ): Promise<void> {
   const src = assertInsideWorkspace(srcPath, roots)
   const dest = assertInsideWorkspace(destPath, roots)
+  if (!existsSync(src)) {
+    throw new Error('源路径不存在')
+  }
   const destDir = resolve(dest, '..')
   if (!existsSync(destDir)) {
     await mkdir(destDir, { recursive: true })
   }
-  await copyFile(src, dest)
+  if (statSync(src).isDirectory()) {
+    await cp(src, dest, { recursive: true })
+  } else {
+    await copyFile(src, dest)
+  }
 }
 
 export function getFileKind(filePath: string): 'text' | 'image' | 'markdown' | 'unknown' {

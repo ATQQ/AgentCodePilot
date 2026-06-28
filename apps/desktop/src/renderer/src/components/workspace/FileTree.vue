@@ -1,23 +1,36 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { ElMessage } from 'element-plus'
 import { useFileExplorerStore } from '@renderer/stores/fileExplorer.store'
 import { usePanelContextStore } from '@renderer/stores/panelContext.store'
 import { useComposerStore } from '@renderer/stores/composer.store'
 import { useLayoutStore } from '@renderer/stores/layout.store'
 import type { FileEntry } from '@renderer/types'
 import { getFileLanguageIconHtml } from '@renderer/utils/fileLanguageIcon'
+import { getBaseName, getParentDir, joinWorkspacePath } from '@renderer/utils/workspacePath'
 import { FileTreeNode } from './FileTreeNode'
 import EditorFileTabs from './EditorFileTabs.vue'
 import SideTreePanel from './SideTreePanel.vue'
 import SideTreeFolderBtn from './SideTreeFolderBtn.vue'
 import FilePreview from './FilePreview.vue'
+import FileTreeContextMenu from './FileTreeContextMenu.vue'
+import FileNameDialog, { type FileNameDialogMode } from './FileNameDialog.vue'
 
+const { t } = useI18n()
 const fileStore = useFileExplorerStore()
 const panelContext = usePanelContextStore()
 const composerStore = useComposerStore()
 const layoutStore = useLayoutStore()
 
 const treeCollapsed = ref(false)
+const contextMenuRef = ref<InstanceType<typeof FileTreeContextMenu> | null>(null)
+const nameDialogRef = ref<InstanceType<typeof FileNameDialog> | null>(null)
+const nameDialogVisible = ref(false)
+const nameDialogMode = ref<FileNameDialogMode>('newFile')
+const nameDialogInitialName = ref('')
+const nameDialogParentDir = ref('')
+const renameEntry = ref<FileEntry | null>(null)
 
 onMounted(async () => {
   await fileStore.ensureRootLoaded()
@@ -58,21 +71,145 @@ async function onEntryClick(entry: FileEntry): Promise<void> {
   }
 }
 
-function sendToChat(entry: FileEntry): void {
-  composerStore.addFileReference(entry.path)
+function resolveTargetDir(entry: FileEntry | null): string {
+  const root = fileStore.treeRoot
+  if (!root) return ''
+  if (!entry) return root
+  return entry.isDirectory ? entry.path : getParentDir(entry.path)
+}
+
+function openContextMenu(e: MouseEvent, entry: FileEntry | null): void {
+  e.preventDefault()
+  e.stopPropagation()
+  const targetDir = resolveTargetDir(entry)
+  if (!targetDir) return
+  void contextMenuRef.value?.open(e.clientX, e.clientY, entry, targetDir)
 }
 
 function showContextMenu(e: MouseEvent, entry: FileEntry): void {
-  e.preventDefault()
-  const action = window.prompt(`选择操作：\n1. 添加到对话\n2. 复制路径\n3. 删除\n\n输入数字：`)
-  if (action === '1') {
-    sendToChat(entry)
-  } else if (action === '2') {
-    navigator.clipboard.writeText(entry.path)
-  } else if (action === '3' && !entry.isDirectory) {
-    if (window.confirm(`删除 ${entry.name}？`)) {
-      fileStore.deleteFile(entry.path)
+  openContextMenu(e, entry)
+}
+
+function onTreeBlankContextMenu(e: MouseEvent): void {
+  if ((e.target as HTMLElement).closest('.file-row')) return
+  openContextMenu(e, null)
+}
+
+function handleAddToChat(entry: FileEntry): void {
+  composerStore.addFileReference(entry.path)
+}
+
+function handleCopy(entry: FileEntry): void {
+  fileStore.copyToClipboard(entry.path, 'copy')
+  ElMessage.success(t('workspace.fileTree.contextMenu.copied'))
+}
+
+function handleCut(entry: FileEntry): void {
+  fileStore.copyToClipboard(entry.path, 'cut')
+  ElMessage.success(t('workspace.fileTree.contextMenu.copied'))
+}
+
+async function handlePaste(targetDir: string): Promise<void> {
+  const clip = fileStore.fileClipboard
+  if (!clip || !fileStore.canPasteIntoDir(targetDir)) return
+
+  const name = getBaseName(clip.path)
+  const exists = await fileStore.entryExistsInDir(targetDir, name)
+
+  if (exists) {
+    const confirmed = window.confirm(
+      t('workspace.fileTree.contextMenu.pasteOverwriteConfirm', { name })
+    )
+    if (!confirmed) return
+    await fileStore.pasteIntoDir(targetDir, true)
+    return
+  }
+
+  await fileStore.pasteIntoDir(targetDir, false)
+}
+
+function openNameDialog(mode: FileNameDialogMode, parentDir: string, initialName = ''): void {
+  nameDialogMode.value = mode
+  nameDialogParentDir.value = parentDir
+  nameDialogInitialName.value = initialName
+  nameDialogVisible.value = true
+}
+
+function handleNewFile(targetDir: string): void {
+  openNameDialog('newFile', targetDir)
+}
+
+function handleNewFolder(targetDir: string): void {
+  openNameDialog('newFolder', targetDir)
+}
+
+function handleRename(entry: FileEntry): void {
+  renameEntry.value = entry
+  openNameDialog('rename', getParentDir(entry.path), entry.name)
+}
+
+async function handleCopyAbsolutePath(entry: FileEntry): Promise<void> {
+  await navigator.clipboard.writeText(entry.path)
+  ElMessage.success(t('workspace.fileTree.contextMenu.pathCopied'))
+}
+
+async function handleCopyRelativePath(entry: FileEntry): Promise<void> {
+  await navigator.clipboard.writeText(entry.relativePath)
+  ElMessage.success(t('workspace.fileTree.contextMenu.pathCopied'))
+}
+
+async function handleDelete(entry: FileEntry): Promise<void> {
+  const confirmKey = entry.isDirectory
+    ? 'workspace.fileTree.contextMenu.deleteDirConfirm'
+    : 'workspace.fileTree.contextMenu.deleteFileConfirm'
+  if (!window.confirm(t(confirmKey, { name: entry.name }))) return
+  await fileStore.deleteFile(entry.path)
+}
+
+function closeNameDialog(): void {
+  nameDialogVisible.value = false
+  renameEntry.value = null
+}
+
+async function handleNameDialogConfirm(name: string): Promise<void> {
+  const parentDir = nameDialogParentDir.value
+  if (!parentDir) {
+    closeNameDialog()
+    return
+  }
+
+  if (nameDialogMode.value === 'rename' && renameEntry.value) {
+    const entry = renameEntry.value
+    if (name === entry.name) {
+      closeNameDialog()
+      return
     }
+    if (await fileStore.entryExistsInDir(parentDir, name)) {
+      nameDialogRef.value?.setError(t('workspace.fileTree.contextMenu.nameExists'))
+      return
+    }
+    const newPath = joinWorkspacePath(parentDir, name)
+    await fileStore.renameEntry(entry.path, newPath)
+    closeNameDialog()
+    return
+  }
+
+  if (await fileStore.entryExistsInDir(parentDir, name)) {
+    nameDialogRef.value?.setError(t('workspace.fileTree.contextMenu.nameExists'))
+    return
+  }
+
+  if (nameDialogMode.value === 'newFile') {
+    const filePath = await fileStore.createFile(parentDir, name)
+    closeNameDialog()
+    await fileStore.openFile(filePath)
+    return
+  }
+
+  if (nameDialogMode.value === 'newFolder') {
+    const dirPath = await fileStore.createDirectory(parentDir, name)
+    closeNameDialog()
+    await fileStore.toggleDir(dirPath)
   }
 }
 
@@ -140,36 +277,61 @@ function onCloseAll(): void {
             <input v-model="fileStore.filter" class="filter-input" placeholder="筛选文件…" />
           </template>
 
-          <template v-if="fileStore.filter">
-            <button
-              v-for="entry in fileStore.filteredTree"
-              :key="entry.path"
-              class="file-row leaf"
-              :class="{ active: !entry.isDirectory && fileStore.openFilePath === entry.path }"
-              @click="onEntryClick(entry)"
-              @contextmenu="showContextMenu($event, entry)"
-            >
-              <span v-if="entry.isDirectory" class="expand-icon">▸</span>
-              <span v-else class="file-lang-icon" v-html="getFileLanguageIconHtml(entry.path)" />
-              <span class="file-name" :title="entry.relativePath">{{ entry.name }}</span>
-            </button>
-          </template>
+          <div class="tree-content" @contextmenu="onTreeBlankContextMenu">
+            <template v-if="fileStore.filter">
+              <button
+                v-for="entry in fileStore.filteredTree"
+                :key="entry.path"
+                class="file-row leaf"
+                :class="{ active: !entry.isDirectory && fileStore.openFilePath === entry.path }"
+                @click="onEntryClick(entry)"
+                @contextmenu="showContextMenu($event, entry)"
+              >
+                <span v-if="entry.isDirectory" class="expand-icon">▸</span>
+                <span v-else class="file-lang-icon" v-html="getFileLanguageIconHtml(entry.path)" />
+                <span class="file-name" :title="entry.relativePath">{{ entry.name }}</span>
+              </button>
+            </template>
 
-          <FileTreeNode
-            v-for="entry in getItems(fileStore.treeRoot ?? '')"
-            v-else
-            :key="entry.path"
-            :entry="entry"
-            :depth="0"
-            :get-items="getItems"
-            :is-expanded="fileStore.isExpanded"
-            :active-file-path="fileStore.openFilePath"
-            @click-entry="onEntryClick"
-            @context-menu="showContextMenu"
-          />
+            <FileTreeNode
+              v-for="entry in getItems(fileStore.treeRoot ?? '')"
+              v-else
+              :key="entry.path"
+              :entry="entry"
+              :depth="0"
+              :get-items="getItems"
+              :is-expanded="fileStore.isExpanded"
+              :active-file-path="fileStore.openFilePath"
+              @click-entry="onEntryClick"
+              @context-menu="showContextMenu"
+            />
+          </div>
         </SideTreePanel>
       </div>
     </template>
+
+    <FileTreeContextMenu
+      ref="contextMenuRef"
+      @add-to-chat="handleAddToChat"
+      @copy="handleCopy"
+      @cut="handleCut"
+      @paste="handlePaste"
+      @new-file="handleNewFile"
+      @new-folder="handleNewFolder"
+      @copy-absolute-path="handleCopyAbsolutePath"
+      @copy-relative-path="handleCopyRelativePath"
+      @rename="handleRename"
+      @delete="handleDelete"
+    />
+
+    <FileNameDialog
+      ref="nameDialogRef"
+      :visible="nameDialogVisible"
+      :mode="nameDialogMode"
+      :initial-name="nameDialogInitialName"
+      @confirm="handleNameDialogConfirm"
+      @cancel="closeNameDialog"
+    />
   </div>
 </template>
 
@@ -211,6 +373,10 @@ function onCloseAll(): void {
 
 .filter-input:focus {
   border-color: var(--composer-border-focus);
+}
+
+.tree-content {
+  min-height: 100%;
 }
 
 .ft-preview {
