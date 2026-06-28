@@ -38,7 +38,7 @@ export const useChatStore = defineStore('chat', () => {
   const lastStreamActivityAtByConversation = ref<Map<string, number>>(new Map())
   const completedConversationIds = ref<Set<string>>(new Set())
   const completedDismissTimers = new Map<string, ReturnType<typeof setTimeout>>()
-  const toolUseIdAliases = ref<Map<string, string>>(new Map>()
+  const toolUseIdAliases = ref<Map<string, string>>(new Map())
   const streamedMessageIds = ref<Set<string>>(new Set())
 
   function markMessageStreamed(messageId: string): void {
