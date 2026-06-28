@@ -1,10 +1,13 @@
-import { computed } from 'vue'
+import { computed, type ComputedRef } from 'vue'
 import { useBrowserStore } from '@renderer/stores/browser.store'
 import { useLayoutStore } from '@renderer/stores/layout.store'
 import { usePanelContextStore } from '@renderer/stores/panelContext.store'
 import { normalizeBrowserUrl } from '@renderer/utils/extractUrls'
 
-export function useBrowserPreview() {
+export function useBrowserPreview(): {
+  htmlBaseDirs: ComputedRef<string[]>
+  openInBrowser: (raw: string, baseDirs?: string[]) => void
+} {
   const browserStore = useBrowserStore()
   const layoutStore = useLayoutStore()
   const panelContextStore = usePanelContextStore()
