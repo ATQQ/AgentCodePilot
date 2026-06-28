@@ -424,6 +424,10 @@ export interface TokenUsage {
   cacheReadTokens: number
   cacheCreationTokens: number
   costUSD: number
+  /** Sum of input + output + cache read + cache write when reported by runtime. */
+  totalTokens?: number
+  /** Subset of output tokens when reported separately by runtime. */
+  reasoningTokens?: number
 }
 
 export interface ToolUseInfo {

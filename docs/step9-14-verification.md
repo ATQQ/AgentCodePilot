@@ -384,7 +384,7 @@ await window.agentAPI.agents.listModels('cursor', true)
 
 发送「读取 package.json 内容」，应出现 ToolCallCard。
 
-### 验证 6：重启后工具调用与停止状态
+### 验证 7：重启后工具调用与停止状态
 
 1. 用 Cursor 发送「列出当前目录文件」（或任意会触发 Read/Bash 的指令）
 2. ToolCallCard 应显示 **开始时间** 与 **耗时**
@@ -394,7 +394,16 @@ await window.agentAPI.agents.listModels('cursor', true)
 
 > 工具调用写入 `messages.tool_calls`（JSON）；停止状态写入 `messages.stopped`。
 
-### 验证 5：设置页
+### 验证 5：Token 用量展示
+
+1. 用 Cursor 发送一条会触发较长上下文的指令（例如「分析 apps/desktop 目录结构」）
+2. 回复完成后，消息操作栏应显示 **共 N token**，并附带分项：`输入 · 输出 · 缓存读 · 缓存写`（有 cache 时）
+3. 总计应接近 Cursor IDE 状态栏/账单的 token 数（旧版只显示 input+output 会明显偏低）
+4. 可选：运行 `pnpm verify:cursor-sdk -- --mode cli`，确认 `usage parsing self-test: ok`，且 `result` 事件打印 `usage total`
+
+> CLI 路径从 `result.usage` 解析；SDK 回退路径从 `usage` 流事件或 `run.wait()` 的 `result.usage` 解析。需 Cursor CLI 2026-02+ 才在 stream-json 中输出 usage。
+
+### 验证 6：设置页
 
 - Codex / Cursor 标签页可配置 API Key、沙箱/模式
 - 切换 Agent 后模型下拉列表应刷新

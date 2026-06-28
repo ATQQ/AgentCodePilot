@@ -76,6 +76,8 @@ export interface Message {
     cacheReadTokens: number
     cacheCreationTokens: number
     costUSD: number
+    totalTokens?: number
+    reasoningTokens?: number
   }
   attachments?: Attachment[]
   toolCalls?: ToolCall[]

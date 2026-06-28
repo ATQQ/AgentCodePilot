@@ -23,6 +23,11 @@ import { homedir } from 'node:os'
 import { execFileSync } from 'node:child_process'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  computeDisplayTotal,
+  mapRawTokenUsage,
+  testUsageParsing
+} from './lib/cursor-token-usage.mjs'
 
 const repoRoot = resolve(fileURLToPath(new URL('..', import.meta.url)))
 
@@ -216,10 +221,49 @@ async function testSdk(options) {
   try {
     for await (const event of run.stream()) {
       console.log(JSON.stringify(summarizeSdkEvent(event)))
+      if (event.type === 'usage') {
+        const usage = mapRawTokenUsage({
+          inputTokens: event.usage.inputTokens,
+          outputTokens: event.usage.outputTokens,
+          cacheReadTokens: event.usage.cacheReadTokens,
+          cacheWriteTokens: event.usage.cacheWriteTokens,
+          totalTokens: event.usage.totalTokens,
+          reasoningTokens: event.usage.reasoningTokens
+        })
+        console.log('stream usage:', JSON.stringify(usage))
+      }
     }
 
     const result = await run.wait()
     console.log('result:', JSON.stringify(result))
+
+    const resultUsage =
+      result.usage != null
+        ? mapRawTokenUsage({
+            inputTokens: result.usage.inputTokens,
+            outputTokens: result.usage.outputTokens,
+            cacheReadTokens: result.usage.cacheReadTokens,
+            cacheWriteTokens: result.usage.cacheWriteTokens,
+            totalTokens: result.usage.totalTokens,
+            reasoningTokens: result.usage.reasoningTokens
+          })
+        : run.usage != null
+          ? mapRawTokenUsage({
+              inputTokens: run.usage.inputTokens,
+              outputTokens: run.usage.outputTokens,
+              cacheReadTokens: run.usage.cacheReadTokens,
+              cacheWriteTokens: run.usage.cacheWriteTokens,
+              totalTokens: run.usage.totalTokens,
+              reasoningTokens: run.usage.reasoningTokens
+            })
+          : undefined
+
+    if (resultUsage) {
+      console.log('result usage:', JSON.stringify(resultUsage))
+      console.log('result usage total:', computeDisplayTotal(resultUsage))
+    } else if (result.status !== 'error') {
+      console.warn('SDK run finished without usage on result or run handle')
+    }
 
     if (result.status === 'error') {
       console.error('run failed:', result.id, result.result ?? '(no result text)')
@@ -273,6 +317,7 @@ async function testCli(options) {
 
     let assistantText = ''
     let resultText = ''
+    let parsedUsage = null
     let exitCode = 0
     const timer = setTimeout(() => {
       console.error(`CLI timeout after ${options.timeoutMs}ms`)
@@ -299,6 +344,16 @@ async function testCli(options) {
         }
         if (event.type === 'result') {
           console.log('result:', JSON.stringify(event))
+          parsedUsage = mapRawTokenUsage(event.usage)
+          if (parsedUsage) {
+            console.log('usage:', JSON.stringify(parsedUsage))
+            console.log('usage total:', computeDisplayTotal(parsedUsage))
+          } else if (event.usage) {
+            console.warn('result.usage present but parsed as empty:', JSON.stringify(event.usage))
+            exitCode = 2
+          } else {
+            console.warn('result event missing usage field (upgrade Cursor CLI to 2026-02+ build)')
+          }
           resultText = typeof event.result === 'string' ? event.result : ''
           if (event.is_error === true || event.subtype === 'error') {
             exitCode = 2
@@ -338,6 +393,15 @@ async function testCli(options) {
 
 async function main() {
   process.chdir(repoRoot)
+
+  section('Usage parsing')
+  try {
+    testUsageParsing()
+    console.log('usage parsing self-test: ok')
+  } catch (error) {
+    console.error('usage parsing self-test failed:', error.message)
+    process.exit(1)
+  }
 
   const options = parseArgs(process.argv.slice(2))
   if (!existsSync(options.cwd)) {

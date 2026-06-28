@@ -11,6 +11,7 @@ import { hasLocalCursorCliConfig } from './cursor-cli-auth'
 import { isSdkSessionId, resolveAgentExecutablePath } from './cursor-executable'
 import { loadCursorSdk } from './cursor-sdk-loader'
 import { isCursorRuntimeSupported } from './cursor-runtime'
+import { mapSdkTokenUsage } from './token-usage'
 
 type SDKAgent = Awaited<ReturnType<(typeof import('@cursor/sdk'))['Agent']['create']>>
 type SDKMessage = import('@cursor/sdk').SDKMessage
@@ -282,6 +283,11 @@ export class CursorAgentAdapter implements AgentAdapter {
         LOG_CATEGORY,
         `Run finished: conv=${input.conversationId}, status=${result.status}, result=${safeSerialize(result.result)}`
       )
+      if (result.usage) {
+        usage = mapSdkTokenUsage(result.usage)
+      } else if (run.usage) {
+        usage = mapSdkTokenUsage(run.usage)
+      }
       if (result.status === 'error') {
         logError(
           LOG_CATEGORY,
@@ -439,6 +445,8 @@ export class CursorAgentAdapter implements AgentAdapter {
           })
         }
         break
+      case 'usage':
+        return mapSdkTokenUsage(event.usage)
       default:
         break
     }

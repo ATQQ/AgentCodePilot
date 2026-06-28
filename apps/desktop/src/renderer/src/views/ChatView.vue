@@ -15,6 +15,7 @@ import MessageAttachmentImage from '@renderer/components/chat/MessageAttachmentI
 import CollapsibleUserMessageText from '@renderer/components/chat/CollapsibleUserMessageText.vue'
 import ChatMessageList from '@renderer/components/chat/ChatMessageList.vue'
 import { getAgentIcon } from '@renderer/utils/agentIcons'
+import { formatTokenUsageSummary } from '@renderer/utils/formatTokenUsage'
 import type { Attachment, Message, PlanReference, ApprovalRequest } from '@renderer/types'
 import { useLayoutStore, type LayoutStore } from '@renderer/stores/layout.store'
 import { usePlanStore } from '@renderer/stores/plan.store'
@@ -619,12 +620,9 @@ function toggleUserMessageExpanded(messageId: string): void {
                       <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
                     </svg>
                   </button>
-                  <span v-if="msg.usage" class="action-tokens"
-                    >输入 {{ msg.usage.inputTokens }} token 输出
-                    {{ msg.usage.outputTokens }} token<template v-if="msg.usage.costUSD">
-                      成本 ${{ msg.usage.costUSD.toFixed(4) }}</template
-                    ></span
-                  >
+                  <span v-if="msg.usage" class="action-tokens">{{
+                    formatTokenUsageSummary(msg.usage)
+                  }}</span>
                   <span class="action-time">{{ formatTime(msg.createdAt) }}</span>
                 </div>
                 <div v-if="debugMode && msg.role === 'assistant'" class="debug-panel">

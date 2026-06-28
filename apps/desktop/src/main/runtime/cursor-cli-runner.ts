@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'child_process'
 import { createInterface } from 'readline'
 import type { AgentEvent, TokenUsage } from '../../preload/types'
 import { logError, logInfo, logWarn } from '../logger'
+import { mapRawTokenUsage } from './token-usage'
 import { getShellEnvironment } from '../shell/shell-env'
 import { resolveCliResumeSessionId } from './cursor-executable'
 import type { AgentRunInput } from './types'
@@ -205,17 +206,6 @@ function parseCliToolCompletion(toolCall: Record<string, unknown>): {
   }
 
   return { summary: 'completed', status: 'completed' }
-}
-
-function mapUsage(raw: Record<string, unknown> | undefined): TokenUsage | undefined {
-  if (!raw) return undefined
-  return {
-    inputTokens: Number(raw.inputTokens ?? 0),
-    outputTokens: Number(raw.outputTokens ?? 0),
-    cacheReadTokens: Number(raw.cacheReadTokens ?? 0),
-    cacheCreationTokens: Number(raw.cacheWriteTokens ?? 0),
-    costUSD: 0
-  }
 }
 
 function buildArgs(options: CursorCliRunOptions): string[] {
@@ -435,7 +425,8 @@ export async function runCursorViaCli(
         }
 
         if (type === 'result') {
-          usage = mapUsage(event.usage as Record<string, unknown> | undefined) ?? usage
+          usage =
+            mapRawTokenUsage(event.usage as Record<string, unknown> | undefined) ?? usage
           captureSessionId(typeof event.session_id === 'string' ? event.session_id : undefined)
 
           const isError = event.is_error === true || event.subtype === 'error'
