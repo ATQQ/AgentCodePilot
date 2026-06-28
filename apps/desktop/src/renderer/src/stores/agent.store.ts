@@ -19,8 +19,11 @@ export const useAgentStore = defineStore('agent', () => {
 
   function selectAgent(id: string, options?: { fetchCatalog?: boolean }): void {
     selectedAgentId.value = id
-    if (options?.fetchCatalog === false) return
     const modelStore = useModelStore()
+    if (options?.fetchCatalog === false) {
+      modelStore.activateAgentCatalog(id)
+      return
+    }
     void modelStore.fetchCatalog(id)
   }
 

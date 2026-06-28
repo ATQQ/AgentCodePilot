@@ -58,7 +58,7 @@ async function handleSubmit(
     conversationId: convId,
     content: text,
     agentId,
-    modelId: modelStore.getEffectiveModelId(),
+    modelId: modelStore.getEffectiveModelId(conv?.modelId),
     cwd,
     workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
     attachments:

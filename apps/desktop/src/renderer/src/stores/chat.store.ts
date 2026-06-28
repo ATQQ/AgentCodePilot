@@ -527,6 +527,7 @@ export const useChatStore = defineStore('chat', () => {
     touchStreamActivity(result.id)
     addWaitingConversation(result.id)
     setPendingAgent(result.id, agentId)
+    void modelStore.refreshCatalogForConversation(result.id, agentId, resolvedModelId)
     return result.id
   }
 

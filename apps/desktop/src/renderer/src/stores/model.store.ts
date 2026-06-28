@@ -4,8 +4,18 @@ import { ElMessage } from 'element-plus'
 import type { AgentModelOption, ModelCatalogResult, ModelCatalogSource } from '@renderer/types'
 import { DEFAULT_CLAUDE_MODEL_ID } from '@renderer/constants/claude-models'
 import i18n from '@renderer/i18n'
+import { useAgentStore } from './agent.store'
+import { useChatStore } from './chat.store'
 
 const MODEL_SELECTOR_AGENTS = ['claude-code', 'codex', 'cursor'] as const
+
+type AgentCatalogSnapshot = {
+  models: AgentModelOption[]
+  discoveredModels: AgentModelOption[]
+  defaultModelId: string
+  catalogSource: ModelCatalogSource
+  discoveredSource: ModelCatalogSource
+}
 
 export const useModelStore = defineStore('model', () => {
   const activeAgentId = ref('claude-code')
@@ -17,19 +27,83 @@ export const useModelStore = defineStore('model', () => {
   const loading = ref(false)
   const switchNotice = ref<{ from: string; to: string } | null>(null)
   let switchNoticeTimer: ReturnType<typeof setTimeout> | null = null
+  const catalogByAgent = new Map<string, AgentCatalogSnapshot>()
+  let catalogFetchGeneration = 0
+  let refreshGeneration = 0
+
+  function snapshotFromCatalog(catalog: ModelCatalogResult): AgentCatalogSnapshot {
+    return {
+      models: catalog.models,
+      discoveredModels: catalog.discoveredModels,
+      defaultModelId: catalog.defaultModelId,
+      catalogSource: catalog.source,
+      discoveredSource: catalog.discoveredSource
+    }
+  }
+
+  function rememberCatalog(agentId: string, catalog: ModelCatalogResult): AgentCatalogSnapshot {
+    const snapshot = snapshotFromCatalog(catalog)
+    catalogByAgent.set(agentId, snapshot)
+    return snapshot
+  }
+
+  function applyCatalogSnapshot(agentId: string, snapshot: AgentCatalogSnapshot): void {
+    activeAgentId.value = agentId
+    models.value = snapshot.models
+    discoveredModels.value = snapshot.discoveredModels
+    defaultModelId.value = snapshot.defaultModelId
+    catalogSource.value = snapshot.catalogSource
+    discoveredSource.value = snapshot.discoveredSource
+  }
+
+  function isAgentCatalogContext(agentId: string): boolean {
+    return useAgentStore().selectedAgentId === agentId
+  }
+
+  function isConversationRefreshContext(conversationId: string, agentId: string): boolean {
+    const chatStore = useChatStore()
+    return chatStore.activeConversationId === conversationId && isAgentCatalogContext(agentId)
+  }
+
+  async function loadCatalog(agentId: string, forceRefresh: boolean): Promise<ModelCatalogResult> {
+    const catalog = await window.agentAPI.agents.listModels(agentId, forceRefresh)
+    rememberCatalog(agentId, catalog)
+    return catalog
+  }
+
+  function activateAgentCatalog(agentId: string): void {
+    activeAgentId.value = agentId
+    const cached = catalogByAgent.get(agentId)
+    if (cached) {
+      applyCatalogSnapshot(agentId, cached)
+      return
+    }
+    models.value = []
+    discoveredModels.value = []
+  }
 
   async function fetchCatalog(agentId = 'claude-code', forceRefresh = false): Promise<void> {
-    activeAgentId.value = agentId
+    const generation = ++catalogFetchGeneration
+
+    const cached = catalogByAgent.get(agentId)
+    if (cached && isAgentCatalogContext(agentId)) {
+      applyCatalogSnapshot(agentId, cached)
+    } else if (isAgentCatalogContext(agentId)) {
+      activeAgentId.value = agentId
+      models.value = []
+      discoveredModels.value = []
+    }
+
     loading.value = true
     try {
-      const catalog = await window.agentAPI.agents.listModels(agentId, forceRefresh)
-      models.value = catalog.models
-      discoveredModels.value = catalog.discoveredModels
-      defaultModelId.value = catalog.defaultModelId
-      catalogSource.value = catalog.source
-      discoveredSource.value = catalog.discoveredSource
+      const catalog = await loadCatalog(agentId, forceRefresh)
+      if (generation !== catalogFetchGeneration) return
+      if (!isAgentCatalogContext(agentId)) return
+      applyCatalogSnapshot(agentId, snapshotFromCatalog(catalog))
     } finally {
-      loading.value = false
+      if (generation === catalogFetchGeneration) {
+        loading.value = false
+      }
     }
   }
 
@@ -90,11 +164,7 @@ export const useModelStore = defineStore('model', () => {
       ...config,
       defaultModelId: modelId
     })
-    models.value = catalog.models
-    discoveredModels.value = catalog.discoveredModels
-    defaultModelId.value = catalog.defaultModelId
-    catalogSource.value = catalog.source
-    discoveredSource.value = catalog.discoveredSource
+    applyCatalog(agentId, catalog)
   }
 
   async function saveAgentConfig(
@@ -105,11 +175,7 @@ export const useModelStore = defineStore('model', () => {
     agentId = activeAgentId.value
   ): Promise<void> {
     const catalog = await window.agentAPI.agents.updateConfig(agentId, config)
-    models.value = catalog.models
-    discoveredModels.value = catalog.discoveredModels
-    defaultModelId.value = catalog.defaultModelId
-    catalogSource.value = catalog.source
-    discoveredSource.value = catalog.discoveredSource
+    applyCatalog(agentId, catalog)
   }
 
   async function resetToDiscovered(agentId = activeAgentId.value): Promise<void> {
@@ -121,12 +187,10 @@ export const useModelStore = defineStore('model', () => {
   }
 
   function applyCatalog(agentId: string, catalog: ModelCatalogResult): void {
-    activeAgentId.value = agentId
-    models.value = catalog.models
-    discoveredModels.value = catalog.discoveredModels
-    defaultModelId.value = catalog.defaultModelId
-    catalogSource.value = catalog.source
-    discoveredSource.value = catalog.discoveredSource
+    rememberCatalog(agentId, catalog)
+    if (isAgentCatalogContext(agentId)) {
+      applyCatalogSnapshot(agentId, snapshotFromCatalog(catalog))
+    }
   }
 
   function resolveModelAfterRefresh(
@@ -155,44 +219,51 @@ export const useModelStore = defineStore('model', () => {
       return
     }
 
+    const generation = ++refreshGeneration
+
     try {
-      await fetchCatalog(agentId, false)
-      if (catalogSource.value === 'app-config') {
+      const cachedCatalog = await loadCatalog(agentId, false)
+      if (generation !== refreshGeneration) return
+      if (!isConversationRefreshContext(conversationId, agentId)) return
+
+      applyCatalogSnapshot(agentId, snapshotFromCatalog(cachedCatalog))
+      if (cachedCatalog.source === 'app-config') {
         return
       }
 
       const displayedBefore = getDisplayedModel(conversationModelId)
 
-      const catalog = await window.agentAPI.agents.listModels(agentId, true)
-      if (!catalog.discoveredModels.length || catalog.discoveredSource === 'fallback') {
-        // Keep cached catalog when discovery is unavailable.
-      } else {
-        applyCatalog(agentId, catalog)
+      const catalog = await loadCatalog(agentId, true)
+      if (generation !== refreshGeneration) return
+      if (!isConversationRefreshContext(conversationId, agentId)) return
+
+      if (catalog.discoveredModels.length && catalog.discoveredSource !== 'fallback') {
+        applyCatalogSnapshot(agentId, snapshotFromCatalog(catalog))
       }
 
-      const { useChatStore } = await import('./chat.store')
       const chatStore = useChatStore()
-      if (chatStore.activeConversationId !== conversationId) {
+      if (!isConversationRefreshContext(conversationId, agentId)) {
         return
       }
 
       await chatStore.loadMessages(conversationId)
-      if (chatStore.activeConversationId !== conversationId) return
+      if (!isConversationRefreshContext(conversationId, agentId)) return
 
       const conv = chatStore.conversations.find((item) => item.id === conversationId)
       const hasAssistantMessages =
         conv?.messages.some((message) => message.role === 'assistant') ?? false
-      const effectiveCatalog: ModelCatalogResult =
+      const effectiveSnapshot =
         catalog.discoveredModels.length && catalog.discoveredSource !== 'fallback'
-          ? catalog
-          : {
-              agentId,
-              models: models.value,
-              discoveredModels: discoveredModels.value,
-              defaultModelId: defaultModelId.value,
-              source: catalogSource.value,
-              discoveredSource: discoveredSource.value
-            }
+          ? snapshotFromCatalog(catalog)
+          : (catalogByAgent.get(agentId) ?? snapshotFromCatalog(cachedCatalog))
+      const effectiveCatalog: ModelCatalogResult = {
+        agentId,
+        models: effectiveSnapshot.models,
+        discoveredModels: effectiveSnapshot.discoveredModels,
+        defaultModelId: effectiveSnapshot.defaultModelId,
+        source: effectiveSnapshot.catalogSource,
+        discoveredSource: effectiveSnapshot.discoveredSource
+      }
 
       const targetModelId = resolveModelAfterRefresh(
         conversationModelId,
@@ -204,7 +275,7 @@ export const useModelStore = defineStore('model', () => {
         await chatStore.setConversationModelId(conversationId, targetModelId)
       }
 
-      if (chatStore.activeConversationId !== conversationId) return
+      if (!isConversationRefreshContext(conversationId, agentId)) return
 
       const displayedAfter = getDisplayedModel(conv?.modelId)
 
@@ -226,6 +297,7 @@ export const useModelStore = defineStore('model', () => {
     switchNotice,
     activeAgentId,
     fetchCatalog,
+    activateAgentCatalog,
     getEffectiveModelId,
     getModelName,
     selectDefaultModel,
