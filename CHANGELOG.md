@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0] - 2026-06-28
+
+### Added
+
+- Cursor Agent 集成（@cursor/sdk）：Agent / Plan 模式、Tool Call 展示与状态追踪、Token 用量统计
+- Codex Agent 集成（@openai/codex-sdk）：沙箱模式配置与 API Key 管理
+- Agent 目录管理：外部配置指纹检测、模型发现与统一配置界面
+- 会话状态追踪：对话进行中 / 完成状态标签，当前会话完成后「完成」标签 3 秒自动消失
+- 内置浏览器增强：本地 HTML 文件加载与自动识别预览，对话中的链接可跳转浏览器
+- 工作区文件操作：右键菜单新建文件夹、重命名文件与目录
+- 对话纯文本自动链接化（LinkifiedPlainText）
+
+### Changed
+
+- 优化 Cursor / Codex Agent 的 Tool Call 生命周期管理与跨 Agent 状态追踪
+- 更新侧栏会话状态标签配色
+- 增强调试信息序列化
+
+### Fixed
+
+- 修复 chat store 中 `toolUseIdAliases` 初始化语法错误
+
+### Known Limitations
+
+- 安装包暂未做代码签名与 macOS 公证
+- 自动更新（electron-updater）尚未接入，需手动下载新版本
+- MCP 等能力仍在后续版本规划中
+
 ## [0.0.1] - 2026-06-27
 
 ### Added
@@ -37,4 +65,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 自动更新（electron-updater）尚未接入，需手动下载新版本
 - Codex / Cursor SDK、MCP 等能力仍在后续版本规划中
 
+[0.1.0]: https://github.com/ATQQ/AgentCodePilot/releases/tag/v0.1.0
 [0.0.1]: https://github.com/ATQQ/AgentCodePilot/releases/tag/v0.0.1

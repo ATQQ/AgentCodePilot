@@ -1,6 +1,6 @@
 {
   "name": "@agent-code-pilot/desktop",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "AgentCodePilot desktop application",
   "homepage": "https://github.com/ATQQ/AgentCodePilot",
   "main": "./out/main/index.js",

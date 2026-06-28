@@ -1,6 +1,6 @@
 {
   "name": "agent-code-pilot",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
   "description": "AgentCodePilot - AI coding agent desktop application",
   "scripts": {
