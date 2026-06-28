@@ -2,6 +2,10 @@ import type { AgentModelOption, ModelCatalogResult, ModelCatalogSource } from '.
 import { resolveApiKey } from './agent-auth'
 import { getAgentConfig } from './agent-config'
 import { loadCursorSdk } from './cursor-sdk-loader'
+import {
+  canReuseDiscoveryCache,
+  getExternalConfigFingerprint
+} from './model-config-fingerprint'
 
 const FALLBACK_MODELS: AgentModelOption[] = [
   { id: 'composer-2.5', name: 'Composer 2.5', description: 'Default Cursor agent model' },
@@ -10,6 +14,7 @@ const FALLBACK_MODELS: AgentModelOption[] = [
 
 const discoveryCache = {
   expiresAt: 0,
+  externalFingerprint: '',
   models: FALLBACK_MODELS
 }
 const CACHE_TTL_MS = 5 * 60 * 1000
@@ -57,6 +62,12 @@ function finalizeCatalog(
 }
 
 async function discoverCursorModels(forceRefresh: boolean): Promise<AgentModelOption[]> {
+  const externalFingerprint = getExternalConfigFingerprint('cursor')
+
+  if (canReuseDiscoveryCache('cursor', discoveryCache.externalFingerprint)) {
+    return discoveryCache.models
+  }
+
   if (!forceRefresh && discoveryCache.expiresAt > Date.now()) {
     return discoveryCache.models
   }
@@ -64,6 +75,7 @@ async function discoverCursorModels(forceRefresh: boolean): Promise<AgentModelOp
   const apiKey = resolveApiKey('cursor', ['CURSOR_API_KEY'])
   if (!apiKey) {
     discoveryCache.expiresAt = Date.now() + CACHE_TTL_MS
+    discoveryCache.externalFingerprint = externalFingerprint
     discoveryCache.models = FALLBACK_MODELS
     return FALLBACK_MODELS
   }
@@ -73,6 +85,7 @@ async function discoverCursorModels(forceRefresh: boolean): Promise<AgentModelOp
     const sdkModels = await Cursor.models.list({ apiKey })
     if (!sdkModels.length) {
       discoveryCache.expiresAt = Date.now() + CACHE_TTL_MS
+      discoveryCache.externalFingerprint = externalFingerprint
       discoveryCache.models = FALLBACK_MODELS
       return FALLBACK_MODELS
     }
@@ -83,10 +96,12 @@ async function discoverCursorModels(forceRefresh: boolean): Promise<AgentModelOp
       description: model.description
     }))
     discoveryCache.expiresAt = Date.now() + CACHE_TTL_MS
+    discoveryCache.externalFingerprint = externalFingerprint
     discoveryCache.models = mapped
     return mapped
   } catch {
     discoveryCache.expiresAt = Date.now() + CACHE_TTL_MS
+    discoveryCache.externalFingerprint = externalFingerprint
     discoveryCache.models = FALLBACK_MODELS
     return FALLBACK_MODELS
   }
@@ -108,4 +123,5 @@ export async function getCursorModelCatalog(forceRefresh = false): Promise<Model
 
 export function invalidateCursorModelCatalog(): void {
   discoveryCache.expiresAt = 0
+  discoveryCache.externalFingerprint = ''
 }

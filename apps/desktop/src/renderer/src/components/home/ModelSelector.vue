@@ -31,6 +31,17 @@ function handleSelect(modelId: string): void {
 
 <template>
   <div v-if="showSelector" class="model-selector">
+    <Transition name="model-notice">
+      <div v-if="modelStore.switchNotice" class="model-switch-notice">
+        <span class="model-switch-from" :title="modelStore.switchNotice.from">
+          {{ modelStore.switchNotice.from }}
+        </span>
+        <span class="model-switch-arrow">→</span>
+        <span class="model-switch-to" :title="modelStore.switchNotice.to">
+          {{ modelStore.switchNotice.to }}
+        </span>
+      </div>
+    </Transition>
     <el-dropdown trigger="click" @command="handleSelect">
       <button class="model-btn" :title="currentModelName">
         <span class="model-name">{{ currentModelName }}</span>
@@ -56,6 +67,57 @@ function handleSelect(modelId: string): void {
 </template>
 
 <style scoped>
+.model-selector {
+  position: relative;
+}
+
+.model-switch-notice {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: min(360px, 72vw);
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--composer-border-focus) 12%, var(--content-bg));
+  border: 1px solid color-mix(in srgb, var(--composer-border-focus) 35%, transparent);
+  color: var(--composer-border-focus);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 10%);
+  pointer-events: none;
+}
+
+.model-switch-from,
+.model-switch-to {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 140px;
+}
+
+.model-switch-arrow {
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+.model-notice-enter-active,
+.model-notice-leave-active {
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.model-notice-enter-from,
+.model-notice-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
 .model-btn {
   display: flex;
   align-items: center;

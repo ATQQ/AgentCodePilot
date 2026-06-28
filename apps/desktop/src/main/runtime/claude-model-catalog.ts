@@ -11,6 +11,10 @@ import {
   type ModelCatalogSource
 } from '../../shared/agent-model'
 import { getAgentConfig, saveAgentConfig } from './agent-config'
+import {
+  canReuseDiscoveryCache,
+  getExternalConfigFingerprint
+} from './model-config-fingerprint'
 
 export { saveAgentConfig, getAgentConfig }
 
@@ -30,6 +34,7 @@ const discoveryCache = new Map<
   string,
   {
     expiresAt: number
+    externalFingerprint: string
     discoveredModels: AgentModelOption[]
     discoveredDefault: string | null
     discoveredSource: ModelCatalogSource
@@ -173,6 +178,12 @@ async function discoverModels(forceRefresh: boolean): Promise<{
 }> {
   const cacheKey = 'claude-code'
   const cached = discoveryCache.get(cacheKey)
+  const externalFingerprint = getExternalConfigFingerprint('claude-code')
+
+  if (cached && canReuseDiscoveryCache('claude-code', cached.externalFingerprint)) {
+    return cached
+  }
+
   if (!forceRefresh && cached && cached.expiresAt > Date.now()) {
     return cached
   }
@@ -185,7 +196,11 @@ async function discoverModels(forceRefresh: boolean): Promise<{
       discoveredDefault: claudeSettings.defaultModelId,
       discoveredSource: 'sdk' as const
     }
-    discoveryCache.set(cacheKey, { expiresAt: Date.now() + CACHE_TTL_MS, ...snapshot })
+    discoveryCache.set(cacheKey, {
+      expiresAt: Date.now() + CACHE_TTL_MS,
+      externalFingerprint,
+      ...snapshot
+    })
     return snapshot
   }
 
@@ -196,7 +211,11 @@ async function discoverModels(forceRefresh: boolean): Promise<{
     discoveredDefault: claudeSettings.defaultModelId,
     discoveredSource: (fromClaudeSettings ? 'claude-settings' : 'fallback') as ModelCatalogSource
   }
-  discoveryCache.set(cacheKey, { expiresAt: Date.now() + CACHE_TTL_MS, ...snapshot })
+  discoveryCache.set(cacheKey, {
+    expiresAt: Date.now() + CACHE_TTL_MS,
+    externalFingerprint,
+    ...snapshot
+  })
   return snapshot
 }
 

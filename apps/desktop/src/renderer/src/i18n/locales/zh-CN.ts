@@ -26,6 +26,10 @@ export default {
     placeholder: '尽管问',
     send: '发送'
   },
+  modelSelector: {
+    configModelChanged: '检测到 Agent 配置的模型变更，已自动修改选择的模型',
+    modelSwitchHint: '「{from}」→「{to}」'
+  },
   composer: {
     addMenu: {
       addPhotosAndFiles: '图片或文件',

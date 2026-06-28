@@ -1,6 +1,10 @@
 import type { AgentModelOption, ModelCatalogResult, ModelCatalogSource } from '../../shared/agent-model'
 import { getAgentConfig } from './agent-config'
 import {
+  canReuseDiscoveryCache,
+  getExternalConfigFingerprint
+} from './model-config-fingerprint'
+import {
   fetchCodexProviderModels,
   readCodexLocalProfile,
   resolveActiveCodexProvider,
@@ -16,6 +20,7 @@ const FALLBACK_MODELS: AgentModelOption[] = [
 
 const discoveryCache = {
   expiresAt: 0,
+  externalFingerprint: '',
   discoveredModels: FALLBACK_MODELS,
   discoveredDefault: FALLBACK_MODELS[0]?.id ?? null,
   discoveredSource: 'fallback' as ModelCatalogSource
@@ -82,6 +87,12 @@ async function discoverCodexModels(forceRefresh: boolean): Promise<{
   discoveredDefault: string | null
   discoveredSource: ModelCatalogSource
 }> {
+  const externalFingerprint = getExternalConfigFingerprint('codex')
+
+  if (canReuseDiscoveryCache('codex', discoveryCache.externalFingerprint)) {
+    return discoveryCache
+  }
+
   if (!forceRefresh && discoveryCache.expiresAt > Date.now()) {
     return discoveryCache
   }
@@ -94,6 +105,7 @@ async function discoverCodexModels(forceRefresh: boolean): Promise<{
       discoveredSource: 'fallback' as const
     }
     discoveryCache.expiresAt = Date.now() + CACHE_TTL_MS
+    discoveryCache.externalFingerprint = externalFingerprint
     Object.assign(discoveryCache, snapshot)
     return snapshot
   }
@@ -116,6 +128,7 @@ async function discoverCodexModels(forceRefresh: boolean): Promise<{
         discoveredSource: 'codex-provider' as const
       }
       discoveryCache.expiresAt = Date.now() + CACHE_TTL_MS
+      discoveryCache.externalFingerprint = externalFingerprint
       Object.assign(discoveryCache, snapshot)
       return snapshot
     } catch {
@@ -130,6 +143,7 @@ async function discoverCodexModels(forceRefresh: boolean): Promise<{
     discoveredSource: fromConfig.source
   }
   discoveryCache.expiresAt = Date.now() + CACHE_TTL_MS
+  discoveryCache.externalFingerprint = externalFingerprint
   Object.assign(discoveryCache, snapshot)
   return snapshot
 }
@@ -174,4 +188,5 @@ export async function getCodexModelCatalog(forceRefresh = false): Promise<ModelC
 
 export function invalidateCodexModelCatalog(): void {
   discoveryCache.expiresAt = 0
+  discoveryCache.externalFingerprint = ''
 }

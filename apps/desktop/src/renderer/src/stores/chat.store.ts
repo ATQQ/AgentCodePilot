@@ -461,8 +461,10 @@ export const useChatStore = defineStore('chat', () => {
       const conv = conversations.value.find((c) => c.id === id)
       if (conv) {
         const agentStore = useAgentStore()
-        agentStore.selectAgent(conv.agentId)
+        const modelStore = useModelStore()
+        agentStore.selectAgent(conv.agentId, { fetchCatalog: false })
         setPendingAgent(id, conv.agentId)
+        void modelStore.refreshCatalogForConversation(id, conv.agentId, conv.modelId)
       }
     }
   }
