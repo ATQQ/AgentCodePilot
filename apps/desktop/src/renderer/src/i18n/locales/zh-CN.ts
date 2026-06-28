@@ -17,12 +17,18 @@ export default {
     conversations: '对话',
     workspaces: '工作空间',
     noChats: '暂无聊天',
-    noWorkspaces: '暂无工作空间'
+    noWorkspaces: '暂无工作空间',
+    conversationInProgress: '进行中',
+    conversationCompleted: '完成'
   },
   home: {
     title: '我们该做什么？',
     placeholder: '尽管问',
     send: '发送'
+  },
+  modelSelector: {
+    configModelChanged: '检测到 Agent 配置的模型变更，已自动修改选择的模型',
+    modelSwitchHint: '「{from}」→「{to}」'
   },
   composer: {
     addMenu: {
@@ -84,7 +90,8 @@ export default {
     expandMessage: '展开全文',
     collapseMessage: '收起',
     closePreview: '关闭预览',
-    closePreviewHint: '按 Esc 关闭'
+    closePreviewHint: '按 Esc 关闭',
+    openInBrowser: '在浏览器中打开'
   },
   approval: {
     waitingTag: '等待批准',
@@ -160,7 +167,8 @@ export default {
     rememberPanelState: '按对话记忆面板状态',
     rememberPanelStateDesc: '切换对话时自动恢复右侧和底部面板的打开状态',
     browserAutoExtractLinks: '自动提取链接',
-    browserAutoExtractLinksDesc: '从终端输出和对话内容中自动识别 HTTP 链接，在浏览器中提供快捷入口',
+    browserAutoExtractLinksDesc:
+      '从终端输出和对话内容中自动识别 HTTP 链接，以及当前项目内的 .html 文件，在浏览器中提供快捷入口',
     light: '浅色',
     dark: '深色',
     system: '系统',
@@ -191,6 +199,9 @@ export default {
       discoveredSource: '当前检测来源',
       sourceSdk: 'Claude Agent SDK',
       sourceClaudeSettings: 'Claude Code 设置 (~/.claude/settings.json)',
+      sourceCodexConfig: 'Codex CLI 配置 (~/.codex/config.toml)',
+      sourceCodexProvider: 'Codex Provider API（~/.codex/config.toml 中的 provider）',
+      sourceCursorSdk: 'Cursor SDK（CURSOR_API_KEY 或 CLI 登录）',
       sourceAppConfig: '应用内自定义配置',
       sourceFallback: '内置默认列表',
       refresh: '重新检测',
@@ -220,7 +231,24 @@ export default {
         responsesDesc: '可配置多条 Markdown，每次对话随机返回其中一条',
         addResponse: '添加响应',
         responseItem: '响应 #{index}'
-      }
+      },
+      apiKey: 'API Key',
+      apiKeyPlaceholder: '输入 API Key',
+      apiKeyConfigured: '已配置（留空保持不变）',
+      codexApiKeyDesc: '可选。留空时将复用本地 Codex CLI 的 ~/.codex 配置（config.toml / auth.json）；也可通过 OPENAI_API_KEY 提供',
+      cursorApiKeyDesc:
+        '可选。留空时将复用本地 Cursor CLI 登录（~/.cursor/cli-config.json）；也可通过 CURSOR_API_KEY 环境变量提供',
+      codexSandbox: '沙箱模式',
+      codexSandboxDesc: '控制 Codex Agent 的文件系统访问范围',
+      sandboxReadOnly: '只读',
+      sandboxWorkspaceWrite: '工作区可写',
+      sandboxFullAccess: '完全访问',
+      cursorMode: '默认对话模式',
+      cursorModeDesc: 'Cursor Agent 首次运行的模式',
+      cursorModeAgent: 'Agent（直接执行）',
+      cursorModePlan: 'Plan（先规划）',
+      cursorAutoReview: 'Auto-review',
+      cursorAutoReviewDesc: '启用后，本地工具调用会经过 Cursor Auto-review 分类器'
     },
     aiFeatures: {
       title: 'AI 功能',
@@ -291,6 +319,32 @@ export default {
       saved: '已保存',
       saveFailed: '保存失败',
       enterEditMode: '已进入编辑模式'
+    },
+    fileTree: {
+      contextMenu: {
+        addToChat: '添加到对话',
+        copy: '复制',
+        cut: '剪切',
+        paste: '粘贴',
+        newFile: '新建文件',
+        newFolder: '新建文件夹',
+        copyAbsolutePath: '复制绝对路径',
+        copyRelativePath: '复制相对路径',
+        rename: '重命名',
+        delete: '删除',
+        deleteFileConfirm: '确定删除「{name}」？此操作不可撤销。',
+        deleteDirConfirm: '确定删除文件夹「{name}」及其全部内容？此操作不可撤销。',
+        pasteOverwriteConfirm: '目标已存在「{name}」，是否覆盖？',
+        pathCopied: '路径已复制',
+        copied: '已复制到剪贴板',
+        invalidName: '名称不能包含 / 或 \\',
+        emptyName: '名称不能为空',
+        nameExists: '名称已存在',
+        newFileTitle: '新建文件',
+        newFolderTitle: '新建文件夹',
+        renameTitle: '重命名',
+        namePlaceholder: '输入名称…'
+      }
     }
   },
   env: {

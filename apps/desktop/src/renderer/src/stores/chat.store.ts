@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { Attachment, ApprovalRequest, Conversation, Message, ToolCall } from '@renderer/types'
 import type { AgentEvent, AttachmentPayload, PlanReference } from '../../../preload/types'
 import type { ApprovalLevel } from '@renderer/types'
@@ -35,6 +35,9 @@ export const useChatStore = defineStore('chat', () => {
   const pendingAgentByConversation = ref<Map<string, string>>(new Map())
   const activeAssistantMessageIds = ref<Map<string, string>>(new Map())
   const thinkingStartedAtByConversation = ref<Map<string, number>>(new Map())
+  const lastStreamActivityAtByConversation = ref<Map<string, number>>(new Map())
+  const completedConversationIds = ref<Set<string>>(new Set())
+  const completedDismissTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const toolUseIdAliases = ref<Map<string, string>>(new Map())
   const streamedMessageIds = ref<Set<string>>(new Set())
 
@@ -123,6 +126,68 @@ export const useChatStore = defineStore('chat', () => {
     return Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
   }
 
+  function touchStreamActivity(conversationId: string): void {
+    const next = new Map(lastStreamActivityAtByConversation.value)
+    next.set(conversationId, Date.now())
+    lastStreamActivityAtByConversation.value = next
+  }
+
+  function clearStreamActivity(conversationId: string): void {
+    if (!lastStreamActivityAtByConversation.value.has(conversationId)) return
+    const next = new Map(lastStreamActivityAtByConversation.value)
+    next.delete(conversationId)
+    lastStreamActivityAtByConversation.value = next
+  }
+
+  function getStreamIdleSeconds(conversationId: string): number {
+    if (!isConversationBusy(conversationId)) return 0
+    const lastActivity = lastStreamActivityAtByConversation.value.get(conversationId)
+    if (!lastActivity) return 0
+    return Math.max(0, Math.floor((Date.now() - lastActivity) / 1000))
+  }
+
+  function clearCompletedDismissTimer(conversationId: string): void {
+    const timer = completedDismissTimers.get(conversationId)
+    if (!timer) return
+    clearTimeout(timer)
+    completedDismissTimers.delete(conversationId)
+  }
+
+  function removeCompletedConversation(conversationId: string): void {
+    clearCompletedDismissTimer(conversationId)
+    if (!completedConversationIds.value.has(conversationId)) return
+    const next = new Set(completedConversationIds.value)
+    next.delete(conversationId)
+    completedConversationIds.value = next
+  }
+
+  function markConversationCompleted(conversationId: string): void {
+    const next = new Set(completedConversationIds.value)
+    next.add(conversationId)
+    completedConversationIds.value = next
+
+    if (activeConversationId.value === conversationId) {
+      clearCompletedDismissTimer(conversationId)
+      const timer = setTimeout(() => {
+        completedDismissTimers.delete(conversationId)
+        removeCompletedConversation(conversationId)
+      }, 3000)
+      completedDismissTimers.set(conversationId, timer)
+    }
+  }
+
+  watch(activeConversationId, (_nextId, prevId) => {
+    if (prevId) clearCompletedDismissTimer(prevId)
+  })
+
+  function isConversationInProgress(conversationId: string): boolean {
+    return isConversationBusy(conversationId)
+  }
+
+  function isConversationRecentlyCompleted(conversationId: string): boolean {
+    return completedConversationIds.value.has(conversationId)
+  }
+
   function isConversationThinking(conversationId: string): boolean {
     if (isConversationBusy(conversationId)) return true
     const activeId = activeAssistantMessageIds.value.get(conversationId)
@@ -139,6 +204,7 @@ export const useChatStore = defineStore('chat', () => {
     removeStreamingConversation(conversationId)
     clearActiveAssistantMessage(conversationId)
     clearThinkingStarted(conversationId)
+    clearStreamActivity(conversationId)
     const conv = conversations.value.find((c) => c.id === conversationId)
     if (!conv) return
     const pendingAgent = getPendingAgent(conversationId)
@@ -401,21 +467,26 @@ export const useChatStore = defineStore('chat', () => {
       planMode: m.planMode,
       planRefs: m.planRefs,
       attachments: m.attachments?.map((att) => enrichAttachment(att as Attachment)),
+      toolCalls: m.toolCalls,
       usage: m.usage,
       debugInput: m.debugInput,
-      debugOutput: m.debugOutput
+      debugOutput: m.debugOutput,
+      stopped: m.stopped
     }))
   }
 
   function setActive(id: string | null): void {
     activeConversationId.value = id
     if (id) {
+      removeCompletedConversation(id)
       loadMessages(id)
       const conv = conversations.value.find((c) => c.id === id)
       if (conv) {
         const agentStore = useAgentStore()
-        agentStore.selectAgent(conv.agentId)
+        const modelStore = useModelStore()
+        agentStore.selectAgent(conv.agentId, { fetchCatalog: false })
         setPendingAgent(id, conv.agentId)
+        void modelStore.refreshCatalogForConversation(id, conv.agentId, conv.modelId)
       }
     }
   }
@@ -473,9 +544,12 @@ export const useChatStore = defineStore('chat', () => {
     })
     activeConversationId.value = result.id
     clearActiveAssistantMessage(result.id)
+    removeCompletedConversation(result.id)
     markThinkingStarted(result.id)
+    touchStreamActivity(result.id)
     addWaitingConversation(result.id)
     setPendingAgent(result.id, agentId)
+    void modelStore.refreshCatalogForConversation(result.id, agentId, resolvedModelId)
     return result.id
   }
 
@@ -548,7 +622,9 @@ export const useChatStore = defineStore('chat', () => {
       effectivePlanMode,
       toPlainPlanRefs(planRefs)
     )
+    removeCompletedConversation(conversationId)
     markThinkingStarted(conversationId)
+    touchStreamActivity(conversationId)
     addWaitingConversation(conversationId)
     const workspaceStore = useWorkspaceStore()
     const wsFolders = workspaceStore.currentWorkspace?.folders
@@ -592,6 +668,7 @@ export const useChatStore = defineStore('chat', () => {
     removeStreamingConversation(conversationId)
     clearActiveAssistantMessage(conversationId)
     clearThinkingStarted(conversationId)
+    clearStreamActivity(conversationId)
     await window.agentAPI.chat.stop(conversationId)
   }
 
@@ -602,7 +679,9 @@ export const useChatStore = defineStore('chat', () => {
     setPendingAgent(next.conversationId, next.agentId)
     addMessage(next.conversationId, 'user', next.content, undefined, next.planMode, next.planRefs)
     clearActiveAssistantMessage(next.conversationId)
+    removeCompletedConversation(next.conversationId)
     markThinkingStarted(next.conversationId)
+    touchStreamActivity(next.conversationId)
     addWaitingConversation(next.conversationId)
     const conv = conversations.value.find((c) => c.id === next.conversationId)
     const workspaceStore = useWorkspaceStore()
@@ -631,10 +710,12 @@ export const useChatStore = defineStore('chat', () => {
   function handleAgentEvent(event: AgentEvent): void {
     switch (event.type) {
       case 'message.started': {
+        removeCompletedConversation(event.conversationId)
         setActiveAssistantMessage(event.conversationId, event.messageId)
         ensureAssistantPlaceholder(event.conversationId, event.messageId)
         addStreamingConversation(event.conversationId)
         removeWaitingConversation(event.conversationId)
+        touchStreamActivity(event.conversationId)
         break
       }
       case 'message.delta': {
@@ -643,6 +724,7 @@ export const useChatStore = defineStore('chat', () => {
         const conv = conversations.value.find((c) => c.id === event.conversationId)
         if (!conv) return
         removeWaitingConversation(event.conversationId)
+        touchStreamActivity(event.conversationId)
         const msg = ensureAssistantPlaceholder(event.conversationId, event.messageId)
         if (!msg) return
         msg.content += event.delta
@@ -687,11 +769,15 @@ export const useChatStore = defineStore('chat', () => {
             }
           }
         }
+        if (!event.stopped) {
+          markConversationCompleted(event.conversationId)
+        }
         if (!isCurrentRun) break
         removeWaitingConversation(event.conversationId)
         removeStreamingConversation(event.conversationId)
         clearActiveAssistantMessage(event.conversationId)
         clearThinkingStarted(event.conversationId)
+        clearStreamActivity(event.conversationId)
         flushQueueForConversation(event.conversationId)
         break
       }
@@ -718,10 +804,12 @@ export const useChatStore = defineStore('chat', () => {
         removeStreamingConversation(event.conversationId)
         clearActiveAssistantMessage(event.conversationId)
         clearThinkingStarted(event.conversationId)
+        clearStreamActivity(event.conversationId)
         flushQueueForConversation(event.conversationId)
         break
       }
       case 'tool.started': {
+        touchStreamActivity(event.conversationId)
         const conv = conversations.value.find((c) => c.id === event.conversationId)
         if (!conv) return
         let msg = conv.messages.find((m) => m.id === event.messageId)
@@ -771,6 +859,7 @@ export const useChatStore = defineStore('chat', () => {
         break
       }
       case 'tool.progress': {
+        touchStreamActivity(event.conversationId)
         const conv = conversations.value.find((c) => c.id === event.conversationId)
         if (!conv) return
         const msg = conv.messages.find((m) => m.id === event.messageId)
@@ -784,6 +873,7 @@ export const useChatStore = defineStore('chat', () => {
         break
       }
       case 'tool.completed': {
+        touchStreamActivity(event.conversationId)
         const conv = conversations.value.find((c) => c.id === event.conversationId)
         if (!conv) return
         const msg = conv.messages.find((m) => m.id === event.messageId)
@@ -1008,6 +1098,10 @@ export const useChatStore = defineStore('chat', () => {
     getPendingAgent,
     getActiveAssistantMessageId,
     getThinkingElapsedSeconds,
+    getStreamIdleSeconds,
+    isConversationBusy,
+    isConversationInProgress,
+    isConversationRecentlyCompleted,
     isConversationThinking,
     isMessageStreaming,
     wasMessageStreamed

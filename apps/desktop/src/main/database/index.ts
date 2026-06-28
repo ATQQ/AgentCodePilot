@@ -172,6 +172,12 @@ function runMigrations(database: Database.Database): void {
   if (!msgCols3.find((c) => c.name === 'agent_id')) {
     database.exec('ALTER TABLE messages ADD COLUMN agent_id TEXT')
   }
+  if (!msgCols3.find((c) => c.name === 'tool_calls')) {
+    database.exec('ALTER TABLE messages ADD COLUMN tool_calls TEXT')
+  }
+  if (!msgCols3.find((c) => c.name === 'stopped')) {
+    database.exec('ALTER TABLE messages ADD COLUMN stopped INTEGER DEFAULT 0')
+  }
 
   const projectCols = database.pragma('table_info(projects)') as { name: string }[]
   if (!projectCols.find((c) => c.name === 'deleted_at')) {

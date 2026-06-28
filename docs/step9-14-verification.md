@@ -318,3 +318,93 @@ cat ~/.agent-desktop-app-dev/logs/app-$(date +%Y-%m-%d).log
 
 # 5. 在应用中切换 Agent、发消息、观察 ToolCallCard
 ```
+
+---
+
+## Step 15: Codex Agent Adapter
+
+### 验证 1：Registry 注册
+
+```js
+await window.agentAPI.agents.list()
+// 应包含 { id: 'codex', name: 'Codex', enabled: true }
+```
+
+### 验证 2：模型目录
+
+```js
+await window.agentAPI.agents.listModels('codex', true)
+// 优先读取 ~/.codex/config.toml 的 model_provider.base_url + auth.json
+// 并请求 {base_url}/models；失败时回退到 config.toml 中的 model
+```
+
+### 验证 3：App 内对话
+
+1. 在设置 → Agent 配置 → Codex 中填写 API Key（或设置 `OPENAI_API_KEY`）
+2. Composer 选择 **Codex**，发送「列出当前目录有哪些文件」
+3. 若本地 `codex` CLI 已可用，**无需在 App 内填写 API Key**（会自动读取 `~/.codex/config.toml` 与 `auth.json`）
+4. 应收到真实 Codex 回复（非 Mock）
+4. 同会话追问「刚才列出了什么」——多轮上下文应正常
+5. 点击 Stop 不应崩溃
+
+### 验证 4：会话恢复
+
+1. 完成一轮 Codex 对话后重启 App
+2. 打开同一会话继续提问
+3. `agent_session_id` 应恢复 Codex thread
+
+---
+
+## Step 16: Cursor Agent Adapter
+
+### 验证 1：Registry 注册
+
+```js
+await window.agentAPI.agents.list()
+// 应包含 { id: 'cursor', name: 'Cursor', enabled: true }
+// 若 Node < 22.13，cursor 不会出现
+```
+
+### 验证 2：模型目录
+
+```js
+await window.agentAPI.agents.listModels('cursor', true)
+// 配置 CURSOR_API_KEY 后应返回 composer-2.5 等模型
+```
+
+### 验证 3：App 内流式对话
+
+1. 设置 → Agent 配置 → Cursor 填写 API Key（或设置 `CURSOR_API_KEY`，或已在终端 `agent login`）
+2. Composer 选择 **Cursor**，模型选 `composer-2.5`
+3. 发送「这个仓库是做什么的？」——应看到流式 assistant 文本（优先走本机 `agent` CLI，日志分类 `[CursorCli]`）
+4. 追问「重点看 apps/desktop」——上下文应保留（CLI session UUID 写入 `agent_session_id`）
+5. Stop 按钮应正常中止
+
+### 验证 4：工具调用（可选）
+
+发送「读取 package.json 内容」，应出现 ToolCallCard。
+
+### 验证 7：重启后工具调用与停止状态
+
+1. 用 Cursor 发送「列出当前目录文件」（或任意会触发 Read/Bash 的指令）
+2. ToolCallCard 应显示 **开始时间** 与 **耗时**
+3. 完全退出 App 并重启，打开同一会话 — 工具卡片与时间信息仍在
+4. 另开一轮对话，流式生成中点击 **Stop** — 应显示「已手动停止」徽章
+5. 重启 App 后该条 assistant 消息仍保留停止徽章
+
+> 工具调用写入 `messages.tool_calls`（JSON）；停止状态写入 `messages.stopped`。
+
+### 验证 5：Token 用量展示
+
+1. 用 Cursor 发送一条会触发较长上下文的指令（例如「分析 apps/desktop 目录结构」）
+2. 回复完成后，消息操作栏应显示 **共 N token**，并附带分项：`输入 · 输出 · 缓存读 · 缓存写`（有 cache 时）
+3. 总计应接近 Cursor IDE 状态栏/账单的 token 数（旧版只显示 input+output 会明显偏低）
+4. 可选：运行 `pnpm verify:cursor-sdk -- --mode cli`，确认 `usage parsing self-test: ok`，且 `result` 事件打印 `usage total`
+
+> CLI 路径从 `result.usage` 解析；SDK 回退路径从 `usage` 流事件或 `run.wait()` 的 `result.usage` 解析。需 Cursor CLI 2026-02+ 才在 stream-json 中输出 usage。
+
+### 验证 6：设置页
+
+- Codex / Cursor 标签页可配置 API Key、沙箱/模式
+- 切换 Agent 后模型下拉列表应刷新
+

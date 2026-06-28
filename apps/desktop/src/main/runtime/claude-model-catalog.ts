@@ -4,14 +4,19 @@ import type { ModelInfo } from '@anthropic-ai/claude-agent-sdk'
 import { loadClaudeAgentSdk } from './claude-sdk-loader'
 import { resolveClaudeCodeExecutablePath } from './claude-executable'
 import { getShellEnvironment } from '../shell/shell-env'
-import * as repo from '../database/repositories'
 import {
   type AgentConfigSettings,
   type AgentModelOption,
   type ModelCatalogResult,
-  type ModelCatalogSource,
-  getAgentConfigSettingKey
+  type ModelCatalogSource
 } from '../../shared/agent-model'
+import { getAgentConfig, saveAgentConfig } from './agent-config'
+import {
+  canReuseDiscoveryCache,
+  getExternalConfigFingerprint
+} from './model-config-fingerprint'
+
+export { saveAgentConfig, getAgentConfig }
 
 const FALLBACK_MODELS: AgentModelOption[] = [
   { id: 'sonnet', name: 'Sonnet', description: 'Balanced speed and capability (default)' },
@@ -29,6 +34,7 @@ const discoveryCache = new Map<
   string,
   {
     expiresAt: number
+    externalFingerprint: string
     discoveredModels: AgentModelOption[]
     discoveredDefault: string | null
     discoveredSource: ModelCatalogSource
@@ -37,21 +43,7 @@ const discoveryCache = new Map<
 const CACHE_TTL_MS = 5 * 60 * 1000
 
 function readAgentConfig(agentId: string): AgentConfigSettings {
-  const raw = repo.getSetting(getAgentConfigSettingKey(agentId))
-  if (!raw) return {}
-  try {
-    return JSON.parse(raw) as AgentConfigSettings
-  } catch {
-    return {}
-  }
-}
-
-export function saveAgentConfig(agentId: string, config: AgentConfigSettings): void {
-  repo.setSetting(getAgentConfigSettingKey(agentId), JSON.stringify(config))
-}
-
-export function getAgentConfig(agentId: string): AgentConfigSettings {
-  return readAgentConfig(agentId)
+  return getAgentConfig(agentId)
 }
 
 function mapSdkModels(models: ModelInfo[]): AgentModelOption[] {
@@ -186,6 +178,12 @@ async function discoverModels(forceRefresh: boolean): Promise<{
 }> {
   const cacheKey = 'claude-code'
   const cached = discoveryCache.get(cacheKey)
+  const externalFingerprint = getExternalConfigFingerprint('claude-code')
+
+  if (cached && canReuseDiscoveryCache('claude-code', cached.externalFingerprint)) {
+    return cached
+  }
+
   if (!forceRefresh && cached && cached.expiresAt > Date.now()) {
     return cached
   }
@@ -198,7 +196,11 @@ async function discoverModels(forceRefresh: boolean): Promise<{
       discoveredDefault: claudeSettings.defaultModelId,
       discoveredSource: 'sdk' as const
     }
-    discoveryCache.set(cacheKey, { expiresAt: Date.now() + CACHE_TTL_MS, ...snapshot })
+    discoveryCache.set(cacheKey, {
+      expiresAt: Date.now() + CACHE_TTL_MS,
+      externalFingerprint,
+      ...snapshot
+    })
     return snapshot
   }
 
@@ -209,35 +211,29 @@ async function discoverModels(forceRefresh: boolean): Promise<{
     discoveredDefault: claudeSettings.defaultModelId,
     discoveredSource: (fromClaudeSettings ? 'claude-settings' : 'fallback') as ModelCatalogSource
   }
-  discoveryCache.set(cacheKey, { expiresAt: Date.now() + CACHE_TTL_MS, ...snapshot })
+  discoveryCache.set(cacheKey, {
+    expiresAt: Date.now() + CACHE_TTL_MS,
+    externalFingerprint,
+    ...snapshot
+  })
   return snapshot
 }
 
-export async function getModelCatalog(
-  agentId: string,
+export async function getClaudeModelCatalog(
   forceRefresh = false
 ): Promise<ModelCatalogResult> {
-  if (agentId !== 'claude-code') {
-    return {
-      agentId,
-      models: [],
-      discoveredModels: [],
-      defaultModelId: 'sonnet',
-      source: 'fallback',
-      discoveredSource: 'fallback'
-    }
-  }
-
-  const appConfig = readAgentConfig(agentId)
+  const appConfig = readAgentConfig('claude-code')
   const { discoveredModels, discoveredDefault, discoveredSource } =
     await discoverModels(forceRefresh)
-  return finalizeCatalog(agentId, discoveredModels, discoveredDefault, discoveredSource, appConfig)
+  return finalizeCatalog(
+    'claude-code',
+    discoveredModels,
+    discoveredDefault,
+    discoveredSource,
+    appConfig
+  )
 }
 
-export function invalidateModelCatalog(agentId?: string): void {
-  if (agentId) {
-    discoveryCache.delete(agentId)
-    return
-  }
-  discoveryCache.clear()
+export function invalidateClaudeModelCatalog(): void {
+  discoveryCache.delete('claude-code')
 }

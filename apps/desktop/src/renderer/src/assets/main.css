@@ -175,3 +175,17 @@ html.dark .el-popper.is-light .el-popper__arrow::before {
 .xterm .xterm-viewport::-webkit-scrollbar-corner {
   background: var(--content-bg);
 }
+
+/* Model refresh toast — use composer focus blue, not app primary gray */
+.el-message.model-refresh-message {
+  background: color-mix(in srgb, var(--composer-border-focus) 12%, var(--content-bg));
+  border: 1px solid color-mix(in srgb, var(--composer-border-focus) 35%, transparent);
+}
+
+.el-message.model-refresh-message .el-message__content {
+  color: var(--composer-border-focus);
+}
+
+.el-message.model-refresh-message .el-message-icon {
+  color: var(--composer-border-focus);
+}

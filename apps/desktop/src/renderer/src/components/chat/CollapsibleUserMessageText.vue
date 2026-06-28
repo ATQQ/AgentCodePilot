@@ -5,6 +5,7 @@ import {
   isLongUserMessage,
   USER_MESSAGE_COLLAPSED_LINES
 } from '@renderer/composables/useChatTimelineItems'
+import LinkifiedPlainText from './LinkifiedPlainText.vue'
 
 const props = defineProps<{
   content: string
@@ -37,7 +38,9 @@ function handleTextClick(): void {
     }"
     @click="handleTextClick"
   >
-    <div class="user-message-text-body">{{ content }}</div>
+    <div class="user-message-text-body">
+      <LinkifiedPlainText :text="content" />
+    </div>
     <button
       v-if="isLong"
       type="button"

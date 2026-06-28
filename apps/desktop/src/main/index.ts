@@ -25,13 +25,19 @@ import type {
   SettingsInfo,
   SettingsPayload,
   OpenPathPayload,
-  OpenPathResult
+  OpenPathResult,
+  ToolUseInfo
 } from '../preload/types'
 import { agentRegistry, ensureAgentRegistry } from './runtime'
 import { supervisedRun, supervisedStop, supervisedStopAll } from './runtime/supervisor'
 import { cloneForIpc } from '../shared/ipc-clone'
 import { parseMaxAgentTurnsSetting, clampMaxAgentTurns } from '../shared/agent-run-settings'
-import { getAgentConfig, getModelCatalog, saveAgentConfig } from './runtime/claude-model-catalog'
+import {
+  getAgentConfig,
+  getModelCatalog,
+  saveAgentConfig,
+  sanitizeAgentConfigForRenderer
+} from './runtime/model-catalog'
 import { respondToApproval, cancelApprovalsForConversation } from './runtime/approval-manager'
 import type { ApprovalRespondPayload } from '../preload/types'
 import { startGateway, stopGateway, getGatewayConfig, isGatewayRunning } from './gateway'
@@ -74,7 +80,9 @@ import {
   readWorkspaceFile,
   writeWorkspaceFile,
   deleteWorkspaceFile,
-  copyWorkspaceFile
+  copyWorkspaceFile,
+  mkdirWorkspaceDir,
+  renameWorkspaceEntry
 } from './file/workspace-file-service'
 import {
   createTerminal,
@@ -93,8 +101,34 @@ let mainWindow: BrowserWindow | null = null
 
 const streamingMessages = new Map<
   string,
-  { conversationId: string; content: string; rawInput: string; agentId?: string }
+  {
+    conversationId: string
+    content: string
+    rawInput: string
+    agentId?: string
+    toolCalls: Map<string, ToolUseInfo>
+  }
 >()
+
+function createStreamingEntry(
+  conversationId: string,
+  rawInput: string,
+  agentId?: string
+): {
+  conversationId: string
+  content: string
+  rawInput: string
+  agentId?: string
+  toolCalls: Map<string, ToolUseInfo>
+} {
+  return {
+    conversationId,
+    content: '',
+    rawInput,
+    agentId,
+    toolCalls: new Map()
+  }
+}
 
 function resolveConversationCwd(conversationId: string, payloadCwd?: string): string {
   const conv = repo.getConversationById(conversationId)
@@ -126,6 +160,35 @@ function resolveConversationWorkspaceFolders(
 
 const AGENT_HISTORY_LIMIT = 50
 const DELTA_BATCH_MS = 16
+const STOPPED_ASSISTANT_TEXT = '已手动终止 AI 回复'
+
+function finalizeToolCallsForSave(toolCalls: Map<string, ToolUseInfo>): ToolUseInfo[] {
+  const nowMs = Date.now()
+  return Array.from(toolCalls.values()).map((tool) => {
+    const finalized: ToolUseInfo = { ...tool }
+
+    if (!finalized.startedAt) {
+      finalized.startedAt = new Date(nowMs).toISOString()
+    }
+
+    if (
+      finalized.elapsedSeconds == null &&
+      finalized.startedAt &&
+      (finalized.status === 'completed' || finalized.status === 'error')
+    ) {
+      finalized.elapsedSeconds = Math.max(
+        0,
+        (nowMs - new Date(finalized.startedAt).getTime()) / 1000
+      )
+    }
+
+    if (finalized.status === 'pending' || finalized.status === 'running') {
+      finalized.status = 'completed'
+    }
+
+    return finalized
+  })
+}
 
 interface DeltaBatchEntry {
   conversationId: string
@@ -193,24 +256,50 @@ function mapPlanRow(r: repo.PlanRow): PlanInfo {
 function emitAgentEvent(event: AgentEvent): void {
   if (event.type === 'message.started') {
     if (!streamingMessages.has(event.messageId)) {
-      streamingMessages.set(event.messageId, {
-        conversationId: event.conversationId,
-        content: '',
-        rawInput: ''
-      })
+      streamingMessages.set(event.messageId, createStreamingEntry(event.conversationId, ''))
     }
   } else if (event.type === 'message.delta') {
     const entry = streamingMessages.get(event.messageId)
     if (entry) entry.content += event.delta
+  } else if (event.type === 'tool.started') {
+    const entry = streamingMessages.get(event.messageId)
+    if (entry) {
+      entry.toolCalls.set(event.tool.toolUseId, {
+        ...event.tool,
+        startedAt: event.tool.startedAt ?? new Date().toISOString()
+      })
+    }
+  } else if (event.type === 'tool.input_updated') {
+    const entry = streamingMessages.get(event.messageId)
+    const tool = entry?.toolCalls.get(event.toolUseId)
+    if (tool) tool.input = event.input
+  } else if (event.type === 'tool.progress') {
+    const entry = streamingMessages.get(event.messageId)
+    const tool = entry?.toolCalls.get(event.toolUseId)
+    if (tool) tool.elapsedSeconds = event.elapsedSeconds
+  } else if (event.type === 'tool.completed') {
+    const entry = streamingMessages.get(event.messageId)
+    const tool = entry?.toolCalls.get(event.toolUseId)
+    if (tool) {
+      if (event.summary) tool.summary = event.summary
+      if (event.elapsedSeconds != null) tool.elapsedSeconds = event.elapsedSeconds
+      tool.status = event.status ?? 'completed'
+    }
   } else if (event.type === 'message.completed') {
     const entry = streamingMessages.get(event.messageId)
     if (entry) {
       try {
+        const stopped = event.stopped === true
+        let content = entry.content
+        if (stopped && !content.trim()) {
+          content = STOPPED_ASSISTANT_TEXT
+        }
+        const finalizedTools = finalizeToolCallsForSave(entry.toolCalls)
         repo.addMessage({
           id: event.messageId,
           conversationId: entry.conversationId,
           role: 'assistant',
-          content: entry.content,
+          content,
           createdAt: new Date().toISOString(),
           agentId: entry.agentId ?? null,
           inputTokens: event.usage?.inputTokens ?? null,
@@ -220,9 +309,12 @@ function emitAgentEvent(event: AgentEvent): void {
           costUSD: event.usage?.costUSD ?? null,
           rawInput: entry.rawInput || null,
           debugInput: event.debugInput || null,
-          debugOutput: event.debugOutput || null
+          debugOutput: event.debugOutput || null,
+          stopped,
+          toolCalls:
+            finalizedTools.length > 0 ? JSON.stringify(finalizedTools) : null
         })
-        savePlanFromAssistantMessage(entry.conversationId, event.messageId, entry.content)
+        savePlanFromAssistantMessage(entry.conversationId, event.messageId, content)
       } catch (e) {
         console.error('[emitAgentEvent] Failed to save message to db:', e)
       }
@@ -319,7 +411,9 @@ function registerIpcHandlers(): void {
     getModelCatalog(agentId, forceRefresh ?? false)
   )
 
-  ipcMain.handle(IPC_CHANNELS.AGENTS_CONFIG_GET, (_e, agentId: string) => getAgentConfig(agentId))
+  ipcMain.handle(IPC_CHANNELS.AGENTS_CONFIG_GET, (_e, agentId: string) =>
+    sanitizeAgentConfigForRenderer(getAgentConfig(agentId))
+  )
 
   ipcMain.handle(
     IPC_CHANNELS.AGENTS_CONFIG_UPDATE,
@@ -385,12 +479,7 @@ function registerIpcHandlers(): void {
       planMode: payload.planMode,
       conversationId: payload.conversationId
     })
-    streamingMessages.set(assistantMsgId, {
-      conversationId: payload.conversationId,
-      content: '',
-      rawInput: prompt,
-      agentId: payload.agentId
-    })
+    streamingMessages.set(assistantMsgId, createStreamingEntry(payload.conversationId, prompt, payload.agentId))
     const runContext = getConversationRunContext(payload.conversationId)
     const approvalLevel = getRunApprovalLevel(payload.conversationId)
     const runInput = {
@@ -443,12 +532,7 @@ function registerIpcHandlers(): void {
       planMode: payload.planMode,
       conversationId: payload.conversationId
     })
-    streamingMessages.set(assistantMsgId, {
-      conversationId: payload.conversationId,
-      content: '',
-      rawInput: prompt,
-      agentId: payload.agentId
-    })
+    streamingMessages.set(assistantMsgId, createStreamingEntry(payload.conversationId, prompt, payload.agentId))
     const runContext = getConversationRunContext(payload.conversationId)
     const approvalLevel = getRunApprovalLevel(payload.conversationId)
     const runInput = {
@@ -560,6 +644,16 @@ function registerIpcHandlers(): void {
         }
         if (r.agent_id) {
           msg.agentId = r.agent_id
+        }
+        if (r.tool_calls) {
+          try {
+            msg.toolCalls = JSON.parse(r.tool_calls) as MessageInfo['toolCalls']
+          } catch {
+            /* ignore */
+          }
+        }
+        if (r.stopped === 1) {
+          msg.stopped = true
         }
         return msg
       })
@@ -838,6 +932,16 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.FILE_COPY, (_e, srcPath: string, destPath: string, roots: string[]) =>
     copyWorkspaceFile(srcPath, destPath, roots)
+  )
+
+  ipcMain.handle(IPC_CHANNELS.FILE_MKDIR, (_e, dirPath: string, roots: string[]) =>
+    mkdirWorkspaceDir(dirPath, roots)
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.FILE_RENAME,
+    (_e, oldPath: string, newPath: string, roots: string[]) =>
+      renameWorkspaceEntry(oldPath, newPath, roots)
   )
 
   // --- Terminal ---

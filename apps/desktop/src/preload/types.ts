@@ -52,6 +52,8 @@ export const IPC_CHANNELS = {
   FILE_WRITE: 'file:write',
   FILE_DELETE: 'file:delete',
   FILE_COPY: 'file:copy',
+  FILE_MKDIR: 'file:mkdir',
+  FILE_RENAME: 'file:rename',
   TERMINAL_CREATE: 'terminal:create',
   TERMINAL_WRITE: 'terminal:write',
   TERMINAL_RESIZE: 'terminal:resize',
@@ -292,13 +294,46 @@ export interface MockAgentConfig {
   responses?: string[]
 }
 
+export interface AgentAuthConfigPublic {
+  hasApiKey?: boolean
+}
+
+export interface CodexAgentConfigPublic extends AgentAuthConfigPublic {
+  defaultModelId?: string
+  sandbox?: 'read_only' | 'workspace_write' | 'full_access'
+}
+
+export interface CursorAgentConfigPublic extends AgentAuthConfigPublic {
+  defaultModelId?: string
+  mode?: 'agent' | 'plan'
+  autoReview?: boolean
+  settingSources?: Array<'project' | 'user' | 'team' | 'mdm' | 'plugins' | 'all'>
+}
+
 export interface AgentConfigSettings {
   defaultModelId?: string
   models?: AgentModelOption[]
   mock?: MockAgentConfig
+  codex?: CodexAgentConfigPublic & { apiKey?: string }
+  cursor?: CursorAgentConfigPublic & { apiKey?: string }
 }
 
-export type ModelCatalogSource = 'sdk' | 'claude-settings' | 'app-config' | 'fallback'
+export interface AgentConfigUpdatePayload {
+  defaultModelId?: string
+  models?: AgentModelOption[]
+  mock?: MockAgentConfig
+  codex?: CodexAgentConfigPublic & { apiKey?: string }
+  cursor?: CursorAgentConfigPublic & { apiKey?: string }
+}
+
+export type ModelCatalogSource =
+  | 'sdk'
+  | 'claude-settings'
+  | 'codex-config'
+  | 'codex-provider'
+  | 'cursor-sdk'
+  | 'app-config'
+  | 'fallback'
 
 export interface ModelCatalogResult {
   agentId: string
@@ -340,9 +375,11 @@ export interface MessageInfo {
   planMode?: boolean
   planRefs?: PlanReference[]
   attachments?: AttachmentPayload[]
+  toolCalls?: ToolUseInfo[]
   usage?: TokenUsage
   debugInput?: string
   debugOutput?: string
+  stopped?: boolean
 }
 
 export type PlanOwnerType = 'conversation' | 'project' | 'workspace'
@@ -389,6 +426,10 @@ export interface TokenUsage {
   cacheReadTokens: number
   cacheCreationTokens: number
   costUSD: number
+  /** Sum of input + output + cache read + cache write when reported by runtime. */
+  totalTokens?: number
+  /** Subset of output tokens when reported separately by runtime. */
+  reasoningTokens?: number
 }
 
 export interface ToolUseInfo {
@@ -473,7 +514,7 @@ export interface AgentAPI {
     list: () => Promise<AgentInfo[]>
     listModels: (agentId: string, forceRefresh?: boolean) => Promise<ModelCatalogResult>
     getConfig: (agentId: string) => Promise<AgentConfigSettings>
-    updateConfig: (agentId: string, config: AgentConfigSettings) => Promise<ModelCatalogResult>
+    updateConfig: (agentId: string, config: AgentConfigUpdatePayload) => Promise<ModelCatalogResult>
   }
   chat: {
     createConversation: (payload: CreateConversationPayload) => Promise<ConversationInfo>
@@ -532,6 +573,8 @@ export interface AgentAPI {
     write: (filePath: string, content: string, roots: string[]) => Promise<void>
     delete: (filePath: string, roots: string[]) => Promise<void>
     copy: (srcPath: string, destPath: string, roots: string[]) => Promise<void>
+    mkdir: (dirPath: string, roots: string[]) => Promise<void>
+    rename: (oldPath: string, newPath: string, roots: string[]) => Promise<void>
   }
   git: {
     status: (cwd: string) => Promise<GitStatusResult>

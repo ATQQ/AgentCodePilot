@@ -488,6 +488,18 @@ onUnmounted(() => {
                     <span v-if="chatStore.hasPendingApproval(conv.id)" class="conv-approval-tag">{{
                       t('approval.waitingTag')
                     }}</span>
+                    <span
+                      v-else-if="chatStore.isConversationInProgress(conv.id)"
+                      class="conv-status-tag in-progress"
+                    >
+                      {{ t('sidebar.conversationInProgress') }}
+                    </span>
+                    <span
+                      v-else-if="chatStore.isConversationRecentlyCompleted(conv.id)"
+                      class="conv-status-tag completed"
+                    >
+                      {{ t('sidebar.conversationCompleted') }}
+                    </span>
                     <span class="conv-time">{{ formatRelativeTime(conv.updatedAt) }}</span>
                     <button class="conv-more-btn" @click="showContextMenuFromButton($event, conv)">
                       <el-icon :size="12"><MoreFilled /></el-icon>
@@ -611,6 +623,18 @@ onUnmounted(() => {
                     <span v-if="chatStore.hasPendingApproval(conv.id)" class="conv-approval-tag">{{
                       t('approval.waitingTag')
                     }}</span>
+                    <span
+                      v-else-if="chatStore.isConversationInProgress(conv.id)"
+                      class="conv-status-tag in-progress"
+                    >
+                      {{ t('sidebar.conversationInProgress') }}
+                    </span>
+                    <span
+                      v-else-if="chatStore.isConversationRecentlyCompleted(conv.id)"
+                      class="conv-status-tag completed"
+                    >
+                      {{ t('sidebar.conversationCompleted') }}
+                    </span>
                     <span class="conv-time">{{ formatRelativeTime(conv.updatedAt) }}</span>
                     <button class="conv-more-btn" @click="showContextMenuFromButton($event, conv)">
                       <el-icon :size="12"><MoreFilled /></el-icon>
@@ -677,6 +701,18 @@ onUnmounted(() => {
                 <span v-if="chatStore.hasPendingApproval(conv.id)" class="conv-approval-tag">{{
                   t('approval.waitingTag')
                 }}</span>
+                <span
+                  v-else-if="chatStore.isConversationInProgress(conv.id)"
+                  class="conv-status-tag in-progress"
+                >
+                  {{ t('sidebar.conversationInProgress') }}
+                </span>
+                <span
+                  v-else-if="chatStore.isConversationRecentlyCompleted(conv.id)"
+                  class="conv-status-tag completed"
+                >
+                  {{ t('sidebar.conversationCompleted') }}
+                </span>
                 <span class="conv-time">{{ formatRelativeTime(conv.updatedAt) }}</span>
                 <button class="conv-more-btn" @click="showContextMenuFromButton($event, conv)">
                   <el-icon :size="12"><MoreFilled /></el-icon>
@@ -1059,6 +1095,34 @@ onUnmounted(() => {
 }
 
 html.dark .conv-approval-tag {
+  background: rgba(52, 211, 153, 0.15);
+  color: #6ee7b7;
+}
+
+.conv-status-tag {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.conv-status-tag.in-progress {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.conv-status-tag.completed {
+  background: #dcfce7;
+  color: #166534;
+}
+
+html.dark .conv-status-tag.in-progress {
+  background: rgba(96, 165, 250, 0.15);
+  color: #93c5fd;
+}
+
+html.dark .conv-status-tag.completed {
   background: rgba(52, 211, 153, 0.15);
   color: #6ee7b7;
 }

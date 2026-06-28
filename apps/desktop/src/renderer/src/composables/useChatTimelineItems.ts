@@ -1,5 +1,7 @@
 import { computed, toValue, type ComputedRef, type MaybeRefOrGetter } from 'vue'
 import type { Message } from '@renderer/types'
+import { usePanelContextStore } from '@renderer/stores/panelContext.store'
+import { linkifyBrowserReferences } from '@renderer/utils/linkifyBrowserReferences'
 
 export type ChatTimelineKind = 'assistant-markdown' | 'assistant-empty' | 'user'
 
@@ -32,7 +34,8 @@ export function mapMessageToTimelineItem(
   msg: Message,
   isMessageStreaming: (id: string) => boolean,
   hasPendingApproval: (id: string) => boolean,
-  isUserMessageExpanded?: (id: string) => boolean
+  isUserMessageExpanded?: (id: string) => boolean,
+  htmlBaseDirs: string[] = []
 ): ChatTimelineItem {
   if (msg.role === 'user') {
     const expanded = isUserMessageExpanded?.(msg.id) ?? false
@@ -53,7 +56,7 @@ export function mapMessageToTimelineItem(
     return {
       id: msg.id,
       kind: 'assistant-markdown',
-      content: msg.content,
+      content: linkifyBrowserReferences(msg.content, htmlBaseDirs),
       final,
       revision,
       message: msg
@@ -108,14 +111,22 @@ export function useChatTimelineItems(options: {
   hasPendingApproval: (messageId: string) => boolean
   isUserMessageExpanded?: (messageId: string) => boolean
 }): ComputedRef<ChatTimelineItem[]> {
+  const panelContextStore = usePanelContextStore()
+
   return computed(() => {
     const messages = toValue(options.messages) ?? []
+    const htmlBaseDirs = panelContextStore.availableFolders.length
+      ? panelContextStore.availableFolders.map((folder) => folder.path)
+      : panelContextStore.effectivePanelCwd
+        ? [panelContextStore.effectivePanelCwd]
+        : []
     return messages.map((msg) =>
       mapMessageToTimelineItem(
         msg,
         options.isMessageStreaming,
         options.hasPendingApproval,
-        options.isUserMessageExpanded
+        options.isUserMessageExpanded,
+        htmlBaseDirs
       )
     )
   })

@@ -3,7 +3,8 @@ import { ref, computed } from 'vue'
 import { useTerminalStore } from './terminal.store'
 import { useChatStore } from './chat.store'
 import { useSettingsStore } from './settings.store'
-import { extractHttpUrlsFromTexts } from '@renderer/utils/extractUrls'
+import { usePanelContextStore } from './panelContext.store'
+import { extractBrowserUrlsFromTexts } from '@renderer/utils/extractUrls'
 import {
   getAllTerminalTexts,
   terminalOutputRevision
@@ -39,6 +40,7 @@ export const useBrowserStore = defineStore('browser', () => {
   const terminalStore = useTerminalStore()
   const chatStore = useChatStore()
   const settingsStore = useSettingsStore()
+  const panelContextStore = usePanelContextStore()
 
   const stateByScope = ref<Record<string, BrowserScopeState>>(loadAllStates())
 
@@ -88,7 +90,12 @@ export const useBrowserStore = defineStore('browser', () => {
   const detectedLinks = computed(() => {
     if (!settingsStore.browserAutoExtractLinks) return []
     void terminalOutputRevision.value
-    return extractHttpUrlsFromTexts(collectSourceTexts())
+    const htmlBaseDirs = panelContextStore.availableFolders.length
+      ? panelContextStore.availableFolders.map((folder) => folder.path)
+      : panelContextStore.effectivePanelCwd
+        ? [panelContextStore.effectivePanelCwd]
+        : []
+    return extractBrowserUrlsFromTexts(collectSourceTexts(), { htmlBaseDirs })
   })
 
   const suggestedLinks = computed(() => {

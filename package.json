@@ -1,6 +1,6 @@
 {
   "name": "agent-code-pilot",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
   "description": "AgentCodePilot - AI coding agent desktop application",
   "scripts": {
@@ -21,7 +21,8 @@
     "typecheck": "pnpm -C apps/desktop typecheck",
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm build",
     "icons:generate": "node scripts/generate-icons.mjs",
-    "icons:sync": "node scripts/sync-icons.mjs"
+    "icons:sync": "node scripts/sync-icons.mjs",
+    "verify:cursor-sdk": "node scripts/verify-cursor-sdk.mjs"
   },
   "devDependencies": {
     "png-to-ico": "^2.1.8",
@@ -40,5 +41,9 @@
       "electron-winstaller",
       "sharp"
     ]
-  }
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
 }

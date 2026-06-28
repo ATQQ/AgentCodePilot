@@ -7,6 +7,7 @@ import { useFileExplorerStore } from '@renderer/stores/fileExplorer.store'
 import { useComposerStore } from '@renderer/stores/composer.store'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import { useLayoutStore } from '@renderer/stores/layout.store'
+import { useBrowserPreview } from '@renderer/composables/useBrowserPreview'
 import { toLocalFileUrl } from '@renderer/utils/localFile'
 import { resolveFileKind, getFileExtension } from '@renderer/utils/fileKind'
 import { getLanguageFromPath, PREVIEW_LANGUAGE_OPTIONS } from '@renderer/utils/monaco'
@@ -23,6 +24,7 @@ const fileStore = useFileExplorerStore()
 const composerStore = useComposerStore()
 const settingsStore = useSettingsStore()
 const layoutStore = useLayoutStore()
+const { openInBrowser } = useBrowserPreview()
 
 const imageSrc = ref('')
 const imageLoadFailed = ref(false)
@@ -42,6 +44,11 @@ const isMarkdown = computed(() => {
   const ext = getFileExtension(props.filePath)
   if (ext === 'md' || ext === 'mdx') return true
   return getLanguageFromPath(props.filePath) === 'markdown'
+})
+
+const isHtml = computed(() => {
+  const ext = getFileExtension(props.filePath)
+  return ext === 'html' || ext === 'htm'
 })
 
 const fileExtension = computed(() => getFileExtension(props.filePath))
@@ -123,6 +130,10 @@ function enterEditModeFromShortcut(): void {
 
 function toggleMdPreview(): void {
   mdPreviewMode.value = !mdPreviewMode.value
+}
+
+function previewHtmlInBrowser(): void {
+  openInBrowser(props.filePath)
 }
 
 function addToChat(): void {
@@ -213,6 +224,14 @@ onUnmounted(() => {
           {{
             mdPreviewMode ? t('workspace.filePreview.source') : t('workspace.filePreview.preview')
           }}
+        </button>
+        <button
+          v-if="isHtml && isEditable && !fileStore.editMode"
+          class="action-btn"
+          :title="t('chat.openInBrowser')"
+          @click="previewHtmlInBrowser"
+        >
+          {{ t('workspace.filePreview.preview') }}
         </button>
       </div>
       <span class="fp-name" :title="filePath">{{ fileName }}</span>

@@ -15,6 +15,7 @@ import MessageAttachmentImage from '@renderer/components/chat/MessageAttachmentI
 import CollapsibleUserMessageText from '@renderer/components/chat/CollapsibleUserMessageText.vue'
 import ChatMessageList from '@renderer/components/chat/ChatMessageList.vue'
 import { getAgentIcon } from '@renderer/utils/agentIcons'
+import { formatTokenUsageSummary } from '@renderer/utils/formatTokenUsage'
 import type { Attachment, Message, PlanReference, ApprovalRequest } from '@renderer/types'
 import { useLayoutStore, type LayoutStore } from '@renderer/stores/layout.store'
 import { usePlanStore } from '@renderer/stores/plan.store'
@@ -122,6 +123,20 @@ function isThinkingMessage(msg: Message): boolean {
   return chatStore.isConversationThinking(convId)
 }
 
+function hasRunningTools(msg: Message): boolean {
+  return msg.toolCalls?.some((tc) => tc.status === 'pending' || tc.status === 'running') ?? false
+}
+
+function showStreamIdleIndicator(msg: Message): boolean {
+  const convId = chatStore.activeConversationId
+  if (!convId || msg.role !== 'assistant' || msg.stopped) return false
+  if (msg.id !== chatStore.getActiveAssistantMessageId(convId)) return false
+  if (!chatStore.isConversationBusy(convId)) return false
+  if (!msg.content.trim() && !msg.toolCalls?.length) return false
+  if (hasRunningTools(msg)) return false
+  return chatStore.getStreamIdleSeconds(convId) >= 2
+}
+
 const showStandaloneThinking = computed(() => {
   if (!chatStore.activeConversationId) return false
   if (!chatStore.isWaiting) return false
@@ -135,15 +150,44 @@ const isAssistantThinking = computed(() => {
   return convId ? chatStore.isConversationThinking(convId) : false
 })
 
+const needsWaitingTimer = computed(() => {
+  const convId = chatStore.activeConversationId
+  if (!convId || !chatStore.isConversationBusy(convId)) {
+    return isAssistantThinking.value
+  }
+  const activeId = chatStore.getActiveAssistantMessageId(convId)
+  const msg = activeId
+    ? chatStore.activeConversation?.messages.find((m) => m.id === activeId)
+    : undefined
+  if (!msg || (!msg.content.trim() && !msg.toolCalls?.length)) {
+    return isAssistantThinking.value
+  }
+  if (hasRunningTools(msg)) return false
+  return true
+})
+
 function refreshWaitingSeconds(): void {
   const convId = chatStore.activeConversationId
-  waitingSeconds.value = convId ? chatStore.getThinkingElapsedSeconds(convId) : 0
+  if (!convId) {
+    waitingSeconds.value = 0
+    return
+  }
+  const activeId = chatStore.getActiveAssistantMessageId(convId)
+  const msg = activeId
+    ? chatStore.activeConversation?.messages.find((m) => m.id === activeId)
+    : undefined
+  const hasStartedReply = Boolean(msg && (msg.content.trim() || msg.toolCalls?.length))
+  if (hasStartedReply && !hasRunningTools(msg!) && chatStore.isConversationBusy(convId)) {
+    waitingSeconds.value = chatStore.getStreamIdleSeconds(convId)
+  } else {
+    waitingSeconds.value = chatStore.getThinkingElapsedSeconds(convId)
+  }
 }
 
 watch(
-  () => isAssistantThinking.value,
-  (thinking) => {
-    if (thinking) {
+  () => needsWaitingTimer.value,
+  (active) => {
+    if (active) {
       refreshWaitingSeconds()
       waitingTimer = setInterval(refreshWaitingSeconds, 1000)
       scheduleScrollToBottom()
@@ -158,7 +202,7 @@ watch(
 watch(
   () => chatStore.activeConversationId,
   () => {
-    if (isAssistantThinking.value) {
+    if (needsWaitingTimer.value) {
       refreshWaitingSeconds()
     }
   }
@@ -313,12 +357,12 @@ function getMessageAgentName(msg: Message): string {
   return agentStore.getAgentName(getMessageAgentId(msg))
 }
 
-const waitingAgentIcon = computed(() => {
+const waitingAgentId = computed(() => {
   const convId = chatStore.activeConversationId
-  const agentId =
-    (convId ? chatStore.getPendingAgent(convId) : undefined) ?? agentStore.selectedAgentId
-  return getAgentIcon(agentId)
+  return (convId ? chatStore.getPendingAgent(convId) : undefined) ?? agentStore.selectedAgentId
 })
+
+const waitingAgentIcon = computed(() => getAgentIcon(waitingAgentId.value))
 
 const isArchived = computed(() => chatStore.activeConversation?.archived === true)
 
@@ -427,7 +471,7 @@ function toggleUserMessageExpanded(messageId: string): void {
                 :class="[msg.role, { 'message--plan': msg.role === 'user' && msg.planMode }]"
               >
                 <div v-if="msg.role === 'assistant'" class="message-role">
-                  <span class="agent-avatar">
+                  <span class="agent-avatar" :data-agent="getMessageAgentId(msg)">
                     <img :src="getMessageAgentIcon(msg)" width="14" height="14" alt="" />
                   </span>
                   <span class="message-role-name">{{ getMessageAgentName(msg) }}</span>
@@ -489,6 +533,19 @@ function toggleUserMessageExpanded(messageId: string): void {
                       :is-dark="isDark"
                       :code-block-props="CODE_BLOCK_PROPS"
                     />
+                    <div
+                      v-if="showStreamIdleIndicator(msg)"
+                      class="thinking-indicator thinking-indicator--inline thinking-indicator--trailing"
+                    >
+                      <div class="thinking-dots">
+                        <span class="dot"></span>
+                        <span class="dot"></span>
+                        <span class="dot"></span>
+                      </div>
+                      <span class="thinking-text"
+                        >{{ t('chat.thinking') }} {{ waitingSeconds }}s</span
+                      >
+                    </div>
                     <button
                       v-if="getPlanIdForMessage(msg.id)"
                       type="button"
@@ -619,12 +676,9 @@ function toggleUserMessageExpanded(messageId: string): void {
                       <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
                     </svg>
                   </button>
-                  <span v-if="msg.usage" class="action-tokens"
-                    >输入 {{ msg.usage.inputTokens }} token 输出
-                    {{ msg.usage.outputTokens }} token<template v-if="msg.usage.costUSD">
-                      成本 ${{ msg.usage.costUSD.toFixed(4) }}</template
-                    ></span
-                  >
+                  <span v-if="msg.usage" class="action-tokens">{{
+                    formatTokenUsageSummary(msg.usage)
+                  }}</span>
                   <span class="action-time">{{ formatTime(msg.createdAt) }}</span>
                 </div>
                 <div v-if="debugMode && msg.role === 'assistant'" class="debug-panel">
@@ -649,7 +703,7 @@ function toggleUserMessageExpanded(messageId: string): void {
             </template>
             <template #after>
               <div v-if="showStandaloneThinking" class="thinking-indicator">
-                <span class="agent-avatar">
+                <span class="agent-avatar" :data-agent="waitingAgentId">
                   <img :src="waitingAgentIcon" width="14" height="14" alt="" />
                 </span>
                 <div class="thinking-dots">
@@ -865,8 +919,41 @@ html.dark .approval-inline-tag {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #f5e6df;
+  background: color-mix(in srgb, var(--content-text) 6%, var(--content-bg));
+  border: 1px solid color-mix(in srgb, var(--content-text) 10%, transparent);
   flex-shrink: 0;
+}
+
+.agent-avatar[data-agent='claude-code'] {
+  background: #f5e6df;
+  border-color: transparent;
+}
+
+.agent-avatar[data-agent='cursor'] {
+  background: #eceef3;
+  border-color: transparent;
+}
+
+.agent-avatar[data-agent='codex'] {
+  background: #e8f5ee;
+  border-color: transparent;
+}
+
+html.dark .agent-avatar {
+  background: color-mix(in srgb, var(--content-text) 8%, transparent);
+  border-color: color-mix(in srgb, var(--content-text) 12%, transparent);
+}
+
+html.dark .agent-avatar[data-agent='claude-code'] {
+  background: rgba(245, 230, 223, 0.18);
+}
+
+html.dark .agent-avatar[data-agent='cursor'] {
+  background: rgba(236, 238, 243, 0.12);
+}
+
+html.dark .agent-avatar[data-agent='codex'] {
+  background: rgba(232, 245, 238, 0.12);
 }
 
 .message-content {
@@ -952,6 +1039,13 @@ html.dark .approval-inline-tag {
 .message.assistant .message-content :deep(.markstream-vue) {
   width: 100%;
   max-width: 100%;
+}
+
+.message.assistant .message-content :deep(.chat-browser-link-wrap a) {
+  color: var(--accent-color);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
 }
 
 .message.assistant .message-content :deep(.code-block-container) {
@@ -1063,6 +1157,10 @@ html.dark .approval-inline-tag {
 
 .thinking-indicator--inline {
   padding: var(--spacing-xs) 0;
+}
+
+.thinking-indicator--trailing {
+  margin-top: var(--spacing-xs);
 }
 
 .thinking-dots {

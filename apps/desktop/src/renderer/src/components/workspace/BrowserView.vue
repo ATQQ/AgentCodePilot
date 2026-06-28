@@ -2,9 +2,12 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useBrowserStore } from '@renderer/stores/browser.store'
+import { usePanelContextStore } from '@renderer/stores/panelContext.store'
+import { normalizeBrowserUrl } from '@renderer/utils/extractUrls'
 
 const { t } = useI18n()
 const browserStore = useBrowserStore()
+const panelContextStore = usePanelContextStore()
 
 const inputUrl = ref('')
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -35,10 +38,16 @@ watch(activeUrl, (url) => {
   inputUrl.value = url ?? ''
 })
 
+const htmlBaseDirs = computed(() =>
+  panelContextStore.availableFolders.length
+    ? panelContextStore.availableFolders.map((folder) => folder.path)
+    : panelContextStore.effectivePanelCwd
+      ? [panelContextStore.effectivePanelCwd]
+      : []
+)
+
 function normalizeUrl(raw: string): string | null {
-  const trimmed = raw.trim()
-  if (!trimmed) return null
-  return trimmed.startsWith('http') ? trimmed : `https://${trimmed}`
+  return normalizeBrowserUrl(raw, { htmlBaseDirs: htmlBaseDirs.value })
 }
 
 function navigateTo(raw: string): void {
@@ -91,6 +100,16 @@ function onDocumentClick(e: MouseEvent): void {
 }
 
 function truncateUrl(url: string, max = 48): string {
+  if (url.startsWith('local-file://')) {
+    try {
+      const filePath = decodeURIComponent(new URL(url).pathname.replace(/^\/+/, ''))
+      const fileName = filePath.split('/').pop() ?? filePath
+      if (fileName.length <= max) return fileName
+      return `${fileName.slice(0, max - 1)}…`
+    } catch {
+      /* fall through */
+    }
+  }
   if (url.length <= max) return url
   return `${url.slice(0, max - 1)}…`
 }

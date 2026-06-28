@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { AgentConfig } from '@renderer/types'
+import { useModelStore } from '@renderer/stores/model.store'
 
 export const useAgentStore = defineStore('agent', () => {
   const agents = ref<AgentConfig[]>([])
@@ -16,8 +17,14 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
-  function selectAgent(id: string): void {
+  function selectAgent(id: string, options?: { fetchCatalog?: boolean }): void {
     selectedAgentId.value = id
+    const modelStore = useModelStore()
+    if (options?.fetchCatalog === false) {
+      modelStore.activateAgentCatalog(id)
+      return
+    }
+    void modelStore.fetchCatalog(id)
   }
 
   function getAgentName(id: string): string {
