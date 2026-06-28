@@ -1113,8 +1113,8 @@ html.dark .conv-approval-tag {
 }
 
 .conv-status-tag.completed {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: #dcfce7;
+  color: #166534;
 }
 
 html.dark .conv-status-tag.in-progress {
@@ -1123,8 +1123,8 @@ html.dark .conv-status-tag.in-progress {
 }
 
 html.dark .conv-status-tag.completed {
-  background: rgba(156, 163, 175, 0.15);
-  color: #9ca3af;
+  background: rgba(52, 211, 153, 0.15);
+  color: #6ee7b7;
 }
 
 .conv-time {
