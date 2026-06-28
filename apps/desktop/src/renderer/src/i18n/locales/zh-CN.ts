@@ -90,7 +90,8 @@ export default {
     expandMessage: '展开全文',
     collapseMessage: '收起',
     closePreview: '关闭预览',
-    closePreviewHint: '按 Esc 关闭'
+    closePreviewHint: '按 Esc 关闭',
+    openInBrowser: '在浏览器中打开'
   },
   approval: {
     waitingTag: '等待批准',

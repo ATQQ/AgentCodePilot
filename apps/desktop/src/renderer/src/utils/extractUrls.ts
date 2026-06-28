@@ -82,7 +82,7 @@ function resolveHtmlPaths(raw: string, baseDirs: string[]): string[] {
 
   const fileUrlPath = withoutQuery.startsWith('file:///') ? decodeFileUrl(withoutQuery) : null
   const candidate = fileUrlPath ?? withoutQuery
-  if (!candidate || candidate.startsWith('~')) return []
+  if (!candidate || candidate.startsWith('~') || candidate.startsWith('@')) return []
 
   if (isAbsolutePath(candidate)) {
     const normalized = normalizePath(candidate)
@@ -145,6 +145,15 @@ export function normalizeBrowserUrl(
   }
 
   return `https://${trimmed}`
+}
+
+export function resolveBrowserTarget(raw: string, htmlBaseDirs: string[]): string | null {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  if (/^https?:\/\//i.test(trimmed)) return trimmed.replace(TRAILING_PUNCT, '')
+  if (/^local-file:\/\//i.test(trimmed)) return trimmed
+  const htmlUrls = extractLocalHtmlUrls(trimmed, htmlBaseDirs)
+  return htmlUrls[0] ?? null
 }
 
 export function extractBrowserUrlsFromTexts(

@@ -4,7 +4,9 @@ import '@renderer/utils/monacoWorkers'
 
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
+import { setCustomComponents } from 'markstream-vue'
 import { setupMarkstreamCore } from './markstream-setup'
+import ChatBrowserLink from './components/chat/ChatBrowserLink.vue'
 import App from './App.vue'
 import router from './router'
 import i18n from './i18n'
@@ -35,5 +37,6 @@ workspaceStore.loadProjects().then(() => {
 chatStore.initAgentEventListener()
 chatStore.initApprovalNavigateListener()
 setupMarkstreamCore()
+setCustomComponents('chat', { link: ChatBrowserLink })
 
 app.mount('#app')

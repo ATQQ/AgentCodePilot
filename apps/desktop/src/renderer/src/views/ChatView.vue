@@ -1041,6 +1041,13 @@ html.dark .agent-avatar[data-agent='codex'] {
   max-width: 100%;
 }
 
+.message.assistant .message-content :deep(.chat-browser-link-wrap a) {
+  color: var(--accent-color);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
 .message.assistant .message-content :deep(.code-block-container) {
   width: 100%;
   max-width: 100%;
