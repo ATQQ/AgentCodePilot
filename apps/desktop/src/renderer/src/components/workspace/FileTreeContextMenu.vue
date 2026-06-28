@@ -51,7 +51,12 @@ function clampMenuPosition(
   }
 }
 
-async function open(x: number, y: number, entry: FileEntry | null, targetDir: string): Promise<void> {
+async function open(
+  x: number,
+  y: number,
+  entry: FileEntry | null,
+  targetDir: string
+): Promise<void> {
   state.visible = true
   state.x = x
   state.y = y
@@ -59,7 +64,12 @@ async function open(x: number, y: number, entry: FileEntry | null, targetDir: st
   state.targetDir = targetDir
   await nextTick()
   const menu = menuRef.value
-  const pos = clampMenuPosition(state.x, state.y, menu?.offsetWidth ?? 200, menu?.offsetHeight ?? 320)
+  const pos = clampMenuPosition(
+    state.x,
+    state.y,
+    menu?.offsetWidth ?? 200,
+    menu?.offsetHeight ?? 320
+  )
   state.x = pos.x
   state.y = pos.y
 }
@@ -142,16 +152,10 @@ defineExpose({ open, close })
 
           <div class="ctx-divider" />
 
-          <button
-            class="ctx-item"
-            @click="onAction(() => emit('copyAbsolutePath', state.entry!))"
-          >
+          <button class="ctx-item" @click="onAction(() => emit('copyAbsolutePath', state.entry!))">
             {{ t('workspace.fileTree.contextMenu.copyAbsolutePath') }}
           </button>
-          <button
-            class="ctx-item"
-            @click="onAction(() => emit('copyRelativePath', state.entry!))"
-          >
+          <button class="ctx-item" @click="onAction(() => emit('copyRelativePath', state.entry!))">
             {{ t('workspace.fileTree.contextMenu.copyRelativePath') }}
           </button>
 

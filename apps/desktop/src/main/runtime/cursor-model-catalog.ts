@@ -1,11 +1,12 @@
-import type { AgentModelOption, ModelCatalogResult, ModelCatalogSource } from '../../shared/agent-model'
+import type {
+  AgentModelOption,
+  ModelCatalogResult,
+  ModelCatalogSource
+} from '../../shared/agent-model'
 import { resolveApiKey } from './agent-auth'
 import { getAgentConfig } from './agent-config'
 import { loadCursorSdk } from './cursor-sdk-loader'
-import {
-  canReuseDiscoveryCache,
-  getExternalConfigFingerprint
-} from './model-config-fingerprint'
+import { canReuseDiscoveryCache, getExternalConfigFingerprint } from './model-config-fingerprint'
 
 const FALLBACK_MODELS: AgentModelOption[] = [
   { id: 'composer-2.5', name: 'Composer 2.5', description: 'Default Cursor agent model' },

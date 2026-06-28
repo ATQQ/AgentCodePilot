@@ -7,7 +7,9 @@ export function isSdkSessionId(sessionId: string): boolean {
   return sessionId.startsWith('agent-')
 }
 
-export function resolveCliResumeSessionId(sessionId: string | null | undefined): string | undefined {
+export function resolveCliResumeSessionId(
+  sessionId: string | null | undefined
+): string | undefined {
   if (!sessionId || isSdkSessionId(sessionId)) return undefined
   return sessionId
 }

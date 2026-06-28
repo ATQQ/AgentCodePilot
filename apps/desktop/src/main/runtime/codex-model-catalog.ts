@@ -1,9 +1,10 @@
-import type { AgentModelOption, ModelCatalogResult, ModelCatalogSource } from '../../shared/agent-model'
+import type {
+  AgentModelOption,
+  ModelCatalogResult,
+  ModelCatalogSource
+} from '../../shared/agent-model'
 import { getAgentConfig } from './agent-config'
-import {
-  canReuseDiscoveryCache,
-  getExternalConfigFingerprint
-} from './model-config-fingerprint'
+import { canReuseDiscoveryCache, getExternalConfigFingerprint } from './model-config-fingerprint'
 import {
   fetchCodexProviderModels,
   readCodexLocalProfile,
@@ -45,18 +46,25 @@ function mapProviderModels(
   return items.map((item) => ({
     id: item.id,
     name: item.id,
-    description: item.owned_by
-      ? `${providerLabel ?? 'provider'} · ${item.owned_by}`
-      : providerLabel
+    description: item.owned_by ? `${providerLabel ?? 'provider'} · ${item.owned_by}` : providerLabel
   }))
 }
 
-function ensureModelInList(models: AgentModelOption[], modelId: string, label?: string): AgentModelOption[] {
+function ensureModelInList(
+  models: AgentModelOption[],
+  modelId: string,
+  label?: string
+): AgentModelOption[] {
   if (models.some((model) => model.id === modelId)) return models
-  return [{ id: modelId, name: modelId, description: label ?? 'From ~/.codex/config.toml' }, ...models]
+  return [
+    { id: modelId, name: modelId, description: label ?? 'From ~/.codex/config.toml' },
+    ...models
+  ]
 }
 
-function modelsFromLocalConfigOnly(profile: NonNullable<ReturnType<typeof readCodexLocalProfile>>): {
+function modelsFromLocalConfigOnly(
+  profile: NonNullable<ReturnType<typeof readCodexLocalProfile>>
+): {
   models: AgentModelOption[]
   defaultModelId: string | null
   source: ModelCatalogSource
@@ -76,7 +84,11 @@ function modelsFromLocalConfigOnly(profile: NonNullable<ReturnType<typeof readCo
   }
 
   if (models.length === 0) {
-    return { models: FALLBACK_MODELS, defaultModelId: FALLBACK_MODELS[0]?.id ?? null, source: 'fallback' }
+    return {
+      models: FALLBACK_MODELS,
+      defaultModelId: FALLBACK_MODELS[0]?.id ?? null,
+      source: 'fallback'
+    }
   }
 
   return { models, defaultModelId, source: 'codex-config' }

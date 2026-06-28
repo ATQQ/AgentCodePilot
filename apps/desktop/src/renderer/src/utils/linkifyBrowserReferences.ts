@@ -159,7 +159,10 @@ function applyMarkdownLinks(text: string, matches: BrowserRefMatch[]): string {
 
 function linkifyPlainSegment(text: string, htmlBaseDirs: string[]): string {
   const inline = findInlineCodeMatches(text, htmlBaseDirs)
-  const protectedRanges = [...inline.protectedRanges, ...findPatternRanges(text, MARKDOWN_LINK_PATTERN)]
+  const protectedRanges = [
+    ...inline.protectedRanges,
+    ...findPatternRanges(text, MARKDOWN_LINK_PATTERN)
+  ]
   const refMatches = findBrowserRefMatches(text, htmlBaseDirs, protectedRanges)
   const matches = mergeMatches([...inline.matches, ...refMatches], [])
   return applyMarkdownLinks(text, matches)

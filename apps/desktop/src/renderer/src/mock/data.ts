@@ -4,9 +4,7 @@ export interface MockFolder {
   path: string
 }
 
-export const mockAgents: AgentConfig[] = [
-  { id: 'claude-code', name: 'Claude Code', enabled: true }
-]
+export const mockAgents: AgentConfig[] = [{ id: 'claude-code', name: 'Claude Code', enabled: true }]
 
 export const mockModels: ModelConfig[] = [
   { id: 'claude-sonnet-4', name: 'Claude Sonnet 4', provider: 'anthropic' },

@@ -84,12 +84,9 @@ function parseCliToolTiming(
     const payload = toolCall[key]
     if (!payload || typeof payload !== 'object') continue
 
-    startedMs =
-      startedMs ??
-      readTimestampMs((payload as { startedAtMs?: unknown }).startedAtMs)
+    startedMs = startedMs ?? readTimestampMs((payload as { startedAtMs?: unknown }).startedAtMs)
     completedMs =
-      completedMs ??
-      readTimestampMs((payload as { completedAtMs?: unknown }).completedAtMs)
+      completedMs ?? readTimestampMs((payload as { completedAtMs?: unknown }).completedAtMs)
 
     const result = (payload as { result?: Record<string, unknown> }).result
     if (result && typeof result === 'object' && 'success' in result) {
@@ -105,7 +102,12 @@ function parseCliToolTiming(
     }
   }
 
-  if (elapsedSeconds == null && startedMs != null && completedMs != null && completedMs >= startedMs) {
+  if (
+    elapsedSeconds == null &&
+    startedMs != null &&
+    completedMs != null &&
+    completedMs >= startedMs
+  ) {
     elapsedSeconds = (completedMs - startedMs) / 1000
   }
 
@@ -249,7 +251,9 @@ function extractAssistantText(message: unknown): string {
   const content = (message as { content?: unknown }).content
   if (!Array.isArray(content)) return ''
   return content
-    .filter((block): block is { type: string; text?: string } => Boolean(block && typeof block === 'object'))
+    .filter((block): block is { type: string; text?: string } =>
+      Boolean(block && typeof block === 'object')
+    )
     .filter((block) => block.type === 'text' && typeof block.text === 'string')
     .map((block) => block.text ?? '')
     .join('')
@@ -355,7 +359,10 @@ export async function runCursorViaCli(
         try {
           event = JSON.parse(trimmed) as Record<string, unknown>
         } catch {
-          logWarn(LOG_CATEGORY, `Non-JSON CLI line: conv=${input.conversationId}, ${trimmed.slice(0, 200)}`)
+          logWarn(
+            LOG_CATEGORY,
+            `Non-JSON CLI line: conv=${input.conversationId}, ${trimmed.slice(0, 200)}`
+          )
           return
         }
 
@@ -445,13 +452,15 @@ export async function runCursorViaCli(
         }
 
         if (type === 'connection' || type === 'retry') {
-          logInfo(LOG_CATEGORY, `CLI ${type}: conv=${input.conversationId}, ${trimmed.slice(0, 300)}`)
+          logInfo(
+            LOG_CATEGORY,
+            `CLI ${type}: conv=${input.conversationId}, ${trimmed.slice(0, 300)}`
+          )
           return
         }
 
         if (type === 'result') {
-          usage =
-            mapRawTokenUsage(event.usage as Record<string, unknown> | undefined) ?? usage
+          usage = mapRawTokenUsage(event.usage as Record<string, unknown> | undefined) ?? usage
           captureSessionId(typeof event.session_id === 'string' ? event.session_id : undefined)
 
           const isError = event.is_error === true || event.subtype === 'error'

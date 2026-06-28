@@ -17,10 +17,7 @@ export function resolveEnvValue(names: string[]): string | undefined {
   return undefined
 }
 
-export function resolveApiKey(
-  agentId: 'codex' | 'cursor',
-  envNames: string[]
-): string | undefined {
+export function resolveApiKey(agentId: 'codex' | 'cursor', envNames: string[]): string | undefined {
   const config = getAgentConfig(agentId)
   const nested = agentId === 'codex' ? config.codex?.apiKey : config.cursor?.apiKey
   if (nested?.trim()) return nested.trim()

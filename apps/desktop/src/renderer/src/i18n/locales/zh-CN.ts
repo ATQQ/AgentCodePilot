@@ -235,7 +235,8 @@ export default {
       apiKey: 'API Key',
       apiKeyPlaceholder: '输入 API Key',
       apiKeyConfigured: '已配置（留空保持不变）',
-      codexApiKeyDesc: '可选。留空时将复用本地 Codex CLI 的 ~/.codex 配置（config.toml / auth.json）；也可通过 OPENAI_API_KEY 提供',
+      codexApiKeyDesc:
+        '可选。留空时将复用本地 Codex CLI 的 ~/.codex 配置（config.toml / auth.json）；也可通过 OPENAI_API_KEY 提供',
       cursorApiKeyDesc:
         '可选。留空时将复用本地 Cursor CLI 登录（~/.cursor/cli-config.json）；也可通过 CURSOR_API_KEY 环境变量提供',
       codexSandbox: '沙箱模式',

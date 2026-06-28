@@ -206,7 +206,8 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
   function closeTabsUnderPath(path: string): void {
     const normalized = path.replace(/[/\\]+$/, '')
     const toClose = openTabs.value.filter(
-      (tab) => tab === normalized || tab.startsWith(`${normalized}/`) || tab.startsWith(`${normalized}\\`)
+      (tab) =>
+        tab === normalized || tab.startsWith(`${normalized}/`) || tab.startsWith(`${normalized}\\`)
     )
     for (const tab of toClose) {
       closeTab(tab)

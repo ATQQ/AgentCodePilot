@@ -11,10 +11,7 @@ import {
   type ModelCatalogSource
 } from '../../shared/agent-model'
 import { getAgentConfig, saveAgentConfig } from './agent-config'
-import {
-  canReuseDiscoveryCache,
-  getExternalConfigFingerprint
-} from './model-config-fingerprint'
+import { canReuseDiscoveryCache, getExternalConfigFingerprint } from './model-config-fingerprint'
 
 export { saveAgentConfig, getAgentConfig }
 
@@ -219,9 +216,7 @@ async function discoverModels(forceRefresh: boolean): Promise<{
   return snapshot
 }
 
-export async function getClaudeModelCatalog(
-  forceRefresh = false
-): Promise<ModelCatalogResult> {
+export async function getClaudeModelCatalog(forceRefresh = false): Promise<ModelCatalogResult> {
   const appConfig = readAgentConfig('claude-code')
   const { discoveredModels, discoveredDefault, discoveredSource } =
     await discoverModels(forceRefresh)

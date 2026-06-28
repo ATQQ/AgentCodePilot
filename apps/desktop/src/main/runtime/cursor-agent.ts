@@ -209,7 +209,7 @@ export class CursorAgentAdapter implements AgentAdapter {
 
     logInfo(
       LOG_CATEGORY,
-      `Resolved run options: modelId=${modelId}, cwd=${cwd}, mode=${input.planMode ? 'plan' : cursorConfig?.mode ?? 'agent'}, autoReview=${cursorConfig?.autoReview ?? approvalLevel === 'request'}, settingSources=${cursorConfig?.settingSources?.join(',') ?? '(none)'}, promptLen=${prompt.length}`
+      `Resolved run options: modelId=${modelId}, cwd=${cwd}, mode=${input.planMode ? 'plan' : (cursorConfig?.mode ?? 'agent')}, autoReview=${cursorConfig?.autoReview ?? approvalLevel === 'request'}, settingSources=${cursorConfig?.settingSources?.join(',') ?? '(none)'}, promptLen=${prompt.length}`
     )
 
     const agentCliPath = resolveAgentExecutablePath()
@@ -243,7 +243,15 @@ export class CursorAgentAdapter implements AgentAdapter {
 
     logInfo(LOG_CATEGORY, `CLI not found, falling back to SDK: conv=${input.conversationId}`)
 
-    const agent = await this.resolveAgent(input, apiKey, modelId, cwd, approvalLevel, cursorConfig, emit)
+    const agent = await this.resolveAgent(
+      input,
+      apiKey,
+      modelId,
+      cwd,
+      approvalLevel,
+      cursorConfig,
+      emit
+    )
 
     logInfo(LOG_CATEGORY, `Sending prompt: agentId=${agent.agentId}, conv=${input.conversationId}`)
 

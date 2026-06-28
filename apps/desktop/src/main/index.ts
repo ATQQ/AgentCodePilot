@@ -311,8 +311,7 @@ function emitAgentEvent(event: AgentEvent): void {
           debugInput: event.debugInput || null,
           debugOutput: event.debugOutput || null,
           stopped,
-          toolCalls:
-            finalizedTools.length > 0 ? JSON.stringify(finalizedTools) : null
+          toolCalls: finalizedTools.length > 0 ? JSON.stringify(finalizedTools) : null
         })
         savePlanFromAssistantMessage(entry.conversationId, event.messageId, content)
       } catch (e) {
@@ -479,7 +478,10 @@ function registerIpcHandlers(): void {
       planMode: payload.planMode,
       conversationId: payload.conversationId
     })
-    streamingMessages.set(assistantMsgId, createStreamingEntry(payload.conversationId, prompt, payload.agentId))
+    streamingMessages.set(
+      assistantMsgId,
+      createStreamingEntry(payload.conversationId, prompt, payload.agentId)
+    )
     const runContext = getConversationRunContext(payload.conversationId)
     const approvalLevel = getRunApprovalLevel(payload.conversationId)
     const runInput = {
@@ -532,7 +534,10 @@ function registerIpcHandlers(): void {
       planMode: payload.planMode,
       conversationId: payload.conversationId
     })
-    streamingMessages.set(assistantMsgId, createStreamingEntry(payload.conversationId, prompt, payload.agentId))
+    streamingMessages.set(
+      assistantMsgId,
+      createStreamingEntry(payload.conversationId, prompt, payload.agentId)
+    )
     const runContext = getConversationRunContext(payload.conversationId)
     const approvalLevel = getRunApprovalLevel(payload.conversationId)
     const runInput = {

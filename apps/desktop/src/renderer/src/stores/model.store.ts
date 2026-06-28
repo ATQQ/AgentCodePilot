@@ -199,10 +199,7 @@ export const useModelStore = defineStore('model', () => {
     hasAssistantMessages: boolean
   ): string {
     if (hasAssistantMessages) {
-      if (
-        conversationModelId &&
-        catalog.models.some((model) => model.id === conversationModelId)
-      ) {
+      if (conversationModelId && catalog.models.some((model) => model.id === conversationModelId)) {
         return conversationModelId
       }
       return catalog.defaultModelId

@@ -1,7 +1,8 @@
 import { toLocalFileUrl } from './localFile'
 
 const HTTP_URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`[\]]+/gi
-const HTML_PATH_REGEX = /(?:file:\/\/\/|(?:[a-zA-Z]:)?[./~]?[\w@%+=:,./\\-]*[\w@%+=:,/\\-])\.html?(?:[?#][^\s<>"{}|\\^`[\]]*)?/gi
+const HTML_PATH_REGEX =
+  /(?:file:\/\/\/|(?:[a-zA-Z]:)?[./~]?[\w@%+=:,./\\-]*[\w@%+=:,/\\-])\.html?(?:[?#][^\s<>"{}|\\^`[\]]*)?/gi
 
 const TRAILING_PUNCT = /[)\]},.;!?]+$/
 
@@ -164,10 +165,7 @@ export function extractBrowserUrlsFromTexts(
   const result: string[] = []
   const htmlBaseDirs = Array.from(new Set(options.htmlBaseDirs?.filter(Boolean) ?? []))
   for (const text of texts) {
-    for (const url of [
-      ...extractHttpUrls(text),
-      ...extractLocalHtmlUrls(text, htmlBaseDirs)
-    ]) {
+    for (const url of [...extractHttpUrls(text), ...extractLocalHtmlUrls(text, htmlBaseDirs)]) {
       if (seen.has(url)) continue
       seen.add(url)
       result.push(url)

@@ -94,12 +94,7 @@ export function mapSdkTokenUsage(usage: {
 
 export function computeDisplayTotal(usage: TokenUsageFields): number {
   if (usage.totalTokens != null && usage.totalTokens > 0) return usage.totalTokens
-  return (
-    usage.inputTokens +
-    usage.outputTokens +
-    usage.cacheReadTokens +
-    usage.cacheCreationTokens
-  )
+  return usage.inputTokens + usage.outputTokens + usage.cacheReadTokens + usage.cacheCreationTokens
 }
 
 export function formatTokenUsageSummary(usage: TokenUsageFields): string {

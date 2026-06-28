@@ -117,7 +117,7 @@ export function resolveCodexProviderApiKey(): string | undefined {
 
 export function resolveActiveCodexProvider(
   profile: CodexLocalProfile
-): CodexModelProviderConfig & { id: string } | null {
+): (CodexModelProviderConfig & { id: string }) | null {
   const providerId = profile.modelProvider
   if (!providerId) return null
 
