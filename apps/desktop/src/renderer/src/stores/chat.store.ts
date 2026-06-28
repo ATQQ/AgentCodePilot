@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { Attachment, ApprovalRequest, Conversation, Message, ToolCall } from '@renderer/types'
 import type { AgentEvent, AttachmentPayload, PlanReference } from '../../../preload/types'
 import type { ApprovalLevel } from '@renderer/types'
@@ -37,7 +37,8 @@ export const useChatStore = defineStore('chat', () => {
   const thinkingStartedAtByConversation = ref<Map<string, number>>(new Map())
   const lastStreamActivityAtByConversation = ref<Map<string, number>>(new Map())
   const completedConversationIds = ref<Set<string>>(new Set())
-  const toolUseIdAliases = ref<Map<string, string>>(new Map())
+  const completedDismissTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  const toolUseIdAliases = ref<Map<string, string>>(new Map>()
   const streamedMessageIds = ref<Set<string>>(new Set())
 
   function markMessageStreamed(messageId: string): void {
@@ -145,7 +146,15 @@ export const useChatStore = defineStore('chat', () => {
     return Math.max(0, Math.floor((Date.now() - lastActivity) / 1000))
   }
 
+  function clearCompletedDismissTimer(conversationId: string): void {
+    const timer = completedDismissTimers.get(conversationId)
+    if (!timer) return
+    clearTimeout(timer)
+    completedDismissTimers.delete(conversationId)
+  }
+
   function removeCompletedConversation(conversationId: string): void {
+    clearCompletedDismissTimer(conversationId)
     if (!completedConversationIds.value.has(conversationId)) return
     const next = new Set(completedConversationIds.value)
     next.delete(conversationId)
@@ -156,7 +165,20 @@ export const useChatStore = defineStore('chat', () => {
     const next = new Set(completedConversationIds.value)
     next.add(conversationId)
     completedConversationIds.value = next
+
+    if (activeConversationId.value === conversationId) {
+      clearCompletedDismissTimer(conversationId)
+      const timer = setTimeout(() => {
+        completedDismissTimers.delete(conversationId)
+        removeCompletedConversation(conversationId)
+      }, 3000)
+      completedDismissTimers.set(conversationId, timer)
+    }
   }
+
+  watch(activeConversationId, (_nextId, prevId) => {
+    if (prevId) clearCompletedDismissTimer(prevId)
+  })
 
   function isConversationInProgress(conversationId: string): boolean {
     return isConversationBusy(conversationId)
