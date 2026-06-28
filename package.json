@@ -41,5 +41,9 @@
       "electron-winstaller",
       "sharp"
     ]
-  }
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
 }

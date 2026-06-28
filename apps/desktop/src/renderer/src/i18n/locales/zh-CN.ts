@@ -166,7 +166,8 @@ export default {
     rememberPanelState: '按对话记忆面板状态',
     rememberPanelStateDesc: '切换对话时自动恢复右侧和底部面板的打开状态',
     browserAutoExtractLinks: '自动提取链接',
-    browserAutoExtractLinksDesc: '从终端输出和对话内容中自动识别 HTTP 链接，在浏览器中提供快捷入口',
+    browserAutoExtractLinksDesc:
+      '从终端输出和对话内容中自动识别 HTTP 链接，以及当前项目内的 .html 文件，在浏览器中提供快捷入口',
     light: '浅色',
     dark: '深色',
     system: '系统',
