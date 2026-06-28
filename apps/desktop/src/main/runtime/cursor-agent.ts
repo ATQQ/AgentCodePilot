@@ -80,6 +80,18 @@ function formatStatusError(event: Extract<SDKMessage, { type: 'status' }>): stri
   return parts.join(' · ')
 }
 
+function serializeDebugPayload(payload: unknown): string | undefined {
+  try {
+    return JSON.stringify(payload, (_key, value) => {
+      if (typeof value === 'function' || typeof value === 'symbol') return undefined
+      if (typeof value === 'string' && value.length > 8000) return `${value.slice(0, 8000)}…`
+      return value
+    })
+  } catch {
+    return JSON.stringify({ error: 'Failed to serialize debug payload' })
+  }
+}
+
 export class CursorAgentAdapter implements AgentAdapter {
   readonly id = 'cursor'
   readonly name = 'Cursor'
@@ -265,10 +277,12 @@ export class CursorAgentAdapter implements AgentAdapter {
     })
 
     let usage: TokenUsage | undefined
+    const rawStreamEvents: unknown[] = []
 
     try {
       for await (const event of run.stream()) {
         if (controller.signal.aborted) break
+        rawStreamEvents.push(summarizeStreamEvent(event))
         if (event.type !== 'assistant') {
           logInfo(
             LOG_CATEGORY,
@@ -307,6 +321,26 @@ export class CursorAgentAdapter implements AgentAdapter {
         conversationId: input.conversationId,
         messageId: input.messageId,
         usage,
+        debugInput: serializeDebugPayload({
+          prompt,
+          modelId,
+          cwd,
+          mode: input.planMode ? 'plan' : cursorConfig?.mode,
+          sessionId: input.agentSessionId ?? agent.agentId,
+          localOptions: {
+            cwd,
+            autoReview: cursorConfig?.autoReview ?? approvalLevel === 'request',
+            enableAgentRetries: true,
+            ...(cursorConfig?.settingSources?.length
+              ? { settingSources: cursorConfig.settingSources }
+              : {})
+          }
+        }),
+        debugOutput: serializeDebugPayload({
+          streamEvents: rawStreamEvents,
+          result: result.result,
+          usage
+        }),
         stopped: controller.signal.aborted || result.status === 'cancelled' || undefined
       })
     } catch (error: unknown) {

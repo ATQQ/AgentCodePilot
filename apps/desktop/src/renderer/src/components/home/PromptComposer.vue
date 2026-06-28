@@ -244,6 +244,7 @@ function cancelUrlInput(): void {
 
 function handleUrlKeydown(e: KeyboardEvent): void {
   if (e.key === 'Enter') {
+    if (e.isComposing) return
     e.preventDefault()
     confirmUrl()
   } else if (e.key === 'Escape') {

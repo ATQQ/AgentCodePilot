@@ -255,6 +255,18 @@ function extractAssistantText(message: unknown): string {
     .join('')
 }
 
+function serializeDebugPayload(payload: unknown): string | undefined {
+  try {
+    return JSON.stringify(payload, (_key, value) => {
+      if (typeof value === 'function' || typeof value === 'symbol') return undefined
+      if (typeof value === 'string' && value.length > 8000) return `${value.slice(0, 8000)}…`
+      return value
+    })
+  } catch {
+    return JSON.stringify({ error: 'Failed to serialize debug payload' })
+  }
+}
+
 export async function runCursorViaCli(
   input: AgentRunInput,
   emit: (event: AgentEvent) => void,
@@ -280,6 +292,7 @@ export async function runCursorViaCli(
   let completed = false
   let usage: TokenUsage | undefined
   let stderrBuffer = ''
+  const rawLines: Record<string, unknown>[] = []
 
   const finishWithError = (error: string): void => {
     if (completed) return
@@ -301,6 +314,16 @@ export async function runCursorViaCli(
       conversationId: input.conversationId,
       messageId: input.messageId,
       usage,
+      debugInput: serializeDebugPayload({
+        prompt: options.prompt,
+        args,
+        cwd: options.cwd,
+        modelId: options.modelId
+      }),
+      debugOutput: serializeDebugPayload({
+        lines: rawLines,
+        stderr: stderrBuffer
+      }),
       stopped: stopped || undefined
     })
   }
@@ -335,6 +358,8 @@ export async function runCursorViaCli(
           logWarn(LOG_CATEGORY, `Non-JSON CLI line: conv=${input.conversationId}, ${trimmed.slice(0, 200)}`)
           return
         }
+
+        rawLines.push(event)
 
         const type = String(event.type ?? '')
 

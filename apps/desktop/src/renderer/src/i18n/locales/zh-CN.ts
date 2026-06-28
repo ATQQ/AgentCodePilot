@@ -17,7 +17,9 @@ export default {
     conversations: '对话',
     workspaces: '工作空间',
     noChats: '暂无聊天',
-    noWorkspaces: '暂无工作空间'
+    noWorkspaces: '暂无工作空间',
+    conversationInProgress: '进行中',
+    conversationCompleted: '完成'
   },
   home: {
     title: '我们该做什么？',

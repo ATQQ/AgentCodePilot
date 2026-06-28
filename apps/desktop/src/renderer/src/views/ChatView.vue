@@ -123,6 +123,20 @@ function isThinkingMessage(msg: Message): boolean {
   return chatStore.isConversationThinking(convId)
 }
 
+function hasRunningTools(msg: Message): boolean {
+  return msg.toolCalls?.some((tc) => tc.status === 'pending' || tc.status === 'running') ?? false
+}
+
+function showStreamIdleIndicator(msg: Message): boolean {
+  const convId = chatStore.activeConversationId
+  if (!convId || msg.role !== 'assistant' || msg.stopped) return false
+  if (msg.id !== chatStore.getActiveAssistantMessageId(convId)) return false
+  if (!chatStore.isConversationBusy(convId)) return false
+  if (!msg.content.trim() && !msg.toolCalls?.length) return false
+  if (hasRunningTools(msg)) return false
+  return chatStore.getStreamIdleSeconds(convId) >= 2
+}
+
 const showStandaloneThinking = computed(() => {
   if (!chatStore.activeConversationId) return false
   if (!chatStore.isWaiting) return false
@@ -136,15 +150,44 @@ const isAssistantThinking = computed(() => {
   return convId ? chatStore.isConversationThinking(convId) : false
 })
 
+const needsWaitingTimer = computed(() => {
+  const convId = chatStore.activeConversationId
+  if (!convId || !chatStore.isConversationBusy(convId)) {
+    return isAssistantThinking.value
+  }
+  const activeId = chatStore.getActiveAssistantMessageId(convId)
+  const msg = activeId
+    ? chatStore.activeConversation?.messages.find((m) => m.id === activeId)
+    : undefined
+  if (!msg || (!msg.content.trim() && !msg.toolCalls?.length)) {
+    return isAssistantThinking.value
+  }
+  if (hasRunningTools(msg)) return false
+  return true
+})
+
 function refreshWaitingSeconds(): void {
   const convId = chatStore.activeConversationId
-  waitingSeconds.value = convId ? chatStore.getThinkingElapsedSeconds(convId) : 0
+  if (!convId) {
+    waitingSeconds.value = 0
+    return
+  }
+  const activeId = chatStore.getActiveAssistantMessageId(convId)
+  const msg = activeId
+    ? chatStore.activeConversation?.messages.find((m) => m.id === activeId)
+    : undefined
+  const hasStartedReply = Boolean(msg && (msg.content.trim() || msg.toolCalls?.length))
+  if (hasStartedReply && !hasRunningTools(msg!) && chatStore.isConversationBusy(convId)) {
+    waitingSeconds.value = chatStore.getStreamIdleSeconds(convId)
+  } else {
+    waitingSeconds.value = chatStore.getThinkingElapsedSeconds(convId)
+  }
 }
 
 watch(
-  () => isAssistantThinking.value,
-  (thinking) => {
-    if (thinking) {
+  () => needsWaitingTimer.value,
+  (active) => {
+    if (active) {
       refreshWaitingSeconds()
       waitingTimer = setInterval(refreshWaitingSeconds, 1000)
       scheduleScrollToBottom()
@@ -159,7 +202,7 @@ watch(
 watch(
   () => chatStore.activeConversationId,
   () => {
-    if (isAssistantThinking.value) {
+    if (needsWaitingTimer.value) {
       refreshWaitingSeconds()
     }
   }
@@ -490,6 +533,19 @@ function toggleUserMessageExpanded(messageId: string): void {
                       :is-dark="isDark"
                       :code-block-props="CODE_BLOCK_PROPS"
                     />
+                    <div
+                      v-if="showStreamIdleIndicator(msg)"
+                      class="thinking-indicator thinking-indicator--inline thinking-indicator--trailing"
+                    >
+                      <div class="thinking-dots">
+                        <span class="dot"></span>
+                        <span class="dot"></span>
+                        <span class="dot"></span>
+                      </div>
+                      <span class="thinking-text"
+                        >{{ t('chat.thinking') }} {{ waitingSeconds }}s</span
+                      >
+                    </div>
                     <button
                       v-if="getPlanIdForMessage(msg.id)"
                       type="button"
@@ -1094,6 +1150,10 @@ html.dark .agent-avatar[data-agent='codex'] {
 
 .thinking-indicator--inline {
   padding: var(--spacing-xs) 0;
+}
+
+.thinking-indicator--trailing {
+  margin-top: var(--spacing-xs);
 }
 
 .thinking-dots {

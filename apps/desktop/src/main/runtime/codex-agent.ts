@@ -74,6 +74,17 @@ function toolInputForItem(item: ThreadItem): Record<string, unknown> {
   }
 }
 
+function serializeDebugPayload(payload: unknown): string | undefined {
+  try {
+    return JSON.stringify(payload, (_key, value) => {
+      if (typeof value === 'function' || typeof value === 'symbol') return undefined
+      return value
+    })
+  } catch {
+    return JSON.stringify({ error: 'Failed to serialize debug payload' })
+  }
+}
+
 export class CodexAgentAdapter implements AgentAdapter {
   readonly id = 'codex'
   readonly name = 'Codex'
@@ -174,9 +185,11 @@ export class CodexAgentAdapter implements AgentAdapter {
 
       const streamed = await thread.runStreamed(prompt, { signal: controller.signal })
       let usage: TokenUsage | undefined
+      const rawEvents: unknown[] = []
 
       for await (const event of streamed.events) {
         if (controller.signal.aborted) break
+        rawEvents.push(event)
         this.handleThreadEvent(event, input, emit, (nextUsage) => {
           usage = nextUsage
         })
@@ -197,6 +210,8 @@ export class CodexAgentAdapter implements AgentAdapter {
         conversationId: input.conversationId,
         messageId: input.messageId,
         usage,
+        debugInput: serializeDebugPayload({ prompt, threadOptions, sessionId }),
+        debugOutput: serializeDebugPayload({ events: rawEvents, threadId: thread.id }),
         stopped: controller.signal.aborted || undefined
       })
     } catch (error: unknown) {

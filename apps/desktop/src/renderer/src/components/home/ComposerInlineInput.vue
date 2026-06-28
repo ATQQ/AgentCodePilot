@@ -20,6 +20,7 @@ const emit = defineEmits<{
 
 const editorRef = ref<HTMLDivElement | null>(null)
 const isEmpty = ref(true)
+const isComposing = ref(false)
 const tooltip = ref<{ text: string; x: number; y: number } | null>(null)
 
 const MAX_HEIGHT = 200
@@ -196,6 +197,7 @@ function handleInput(): void {
 
 function handleKeydown(e: KeyboardEvent): void {
   if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.isComposing || isComposing.value) return
     e.preventDefault()
     emit('submit')
     return
@@ -334,6 +336,8 @@ defineExpose({
       spellcheck="false"
       @input="handleInput"
       @keydown="handleKeydown"
+      @compositionstart="isComposing = true"
+      @compositionend="isComposing = false"
       @paste="handlePaste"
       @mouseover="handleMouseOver"
       @mouseout="handleMouseOut"
