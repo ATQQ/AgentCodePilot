@@ -13,9 +13,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   select: [path: string]
-  stage: [path: string]
-  unstage: [path: string]
-  discard: [path: string]
+  stage: [paths: string[]]
+  unstage: [paths: string[]]
+  discard: [paths: string[]]
 }>()
 
 const filter = computed(() => props.filter ?? '')
@@ -65,9 +65,9 @@ function isExpanded(path: string): boolean {
         :is-expanded="isExpanded"
         @toggle-dir="toggleDir"
         @select="(path) => emit('select', path)"
-        @stage="(path) => emit('stage', path)"
-        @unstage="(path) => emit('unstage', path)"
-        @discard="(path) => emit('discard', path)"
+        @stage="(paths) => emit('stage', paths)"
+        @unstage="(paths) => emit('unstage', paths)"
+        @discard="(paths) => emit('discard', paths)"
       />
     </div>
   </div>
@@ -169,8 +169,13 @@ function isExpanded(path: string): boolean {
 :deep(.compressed-path-row) {
   display: flex;
   align-items: center;
+  gap: 4px;
   padding: 3px 8px 1px;
   box-sizing: border-box;
+}
+
+:deep(.compressed-path-row:hover .file-actions) {
+  display: inline-flex;
 }
 
 :deep(.compressed-path-label) {
@@ -181,6 +186,10 @@ function isExpanded(path: string): boolean {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+:deep(.file-row.dir:hover .file-actions) {
+  display: inline-flex;
 }
 
 :deep(.file-actions) {

@@ -302,7 +302,11 @@ export async function commitChanges(cwd: string, message: string): Promise<void>
   const trimmed = message.trim()
   if (!trimmed) throw new Error('提交消息不能为空')
   const git = simpleGit(cwd)
-  await git.commit(trimmed)
+  try {
+    await git.commit(trimmed)
+  } catch (err) {
+    throw formatGitCommandError(err, '提交失败')
+  }
 }
 
 export async function pushChanges(cwd: string): Promise<void> {
@@ -311,9 +315,19 @@ export async function pushChanges(cwd: string): Promise<void> {
   try {
     await git.push()
   } catch (err) {
-    const msg = err instanceof Error ? err.message : '推送失败'
-    throw new Error(msg)
+    throw formatGitCommandError(err, '推送失败')
   }
+}
+
+function formatGitCommandError(err: unknown, fallback: string): Error {
+  if (!(err instanceof Error)) return new Error(fallback)
+  let message = err.message.trim()
+  message = message.replace(/^GitError:\s*/i, '').trim()
+  const stackIdx = message.indexOf('\n    at ')
+  if (stackIdx > 0) {
+    message = message.slice(0, stackIdx).trim()
+  }
+  return new Error(message || fallback)
 }
 
 export async function getStagedDiff(cwd: string): Promise<string> {

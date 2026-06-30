@@ -913,7 +913,10 @@ function registerIpcHandlers(): void {
     getRecentLog(cwd, limit ?? 10)
   )
 
-  ipcMain.handle(IPC_CHANNELS.AGENT_RUN_UTILITY, (_e, payload) => runUtilityAgent(payload))
+  ipcMain.handle(IPC_CHANNELS.AGENT_RUN_UTILITY, async (_e, payload) => {
+    await ensureAgentRegistry()
+    return runUtilityAgent(payload)
+  })
 
   // --- Workspace files ---
 

@@ -1,10 +1,23 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useLayoutStore } from '@renderer/stores/layout.store'
 import { useGitStore } from '@renderer/stores/git.store'
 import EnvironmentInfoPopover from '@renderer/components/environment/EnvironmentInfoPopover.vue'
 
 const layoutStore = useLayoutStore()
 const gitStore = useGitStore()
+
+const changesSummary = computed(() => gitStore.getScopeSummary(layoutStore.changesScope))
+
+const scopeBadgeLabel = computed(() =>
+  layoutStore.changesScope === 'staged' ? '已暂存' : '未暂存'
+)
+
+const envBadgeTitle = computed(() => {
+  if (!gitStore.status?.isRepo) return '环境信息'
+  const { additions, deletions } = changesSummary.value
+  return `环境信息（${scopeBadgeLabel.value}：+${additions} / -${deletions}）`
+})
 
 function toggleEnvInfo(): void {
   layoutStore.toggleEnvInfo()
@@ -28,7 +41,7 @@ function toggleRight(): void {
         class="topbar-btn env-btn"
         data-env-trigger
         :class="{ active: layoutStore.envInfoVisible || layoutStore.envInfoPinned }"
-        :title="layoutStore.envInfoPinned ? '环境信息（已常驻）' : '环境信息'"
+        :title="layoutStore.envInfoPinned ? `环境信息（已常驻，${scopeBadgeLabel}）` : envBadgeTitle"
         @click="toggleEnvInfo"
       >
         <svg
@@ -44,8 +57,9 @@ function toggleRight(): void {
           <circle cx="8" cy="8.5" r="1.2" />
         </svg>
         <span v-if="gitStore.status?.isRepo" class="env-badge">
-          <span class="add">+{{ gitStore.status.additions }}</span>
-          <span class="del">-{{ gitStore.status.deletions }}</span>
+          <span class="scope-tag">{{ layoutStore.changesScope === 'staged' ? 'S' : 'U' }}</span>
+          <span class="add">+{{ changesSummary.additions }}</span>
+          <span class="del">-{{ changesSummary.deletions }}</span>
         </span>
       </button>
 
@@ -133,7 +147,15 @@ function toggleRight(): void {
 .env-badge {
   font-size: var(--font-size-xs);
   display: flex;
+  align-items: center;
   gap: 4px;
+}
+
+.scope-tag {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--content-text-tertiary);
+  line-height: 1;
 }
 
 .add {

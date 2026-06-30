@@ -52,6 +52,7 @@ interface ConversationPanelState {
   bottomPanelVisible: boolean
   activeExtensionTab: ExtensionTab
   reviewScope: ReviewScope
+  changesScope: ReviewScope
 }
 
 function loadPersist(): LayoutPersist {
@@ -79,6 +80,7 @@ export interface LayoutStoreReturn {
   homeRouteActive: Ref<boolean>
   activeExtensionTab: Ref<ExtensionTab>
   reviewScope: Ref<ReviewScope>
+  changesScope: Ref<ReviewScope>
   activePlanId: Ref<string | null>
   plansScope: Ref<PlansScope>
   plansOwnerType: Ref<PlanOwnerType | null>
@@ -109,6 +111,7 @@ export interface LayoutStoreReturn {
     }
   ) => void
   setDiffViewMode: (mode: DiffViewMode) => void
+  setChangesScope: (scope: ReviewScope) => void
   setHomeRouteActive: (active: boolean) => void
 }
 
@@ -129,6 +132,7 @@ export const useLayoutStore = defineStore('layout', (): LayoutStoreReturn => {
   const bottomPanelVisible = ref(false)
   const activeExtensionTab = ref<ExtensionTab>('review')
   const reviewScope = ref<ReviewScope>('unstaged')
+  const changesScope = ref<ReviewScope>('unstaged')
   const activePlanId = ref<string | null>(null)
   const plansScope = ref<PlansScope>('conversation')
   const plansOwnerType = ref<PlanOwnerType | null>(null)
@@ -170,7 +174,8 @@ export const useLayoutStore = defineStore('layout', (): LayoutStoreReturn => {
       rightPanelVisible: rightPanelVisible.value,
       bottomPanelVisible: bottomPanelVisible.value,
       activeExtensionTab: activeExtensionTab.value,
-      reviewScope: reviewScope.value
+      reviewScope: reviewScope.value,
+      changesScope: changesScope.value
     }
   }
 
@@ -179,6 +184,7 @@ export const useLayoutStore = defineStore('layout', (): LayoutStoreReturn => {
     bottomPanelVisible.value = state.bottomPanelVisible
     activeExtensionTab.value = state.activeExtensionTab
     reviewScope.value = state.reviewScope
+    changesScope.value = state.changesScope ?? state.reviewScope
   }
 
   function handleConversationSwitch(nextId: string | null): void {
@@ -307,11 +313,18 @@ export const useLayoutStore = defineStore('layout', (): LayoutStoreReturn => {
     bottomPanelVisible.value = !bottomPanelVisible.value
   }
 
+  function setChangesScope(scope: ReviewScope): void {
+    changesScope.value = scope
+    if (activeExtensionTab.value === 'review') {
+      reviewScope.value = scope
+    }
+  }
+
   function openExtensionTab(tab: ExtensionTab, options?: { reviewScope?: ReviewScope }): void {
     activeExtensionTab.value = tab
     rightPanelVisible.value = true
     if (options?.reviewScope) {
-      reviewScope.value = options.reviewScope
+      setChangesScope(options.reviewScope)
     }
   }
 
@@ -389,6 +402,7 @@ export const useLayoutStore = defineStore('layout', (): LayoutStoreReturn => {
     homeRouteActive,
     activeExtensionTab,
     reviewScope,
+    changesScope,
     activePlanId,
     plansScope,
     plansOwnerType,
@@ -412,6 +426,7 @@ export const useLayoutStore = defineStore('layout', (): LayoutStoreReturn => {
     openReviewForCommit,
     openPlansPanel,
     setDiffViewMode,
+    setChangesScope,
     setHomeRouteActive
   }
 }) as unknown as () => LayoutStore

@@ -3,6 +3,7 @@ import { useSettingsStore } from '@renderer/stores/settings.store'
 import { useAgentStore } from '@renderer/stores/agent.store'
 import { useModelStore } from '@renderer/stores/model.store'
 import { usePanelContextStore } from '@renderer/stores/panelContext.store'
+import { useChatStore } from '@renderer/stores/chat.store'
 import { DEFAULT_COMMIT_MESSAGE_PROMPT } from '@renderer/constants/defaults'
 
 export type AiUtilityKey = 'commitMessage' | 'autoCommit'
@@ -16,6 +17,7 @@ export function useAiUtility(): {
   const agentStore = useAgentStore()
   const modelStore = useModelStore()
   const panelContext = usePanelContextStore()
+  const chatStore = useChatStore()
   const running = ref(false)
   const error = ref<string | null>(null)
 
@@ -23,6 +25,21 @@ export function useAiUtility(): {
     const custom = settingsStore.aiPrompts.commitMessage?.trim()
     return custom || DEFAULT_COMMIT_MESSAGE_PROMPT
   })
+
+  function resolveConversationAgentId(): string {
+    const conv = chatStore.activeConversation
+    const convId = chatStore.activeConversationId
+    return (
+      conv?.agentId ??
+      (convId ? chatStore.getPendingAgent(convId) : undefined) ??
+      agentStore.selectedAgentId ??
+      'claude-code'
+    )
+  }
+
+  function resolveConversationModelId(): string {
+    return modelStore.getEffectiveModelId(chatStore.activeConversation?.modelId)
+  }
 
   async function generateCommitMessage(): Promise<string | null> {
     const cwd = panelContext.effectivePanelCwd
@@ -63,14 +80,21 @@ export function useAiUtility(): {
         systemPrompt: systemPrompt.value,
         userPrompt,
         cwd,
-        agentId: agentStore.selectedAgentId,
-        modelId: modelStore.getEffectiveModelId()
+        agentId: resolveConversationAgentId(),
+        modelId: resolveConversationModelId()
       })
 
-      return result
+      const message = result
         .replace(/^```[\w]*\n?/m, '')
         .replace(/\n?```$/m, '')
         .trim()
+
+      if (!message) {
+        error.value = '未生成有效提交消息'
+        return null
+      }
+
+      return message
     } catch (err) {
       error.value = err instanceof Error ? err.message : '生成失败'
       return null

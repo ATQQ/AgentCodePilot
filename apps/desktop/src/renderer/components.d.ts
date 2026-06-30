@@ -47,6 +47,7 @@ declare module 'vue' {
     FolderSwitcher: typeof import('./src/components/layout/FolderSwitcher.vue')['default']
     GitChangedFileTree: typeof import('./src/components/workspace/GitChangedFileTree.vue')['default']
     GitCommitBar: typeof import('./src/components/workspace/GitCommitBar.vue')['default']
+    GitOperationLogDialog: typeof import('./src/components/workspace/GitOperationLogDialog.vue')['default']
     HomeEmptyState: typeof import('./src/components/home/HomeEmptyState.vue')['default']
     ImagePreviewOverlay: typeof import('./src/components/common/ImagePreviewOverlay.vue')['default']
     LinkifiedPlainText: typeof import('./src/components/chat/LinkifiedPlainText.vue')['default']

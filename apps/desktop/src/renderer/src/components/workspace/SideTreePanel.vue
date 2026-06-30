@@ -64,7 +64,7 @@ function onResize(next: number): void {
   top: 0;
   right: 0;
   bottom: 0;
-  z-index: 5;
+  z-index: 30;
   box-shadow: -4px 0 16px color-mix(in srgb, var(--content-bg) 40%, transparent);
 }
 
@@ -74,6 +74,8 @@ function onResize(next: number): void {
   flex: 1;
   min-width: 0;
   overflow: hidden;
+  position: relative;
+  z-index: 1;
 }
 
 .side-tree-header {

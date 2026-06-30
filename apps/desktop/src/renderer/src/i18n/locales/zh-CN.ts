@@ -127,7 +127,20 @@ export default {
     discardAll: '放弃所有更改',
     stageAll: '暂存所有更改',
     unstageAll: '取消暂存所有更改',
-    discardAllConfirm: '确定放弃全部 {count} 个文件的更改？此操作不可撤销。'
+    discardAllConfirm: '确定放弃全部 {count} 个文件的更改？此操作不可撤销。',
+    stageDir: '暂存目录下所有更改',
+    unstageDir: '取消暂存目录下所有更改',
+    discardDir: '放弃目录下所有更改',
+    discardDirConfirm: '确定放弃「{name}」下 {count} 个文件的更改？此操作不可撤销。',
+    discardFileConfirm: '确定放弃「{name}」的更改？此操作不可撤销。',
+    commitErrorTitle: '提交失败',
+    pushErrorTitle: '推送失败',
+    operationErrorTitle: 'Git 操作失败',
+    committing: '提交中…',
+    viewErrorLog: '查看日志',
+    copyErrorLog: '复制日志',
+    errorCopied: '错误日志已复制',
+    errorCopyManual: '无法自动复制，请手动选择日志内容'
   },
   browser: {
     urlPlaceholder: '输入 URL',

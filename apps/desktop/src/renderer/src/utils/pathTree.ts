@@ -65,3 +65,39 @@ export function collectDirPaths(nodes: PathTreeNode[]): string[] {
   }
   return paths
 }
+
+export function collectFilePathsUnder(node: PathTreeNode): string[] {
+  if (!node.isDirectory) {
+    return node.fileMeta ? [node.fileMeta.path] : [node.path]
+  }
+
+  const paths: string[] = []
+  for (const child of node.children) {
+    paths.push(...collectFilePathsUnder(child))
+  }
+  return paths
+}
+
+export function aggregateDirStats(node: PathTreeNode): {
+  additions: number
+  deletions: number
+  fileCount: number
+} {
+  const paths = collectFilePathsUnder(node)
+  let additions = 0
+  let deletions = 0
+
+  function walk(n: PathTreeNode): void {
+    if (!n.isDirectory && n.fileMeta) {
+      additions += n.fileMeta.additions
+      deletions += n.fileMeta.deletions
+      return
+    }
+    for (const child of n.children) {
+      walk(child)
+    }
+  }
+
+  walk(node)
+  return { additions, deletions, fileCount: paths.length }
+}

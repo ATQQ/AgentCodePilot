@@ -3,7 +3,7 @@ import type { AgentUtilityPayload } from '../../preload/types'
 import { agentRegistry } from './registry'
 
 export async function runUtilityAgent(payload: AgentUtilityPayload): Promise<string> {
-  const agentId = payload.agentId ?? 'claude-code'
+  const agentId = payload.agentId?.trim() || 'claude-code'
   const adapter = agentRegistry.get(agentId)
   if (!adapter) {
     throw new Error(`Agent "${agentId}" 不可用`)
@@ -52,7 +52,7 @@ export async function runUtilityAgent(payload: AgentUtilityPayload): Promise<str
           agentId,
           model: payload.modelId,
           cwd: payload.cwd || app.getPath('home'),
-          approvalLevel: 'full'
+          approvalLevel: 'request'
         },
         emit
       )

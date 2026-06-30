@@ -2,12 +2,18 @@ import { defineComponent, h, type PropType, type VNode } from 'vue'
 import { RefreshLeft, Plus } from '@element-plus/icons-vue'
 import type { PathTreeNode } from '@renderer/utils/pathTree'
 import {
+  aggregateDirStats,
+  collectFilePathsUnder
+} from '@renderer/utils/pathTree'
+import {
   analyzeSingleBranchCompression,
   type CompressibleTreeNode
 } from '@renderer/utils/treeCompression'
 import { getFileLanguageIconHtml } from '@renderer/utils/fileLanguageIcon'
+import i18n from '@renderer/i18n'
 
 const actionIconStyle = { width: '14px', height: '14px' }
+const t = i18n.global.t
 
 function toCompressibleNode(node: PathTreeNode): CompressibleTreeNode {
   return {
@@ -38,7 +44,73 @@ export const GitTreeNode = defineComponent({
   },
   emits: ['toggleDir', 'select', 'stage', 'unstage', 'discard'],
   setup(props, { emit }) {
-    function renderCompressedPrefix(label: string, depth: number): VNode {
+    function renderActionButtons(
+      paths: string[],
+      options?: { isDirectory?: boolean }
+    ): VNode | null {
+      if (paths.length === 0) return null
+      const isDirectory = options?.isDirectory ?? paths.length > 1
+      const discardTitle = isDirectory ? t('review.discardDir') : '放弃更改'
+      const stageTitle = isDirectory ? t('review.stageDir') : '暂存'
+      const unstageTitle = isDirectory ? t('review.unstageDir') : '取消暂存'
+
+      return h('span', { class: 'file-actions' }, [
+        props.scope === 'unstaged'
+          ? h(
+              'button',
+              {
+                type: 'button',
+                class: 'action-btn discard',
+                title: discardTitle,
+                onClick: (e: Event) => {
+                  e.stopPropagation()
+                  emit('discard', paths)
+                }
+              },
+              [h(RefreshLeft, { style: actionIconStyle })]
+            )
+          : null,
+        props.scope === 'unstaged'
+          ? h(
+              'button',
+              {
+                type: 'button',
+                class: 'action-btn stage',
+                title: stageTitle,
+                onClick: (e: Event) => {
+                  e.stopPropagation()
+                  emit('stage', paths)
+                }
+              },
+              [h(Plus, { style: actionIconStyle })]
+            )
+          : h(
+              'button',
+              {
+                type: 'button',
+                class: 'action-btn unstage',
+                title: unstageTitle,
+                onClick: (e: Event) => {
+                  e.stopPropagation()
+                  emit('unstage', paths)
+                }
+              },
+              '−'
+            )
+      ])
+    }
+
+    function renderStats(additions: number, deletions: number): VNode {
+      return h('span', { class: 'file-stat' }, [
+        h('span', { class: 'add' }, `+${additions}`),
+        h('span', { class: 'del' }, `-${deletions}`)
+      ])
+    }
+
+    function renderCompressedPrefix(label: string, depth: number, dirNode: PathTreeNode): VNode {
+      const paths = collectFilePathsUnder(dirNode)
+      const stats = aggregateDirStats(dirNode)
+
       return h(
         'div',
         {
@@ -46,12 +118,18 @@ export const GitTreeNode = defineComponent({
           style: { paddingLeft: `${8 + depth * 14}px` },
           title: label
         },
-        [h('span', { class: 'compressed-path-label' }, label)]
+        [
+          h('span', { class: 'compressed-path-label' }, label),
+          renderActionButtons(paths, { isDirectory: true }),
+          renderStats(stats.additions, stats.deletions)
+        ]
       )
     }
 
     function renderFileRow(node: PathTreeNode, depth: number): VNode {
       const isActive = props.selectedFile === node.path
+      const filePath = node.fileMeta?.path ?? node.path
+
       return h(
         'button',
         {
@@ -67,57 +145,9 @@ export const GitTreeNode = defineComponent({
             innerHTML: getFileLanguageIconHtml(node.path)
           }),
           h('span', { class: 'file-name', title: node.path }, node.name),
+          node.fileMeta ? renderActionButtons([filePath]) : null,
           node.fileMeta
-            ? h('span', { class: 'file-actions' }, [
-                props.scope === 'unstaged'
-                  ? h(
-                      'button',
-                      {
-                        type: 'button',
-                        class: 'action-btn discard',
-                        title: '放弃更改',
-                        onClick: (e: Event) => {
-                          e.stopPropagation()
-                          emit('discard', node.path)
-                        }
-                      },
-                      [h(RefreshLeft, { style: actionIconStyle })]
-                    )
-                  : null,
-                props.scope === 'unstaged'
-                  ? h(
-                      'button',
-                      {
-                        type: 'button',
-                        class: 'action-btn stage',
-                        title: '暂存',
-                        onClick: (e: Event) => {
-                          e.stopPropagation()
-                          emit('stage', node.path)
-                        }
-                      },
-                      [h(Plus, { style: actionIconStyle })]
-                    )
-                  : h(
-                      'button',
-                      {
-                        type: 'button',
-                        class: 'action-btn unstage',
-                        title: '取消暂存',
-                        onClick: (e: Event) => {
-                          e.stopPropagation()
-                          emit('unstage', node.path)
-                        }
-                      },
-                      '−'
-                    )
-              ])
-            : null,
-          node.fileMeta
-            ? h('span', { class: 'file-stat' }, [
-                h('span', { class: 'add' }, `+${node.fileMeta.additions}`),
-                h('span', { class: 'del' }, `-${node.fileMeta.deletions}`)
-              ])
+            ? renderStats(node.fileMeta.additions, node.fileMeta.deletions)
             : null
         ]
       )
@@ -126,19 +156,22 @@ export const GitTreeNode = defineComponent({
     function renderDirRow(node: PathTreeNode, depth: number): VNode {
       const expanded = props.isExpanded(node.path)
       const children = expanded ? node.children : []
-      const isActive = false
+      const paths = collectFilePathsUnder(node)
+      const stats = aggregateDirStats(node)
 
       return h('div', { class: 'git-tree-node' }, [
         h(
           'button',
           {
-            class: ['file-row', 'dir', { active: isActive }],
+            class: ['file-row', 'dir'],
             style: { paddingLeft: `${8 + depth * 14}px` },
             onClick: () => emit('toggleDir', node.path)
           },
           [
             h('span', { class: 'expand-icon' }, expanded ? '▾' : '▸'),
-            h('span', { class: 'file-name', title: node.path }, node.name)
+            h('span', { class: 'file-name', title: node.path }, node.name),
+            renderActionButtons(paths, { isDirectory: true }),
+            renderStats(stats.additions, stats.deletions)
           ]
         ),
         ...children.map((child: PathTreeNode) =>
@@ -151,9 +184,9 @@ export const GitTreeNode = defineComponent({
             isExpanded: props.isExpanded,
             onToggleDir: (p: string) => emit('toggleDir', p),
             onSelect: (p: string) => emit('select', p),
-            onStage: (p: string) => emit('stage', p),
-            onUnstage: (p: string) => emit('unstage', p),
-            onDiscard: (p: string) => emit('discard', p)
+            onStage: (paths: string[]) => emit('stage', paths),
+            onUnstage: (paths: string[]) => emit('unstage', paths),
+            onDiscard: (paths: string[]) => emit('discard', paths)
           })
         )
       ])
@@ -170,7 +203,7 @@ export const GitTreeNode = defineComponent({
       if (compression) {
         const childDepth = props.depth + 1
         return h('div', { class: 'git-tree-node' }, [
-          renderCompressedPrefix(compression.prefixLabel, props.depth),
+          renderCompressedPrefix(compression.prefixLabel, props.depth, node),
           ...compression.items.map((item) => {
             const childNode = findNodeInTree(node, item.path)
             if (!childNode) return null
@@ -184,9 +217,9 @@ export const GitTreeNode = defineComponent({
                 isExpanded: props.isExpanded,
                 onToggleDir: (p: string) => emit('toggleDir', p),
                 onSelect: (p: string) => emit('select', p),
-                onStage: (p: string) => emit('stage', p),
-                onUnstage: (p: string) => emit('unstage', p),
-                onDiscard: (p: string) => emit('discard', p)
+                onStage: (paths: string[]) => emit('stage', paths),
+                onUnstage: (paths: string[]) => emit('unstage', paths),
+                onDiscard: (paths: string[]) => emit('discard', paths)
               })
             }
             return renderFileRow(childNode, childDepth)

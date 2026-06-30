@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useGitStore } from '@renderer/stores/git.store'
-import { useLayoutStore } from '@renderer/stores/layout.store'
+import { useLayoutStore, type ReviewScope } from '@renderer/stores/layout.store'
 import { usePanelContextStore } from '@renderer/stores/panelContext.store'
 import OpenPathMenu from './OpenPathMenu.vue'
 
@@ -18,9 +18,16 @@ const panelContext = usePanelContextStore()
 const branchCopied = ref(false)
 let branchCopiedTimer: ReturnType<typeof setTimeout> | null = null
 
+const changesSummary = computed(() => gitStore.getScopeSummary(layoutStore.changesScope))
+
+const scopeOptions: { value: ReviewScope; label: string }[] = [
+  { value: 'unstaged', label: '未暂存' },
+  { value: 'staged', label: '已暂存' }
+]
+
 function handleChangesClick(): void {
   if (!gitStore.status?.isRepo) return
-  layoutStore.openReviewFromChanges()
+  layoutStore.openExtensionTab('review', { reviewScope: layoutStore.changesScope })
   layoutStore.envInfoVisible = false
 }
 
@@ -28,6 +35,10 @@ function handleCommitClick(): void {
   if (!gitStore.status?.isRepo) return
   layoutStore.openReviewForCommit()
   layoutStore.envInfoVisible = false
+}
+
+function onScopeChange(scope: ReviewScope): void {
+  layoutStore.setChangesScope(scope)
 }
 
 async function copyBranch(): Promise<void> {
@@ -64,19 +75,34 @@ async function copyBranch(): Promise<void> {
     <div v-if="!panelContext.effectivePanelCwd" class="env-empty">请先选择项目</div>
 
     <template v-else-if="gitStore.status">
-      <button
-        v-if="gitStore.status.isRepo"
-        class="env-row env-row-clickable"
-        @click="handleChangesClick"
-      >
+      <div v-if="gitStore.status.isRepo" class="env-row env-changes-row">
         <span class="env-label">变更</span>
-        <span class="env-value">
-          <span class="diff-stat">
-            <span class="add">+{{ gitStore.status.additions.toLocaleString() }}</span>
-            <span class="del">-{{ gitStore.status.deletions.toLocaleString() }}</span>
-          </span>
-        </span>
-      </button>
+        <div class="env-changes-right">
+          <div class="scope-toggle" @click.stop>
+            <button
+              v-for="opt in scopeOptions"
+              :key="opt.value"
+              type="button"
+              class="scope-btn"
+              :class="{ active: layoutStore.changesScope === opt.value }"
+              @click="onScopeChange(opt.value)"
+            >
+              {{ opt.label }}
+            </button>
+          </div>
+          <button
+            type="button"
+            class="changes-stat-btn"
+            title="在审查面板中查看"
+            @click="handleChangesClick"
+          >
+            <span class="diff-stat">
+              <span class="add">+{{ changesSummary.additions.toLocaleString() }}</span>
+              <span class="del">-{{ changesSummary.deletions.toLocaleString() }}</span>
+            </span>
+          </button>
+        </div>
+      </div>
 
       <div v-else class="env-row">
         <span class="env-label">Git</span>
@@ -254,6 +280,58 @@ async function copyBranch(): Promise<void> {
 .diff-stat .del {
   color: #dc2626;
   margin-left: 4px;
+}
+
+.env-changes-row {
+  flex-wrap: wrap;
+}
+
+.env-changes-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.scope-toggle {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--sidebar-bg);
+  border: 1px solid var(--sidebar-border);
+}
+
+.scope-btn {
+  padding: 2px 8px;
+  border: none;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--content-text-secondary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.scope-btn:hover {
+  color: var(--content-text);
+}
+
+.scope-btn.active {
+  background: var(--sidebar-item-active);
+  color: var(--content-text);
+}
+
+.changes-stat-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+}
+
+.changes-stat-btn:hover {
+  background: var(--sidebar-item-hover);
 }
 
 .action-btn {

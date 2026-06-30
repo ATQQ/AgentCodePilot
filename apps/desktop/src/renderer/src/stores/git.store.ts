@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import type { GitStatusResult, GitChangedFile, GitDiffScope } from '@renderer/types'
+import { formatGitOperationError } from '@renderer/utils/gitError'
 import { usePanelContextStore } from './panelContext.store'
 import { useLayoutStore } from './layout.store'
 
@@ -32,6 +33,7 @@ export const useGitStore = defineStore('git', () => {
   const diffError = ref<string | null>(null)
   const commitMessage = ref('')
   const operationError = ref<string | null>(null)
+  const operationErrorLog = ref<string | null>(null)
 
   const changedFilesByScope = ref(emptyScopeRecord<GitChangedFile[]>([]))
   const selectedFileByScope = ref(emptyScopeRecord<string | null>(null))
@@ -69,6 +71,18 @@ export const useGitStore = defineStore('git', () => {
     diffError.value = null
     commitMessage.value = ''
     operationError.value = null
+    operationErrorLog.value = null
+  }
+
+  function clearOperationError(): void {
+    operationError.value = null
+    operationErrorLog.value = null
+  }
+
+  function setOperationError(err: unknown, fallback: string): void {
+    const formatted = formatGitOperationError(err, fallback)
+    operationError.value = formatted.summary
+    operationErrorLog.value = formatted.log
   }
 
   function invalidateDiffCache(paths?: string[]): void {
@@ -399,49 +413,49 @@ export const useGitStore = defineStore('git', () => {
   async function stageFiles(paths: string[]): Promise<void> {
     const cwd = panelContext.effectivePanelCwd
     if (!cwd || paths.length === 0) return
-    operationError.value = null
+    clearOperationError()
     try {
       await window.agentAPI.git.stage(cwd, paths)
       invalidateDiffCache(paths)
       await refreshStatus()
       await refreshAllScopes()
     } catch (err) {
-      operationError.value = err instanceof Error ? err.message : '暂存失败'
+      setOperationError(err, '暂存失败')
     }
   }
 
   async function unstageFiles(paths: string[]): Promise<void> {
     const cwd = panelContext.effectivePanelCwd
     if (!cwd || paths.length === 0) return
-    operationError.value = null
+    clearOperationError()
     try {
       await window.agentAPI.git.unstage(cwd, paths)
       invalidateDiffCache(paths)
       await refreshStatus()
       await refreshAllScopes()
     } catch (err) {
-      operationError.value = err instanceof Error ? err.message : '取消暂存失败'
+      setOperationError(err, '取消暂存失败')
     }
   }
 
   async function discardFiles(paths: string[]): Promise<void> {
     const cwd = panelContext.effectivePanelCwd
     if (!cwd || paths.length === 0) return
-    operationError.value = null
+    clearOperationError()
     try {
       await window.agentAPI.git.discard(cwd, paths)
       invalidateDiffCache(paths)
       await refreshStatus()
       await refreshAllScopes()
     } catch (err) {
-      operationError.value = err instanceof Error ? err.message : '放弃更改失败'
+      setOperationError(err, '放弃更改失败')
     }
   }
 
   async function commit(): Promise<boolean> {
     const cwd = panelContext.effectivePanelCwd
     if (!cwd) return false
-    operationError.value = null
+    clearOperationError()
     try {
       await window.agentAPI.git.commit(cwd, commitMessage.value)
       commitMessage.value = ''
@@ -450,7 +464,7 @@ export const useGitStore = defineStore('git', () => {
       await refreshAllScopes()
       return true
     } catch (err) {
-      operationError.value = err instanceof Error ? err.message : '提交失败'
+      setOperationError(err, '提交失败')
       return false
     }
   }
@@ -458,13 +472,13 @@ export const useGitStore = defineStore('git', () => {
   async function push(): Promise<boolean> {
     const cwd = panelContext.effectivePanelCwd
     if (!cwd) return false
-    operationError.value = null
+    clearOperationError()
     try {
       await window.agentAPI.git.push(cwd)
       await refreshStatus()
       return true
     } catch (err) {
-      operationError.value = err instanceof Error ? err.message : '推送失败'
+      setOperationError(err, '推送失败')
       return false
     }
   }
@@ -494,6 +508,19 @@ export const useGitStore = defineStore('git', () => {
     }
   )
 
+  function getScopeSummary(scope: GitDiffScope): {
+    additions: number
+    deletions: number
+    fileCount: number
+  } {
+    const files = changedFilesByScope.value[scope]
+    return {
+      additions: files.reduce((sum, f) => sum + f.additions, 0),
+      deletions: files.reduce((sum, f) => sum + f.deletions, 0),
+      fileCount: files.length
+    }
+  }
+
   return {
     status,
     changedFiles,
@@ -506,6 +533,7 @@ export const useGitStore = defineStore('git', () => {
     diffError,
     commitMessage,
     operationError,
+    operationErrorLog,
     filesLoadingByScope,
     scopeLoaded,
     isFilesLoading,
@@ -516,6 +544,7 @@ export const useGitStore = defineStore('git', () => {
     loadDiff,
     loadDiffForSelection,
     changedFilesByScope,
+    getScopeSummary,
     openTabsByScope,
     getOpenTabs,
     openFileTab,

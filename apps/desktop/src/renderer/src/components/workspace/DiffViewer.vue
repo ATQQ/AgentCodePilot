@@ -64,6 +64,8 @@ const activeFileMeta = computed(() =>
 
 const diffModifiedEditable = computed(() => layoutStore.reviewScope === 'unstaged')
 
+const activeScopeSummary = computed(() => gitStore.getScopeSummary(layoutStore.reviewScope))
+
 function addSelectionToChat(startLine: number, endLine: number): void {
   if (!gitStore.selectedFile) return
   composerStore.addFileReference(gitStore.selectedFile, startLine, endLine)
@@ -75,7 +77,7 @@ function onDiffModifiedChange(content: string): void {
 }
 
 function onScopeChange(scope: GitDiffScope): void {
-  layoutStore.reviewScope = scope as import('@renderer/stores/layout.store').ReviewScope
+  layoutStore.setChangesScope(scope as import('@renderer/stores/layout.store').ReviewScope)
 }
 
 function onFileSelect(path: string): void {
@@ -90,18 +92,36 @@ function onTabClose(path: string): void {
   gitStore.closeFileTab(path)
 }
 
-function onStage(path: string): void {
-  void gitStore.stageFiles([path])
+function onStage(paths: string[]): void {
+  if (paths.length === 0) return
+  void gitStore.stageFiles(paths)
 }
 
-function onUnstage(path: string): void {
-  void gitStore.unstageFiles([path])
+function onUnstage(paths: string[]): void {
+  if (paths.length === 0) return
+  void gitStore.unstageFiles(paths)
 }
 
-function onDiscard(path: string): void {
-  const name = path.split('/').pop() ?? path
-  if (!window.confirm(`确定放弃「${name}」的更改？此操作不可撤销。`)) return
-  void gitStore.discardFiles([path])
+function onDiscard(paths: string[]): void {
+  if (paths.length === 0) return
+  const message =
+    paths.length === 1
+      ? t('review.discardFileConfirm', {
+          name: paths[0].split('/').pop() ?? paths[0]
+        })
+      : (() => {
+          const commonPrefix = paths.reduce((prefix, path) => {
+            let next = prefix
+            while (next && !path.startsWith(`${next}/`) && path !== next) {
+              next = next.slice(0, next.lastIndexOf('/'))
+            }
+            return next
+          }, paths[0].slice(0, paths[0].lastIndexOf('/')))
+          const dirName = commonPrefix.split('/').pop() || commonPrefix || '目录'
+          return t('review.discardDirConfirm', { name: dirName, count: paths.length })
+        })()
+  if (!window.confirm(message)) return
+  void gitStore.discardFiles(paths)
 }
 
 function allChangedPaths(): string[] {
@@ -184,6 +204,11 @@ watch(
           </button>
         </div>
 
+        <span class="scope-summary">
+          <span class="add">+{{ activeScopeSummary.additions.toLocaleString() }}</span>
+          <span class="del">-{{ activeScopeSummary.deletions.toLocaleString() }}</span>
+        </span>
+
         <div class="toolbar-right">
           <div class="view-mode-tabs">
             <button
@@ -245,7 +270,7 @@ watch(
             />
           </div>
 
-          <GitCommitBar v-if="layoutStore.reviewScope === 'staged'" />
+          <GitCommitBar />
 
           <EditorFileTabs
             :tabs="openTabs"
@@ -374,6 +399,23 @@ watch(
   color: var(--sidebar-text-active);
 }
 
+.scope-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-xs);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.scope-summary .add {
+  color: #16a34a;
+}
+
+.scope-summary .del {
+  color: #dc2626;
+}
+
 .dv-body {
   position: relative;
   flex: 1;
@@ -394,7 +436,7 @@ watch(
   position: absolute;
   top: 8px;
   right: 8px;
-  z-index: 6;
+  z-index: 31;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -504,7 +546,7 @@ watch(
   background: color-mix(in srgb, var(--sidebar-bg) 90%, transparent);
   border: 1px solid var(--sidebar-border);
   pointer-events: none;
-  z-index: 2;
+  z-index: 1;
 }
 
 .list-refresh-hint {
