@@ -195,12 +195,26 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     await window.agentAPI.file.write(path, dirtyContent.value, roots)
     fileContent.value = dirtyContent.value
     fileSaveToken.value += 1
+    void notifyWorkspaceMutation()
     return true
   }
 
   async function invalidateAndReload(parentDir: string): Promise<void> {
     delete childrenCache.value[parentDir]
     await loadDir(parentDir)
+  }
+
+  async function refreshExpandedDirs(): Promise<void> {
+    const root = treeRoot.value
+    if (!root) return
+    const dirs = [...expandedDirs.value]
+    await Promise.all(dirs.map((dir) => loadDir(dir)))
+  }
+
+  function notifyWorkspaceMutation(): void {
+    void import('./git.store').then(({ useGitStore }) => {
+      void useGitStore().refreshStatus({ silent: true })
+    })
   }
 
   function closeTabsUnderPath(path: string): void {
@@ -270,6 +284,7 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
       await moveEntry(clip.path, destPath, exists)
       clearClipboard()
     }
+    void notifyWorkspaceMutation()
   }
 
   async function mkdir(dirPath: string): Promise<void> {
@@ -278,6 +293,7 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     await window.agentAPI.file.mkdir(dirPath, roots)
     const parent = getParentDir(dirPath)
     await invalidateAndReload(parent || treeRoot.value!)
+    void notifyWorkspaceMutation()
   }
 
   async function renameEntry(oldPath: string, newPath: string): Promise<void> {
@@ -291,6 +307,7 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     if (newParent !== oldParent) {
       await invalidateAndReload(newParent || treeRoot.value!)
     }
+    void notifyWorkspaceMutation()
   }
 
   async function moveEntry(srcPath: string, destPath: string, overwrite = false): Promise<void> {
@@ -307,6 +324,7 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     if (destParent !== srcParent) {
       await invalidateAndReload(destParent || treeRoot.value!)
     }
+    void notifyWorkspaceMutation()
   }
 
   async function createFile(parentDir: string, name: string): Promise<string> {
@@ -315,6 +333,7 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     if (roots.length === 0) return filePath
     await window.agentAPI.file.write(filePath, '', roots)
     await invalidateAndReload(parentDir)
+    void notifyWorkspaceMutation()
     return filePath
   }
 
@@ -341,6 +360,7 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     }
     const parent = getParentDir(path)
     await invalidateAndReload(parent || treeRoot.value!)
+    void notifyWorkspaceMutation()
   }
 
   async function copyFile(srcPath: string, destPath: string): Promise<void> {
@@ -349,6 +369,7 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     await window.agentAPI.file.copy(srcPath, destPath, roots)
     const parent = getParentDir(destPath)
     await invalidateAndReload(parent || treeRoot.value!)
+    void notifyWorkspaceMutation()
   }
 
   function setEditMode(enabled: boolean): void {
@@ -433,6 +454,7 @@ export const useFileExplorerStore = defineStore('fileExplorer', () => {
     createDirectory,
     entryExistsInDir,
     invalidateAndReload,
+    refreshExpandedDirs,
     setEditMode,
     rememberFileTreeOpenBeforeEdit,
     consumeFileTreeRestore,

@@ -146,24 +146,24 @@ export const useGitStore = defineStore('git', () => {
     return status.value?.isRepo === true
   }
 
-  async function refreshStatus(): Promise<void> {
+  async function refreshStatus(options?: { silent?: boolean }): Promise<void> {
     const cwd = panelContext.effectivePanelCwd
     if (!cwd) {
       status.value = null
       return
     }
 
-    loading.value = true
+    if (!options?.silent) loading.value = true
     try {
       status.value = await window.agentAPI.git.status(cwd)
     } finally {
-      loading.value = false
+      if (!options?.silent) loading.value = false
     }
   }
 
   async function loadChangedFiles(
     scope: GitDiffScope,
-    options?: { reloadCurrentDiff?: boolean }
+    options?: { reloadCurrentDiff?: boolean; silent?: boolean }
   ): Promise<void> {
     const cwd = panelContext.effectivePanelCwd
     if (!cwd) {
@@ -186,7 +186,7 @@ export const useGitStore = defineStore('git', () => {
     }
 
     const requestId = ++loadFilesRequestId[scope]
-    filesLoadingByScope.value[scope] = true
+    if (!options?.silent) filesLoadingByScope.value[scope] = true
 
     try {
       const files = await window.agentAPI.git.changedFiles(cwd, scope)
@@ -220,7 +220,7 @@ export const useGitStore = defineStore('git', () => {
         await loadDiffForSelection()
       }
     } finally {
-      if (requestId === loadFilesRequestId[scope]) {
+      if (requestId === loadFilesRequestId[scope] && !options?.silent) {
         filesLoadingByScope.value[scope] = false
       }
     }
@@ -495,10 +495,29 @@ export const useGitStore = defineStore('git', () => {
     }
   }
 
+  async function pollRefresh(): Promise<void> {
+    await refreshStatus({ silent: true })
+    if (!layoutStore.showExtensionPanel) return
+
+    const tab = layoutStore.activeExtensionTab
+    if (tab === 'review') {
+      await loadChangedFiles(layoutStore.reviewScope, {
+        reloadCurrentDiff: true,
+        silent: true
+      })
+      return
+    }
+
+    if (tab === 'files') {
+      const { useFileExplorerStore } = await import('./fileExplorer.store')
+      await useFileExplorerStore().refreshExpandedDirs()
+    }
+  }
+
   function startPolling(): void {
     stopPolling()
-    void refreshStatus()
-    pollTimer = setInterval(() => void refreshStatus(), 5000)
+    void pollRefresh()
+    pollTimer = setInterval(() => void pollRefresh(), 5000)
   }
 
   function stopPolling(): void {
@@ -517,6 +536,14 @@ export const useGitStore = defineStore('git', () => {
         await loadAllChangedFiles()
         await loadDiffForSelection()
       })
+    }
+  )
+
+  watch(
+    () => [layoutStore.showExtensionPanel, layoutStore.activeExtensionTab] as const,
+    ([visible, tab]) => {
+      if (!visible || !pollTimer) return
+      if (tab === 'review' || tab === 'files') void pollRefresh()
     }
   )
 

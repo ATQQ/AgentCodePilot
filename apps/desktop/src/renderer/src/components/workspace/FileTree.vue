@@ -248,10 +248,9 @@ function onCloseAll(): void {
       <div class="ft-body">
         <div class="main-pane">
           <SideTreeFolderBtn
-            v-if="treeCollapsed"
-            title="展开文件树"
-            floating
-            @click="treeCollapsed = false"
+            class="ft-tree-toggle"
+            :title="treeCollapsed ? '展开文件树' : '收起文件树'"
+            @click="treeCollapsed = !treeCollapsed"
           />
 
           <EditorFileTabs
@@ -282,7 +281,6 @@ function onCloseAll(): void {
         >
           <template #header>
             <input v-model="fileStore.filter" class="filter-input" placeholder="筛选文件…" />
-            <SideTreeFolderBtn title="收起文件树" @click="treeCollapsed = true" />
           </template>
 
           <div class="tree-content" @contextmenu="onTreeBlankContextMenu">
@@ -368,6 +366,13 @@ function onCloseAll(): void {
   overflow: hidden;
 }
 
+.ft-tree-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 35;
+}
+
 .filter-input {
   width: 100%;
   padding: 4px 8px;
@@ -429,9 +434,18 @@ function onCloseAll(): void {
 
 .expand-icon {
   width: 12px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--content-text-secondary);
   font-size: 10px;
-  flex-shrink: 0;
+  line-height: 1;
+  transition: transform 0.12s ease;
+}
+
+.expand-icon.expanded {
+  transform: rotate(90deg);
 }
 
 .file-lang-icon {
@@ -515,9 +529,18 @@ function onCloseAll(): void {
 
 :deep(.expand-icon) {
   width: 12px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--content-text-secondary);
   font-size: 10px;
-  flex-shrink: 0;
+  line-height: 1;
+  transition: transform 0.12s ease;
+}
+
+:deep(.expand-icon.expanded) {
+  transform: rotate(90deg);
 }
 
 :deep(.file-lang-icon) {

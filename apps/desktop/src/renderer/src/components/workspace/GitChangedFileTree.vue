@@ -19,7 +19,7 @@ const emit = defineEmits<{
 }>()
 
 const filter = computed(() => props.filter ?? '')
-const expandedDirs = ref<Set<string>>(new Set())
+const expandedDirsByScope = ref<Partial<Record<'unstaged' | 'staged', Set<string>>>>({})
 
 const tree = computed(() => buildPathTree(props.files))
 
@@ -30,23 +30,53 @@ const filteredTree = computed(() => {
   return buildPathTree(matched)
 })
 
+function getExpandedDirs(): Set<string> {
+  return expandedDirsByScope.value[props.scope] ?? new Set()
+}
+
+function syncExpandedDirs(files: GitChangedFile[]): void {
+  const allDirPaths = collectDirPaths(buildPathTree(files))
+  const allDirSet = new Set(allDirPaths)
+  const prev = expandedDirsByScope.value[props.scope]
+
+  if (!prev || prev.size === 0) {
+    expandedDirsByScope.value = {
+      ...expandedDirsByScope.value,
+      [props.scope]: allDirSet
+    }
+    return
+  }
+
+  const next = new Set<string>()
+  for (const path of prev) {
+    if (allDirSet.has(path)) next.add(path)
+  }
+  expandedDirsByScope.value = {
+    ...expandedDirsByScope.value,
+    [props.scope]: next
+  }
+}
+
 watch(
   () => props.files,
   (files) => {
-    expandedDirs.value = new Set(collectDirPaths(buildPathTree(files)))
+    syncExpandedDirs(files)
   },
   { immediate: true }
 )
 
 function toggleDir(path: string): void {
-  const next = new Set(expandedDirs.value)
+  const next = new Set(getExpandedDirs())
   if (next.has(path)) next.delete(path)
   else next.add(path)
-  expandedDirs.value = next
+  expandedDirsByScope.value = {
+    ...expandedDirsByScope.value,
+    [props.scope]: next
+  }
 }
 
 function isExpanded(path: string): boolean {
-  return expandedDirs.value.has(path)
+  return getExpandedDirs().has(path)
 }
 </script>
 

@@ -82,7 +82,7 @@ function onResize(next: number): void {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 40px 6px 8px;
+  padding: 6px 8px;
   border-bottom: 1px solid var(--sidebar-border);
   flex-shrink: 0;
 }

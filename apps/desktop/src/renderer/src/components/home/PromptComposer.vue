@@ -42,6 +42,9 @@ onMounted(() => {
 
 onUnmounted(() => {
   compactObserver?.disconnect()
+  cancelMenuClose()
+  window.removeEventListener('resize', updateSkillSubmenuPosition)
+  window.removeEventListener('scroll', updateSkillSubmenuPosition, true)
 })
 
 watch(
@@ -69,7 +72,11 @@ watch(
 const showAddMenu = ref(false)
 const showApprovalMenu = ref(false)
 const showPlanPicker = ref(false)
-const showSkillPicker = ref(false)
+const showSkillSubmenu = ref(false)
+const skillSubmenuTriggerRef = ref<HTMLElement | null>(null)
+const skillSubmenuPanelRef = ref<HTMLElement | null>(null)
+const skillSubmenuStyle = ref<Record<string, string>>({})
+let menuCloseTimer: ReturnType<typeof setTimeout> | null = null
 const planRefs = ref<PlanReference[]>([])
 // const pursueGoals = ref(false) // TODO: 目标模式，后续实现
 const attachments = ref<Attachment[]>([])
@@ -148,16 +155,78 @@ function removePlanRef(id: string): void {
   planRefs.value = planRefs.value.filter((p) => p.id !== id)
 }
 
-function openSkillPicker(): void {
-  showAddMenu.value = false
-  showSkillPicker.value = true
-}
-
 function handleSkillPickerSelect(skill: SkillReference): void {
   inlineInputRef.value?.insertSkillRef(skill)
   syncInlineContentState()
-  showSkillPicker.value = false
+  showAddMenu.value = false
+  showSkillSubmenu.value = false
 }
+
+function cancelMenuClose(): void {
+  if (menuCloseTimer) {
+    clearTimeout(menuCloseTimer)
+    menuCloseTimer = null
+  }
+}
+
+function scheduleMenuClose(): void {
+  cancelMenuClose()
+  menuCloseTimer = setTimeout(() => {
+    showAddMenu.value = false
+    showSkillSubmenu.value = false
+  }, 160)
+}
+
+function openSkillSubmenu(): void {
+  cancelMenuClose()
+  showSkillSubmenu.value = true
+  void nextTick(() => {
+    updateSkillSubmenuPosition()
+    requestAnimationFrame(updateSkillSubmenuPosition)
+  })
+}
+
+function updateSkillSubmenuPosition(): void {
+  const trigger = skillSubmenuTriggerRef.value
+  const panel = skillSubmenuPanelRef.value
+  if (!trigger) return
+
+  const rect = trigger.getBoundingClientRect()
+  const panelWidth = panel?.offsetWidth ?? 300
+  const panelHeight = panel?.offsetHeight ?? 360
+  const margin = 8
+  const gap = 4
+
+  let left = rect.right + gap
+  let top = rect.bottom - panelHeight
+
+  if (top < margin) top = margin
+  if (top + panelHeight > window.innerHeight - margin) {
+    top = Math.max(margin, window.innerHeight - panelHeight - margin)
+  }
+  if (left + panelWidth > window.innerWidth - margin) {
+    left = Math.max(margin, rect.left - panelWidth - gap)
+  }
+
+  skillSubmenuStyle.value = {
+    top: `${top}px`,
+    left: `${left}px`
+  }
+}
+
+function handleAddMenuLeave(): void {
+  scheduleMenuClose()
+}
+
+watch(showSkillSubmenu, (open) => {
+  if (open) {
+    window.addEventListener('resize', updateSkillSubmenuPosition)
+    window.addEventListener('scroll', updateSkillSubmenuPosition, true)
+  } else {
+    window.removeEventListener('resize', updateSkillSubmenuPosition)
+    window.removeEventListener('scroll', updateSkillSubmenuPosition, true)
+  }
+})
 
 function openPlanPicker(): void {
   showAddMenu.value = false
@@ -413,7 +482,12 @@ defineExpose({
             <el-icon :size="16"><Plus /></el-icon>
           </button>
           <Transition name="fade">
-            <div v-if="showAddMenu" class="dropdown-menu" @mouseleave="showAddMenu = false">
+            <div
+              v-if="showAddMenu"
+              class="dropdown-menu"
+              @mouseenter="cancelMenuClose"
+              @mouseleave="handleAddMenuLeave"
+            >
               <button class="menu-item" @click="handleSelectFiles">
                 <span class="menu-icon">&#x1F4CE;</span>
                 <span>{{ t('composer.addMenu.addPhotosAndFiles') }}</span>
@@ -427,10 +501,22 @@ defineExpose({
                 <span class="menu-icon">&#x1F4CB;</span>
                 <span>{{ t('composer.addMenu.referencePlan') }}</span>
               </button>
-              <button class="menu-item" @click="openSkillPicker">
-                <span class="menu-icon">&#x2728;</span>
-                <span>{{ t('composer.addMenu.referenceSkill') }}</span>
-              </button>
+              <div
+                ref="skillSubmenuTriggerRef"
+                class="menu-submenu-wrapper"
+                @mouseenter="openSkillSubmenu"
+                @mouseleave="scheduleMenuClose"
+              >
+                <button
+                  type="button"
+                  class="menu-item menu-item--submenu"
+                  :class="{ active: showSkillSubmenu }"
+                >
+                  <span class="menu-icon">&#x2728;</span>
+                  <span>{{ t('composer.addMenu.referenceSkill') }}</span>
+                  <span class="menu-arrow">&#8250;</span>
+                </button>
+              </div>
               <!-- TODO: 目标模式，后续实现
               <button class="menu-item menu-item--toggle" @click.stop="pursueGoals = !pursueGoals">
                 <span class="menu-icon">&#x1F3AF;</span>
@@ -544,11 +630,23 @@ defineExpose({
       @close="showPlanPicker = false"
       @select="handlePlanPickerSelect"
     />
-    <SkillPicker
-      :visible="showSkillPicker"
-      @close="showSkillPicker = false"
-      @select="handleSkillPickerSelect"
-    />
+
+    <Teleport to="body">
+      <div
+        v-if="showSkillSubmenu"
+        ref="skillSubmenuPanelRef"
+        class="skill-submenu skill-submenu--teleported"
+        :style="skillSubmenuStyle"
+        @mouseenter="cancelMenuClose"
+        @mouseleave="scheduleMenuClose"
+      >
+        <SkillPicker
+          :active="showSkillSubmenu"
+          @select="handleSkillPickerSelect"
+          @loaded="updateSkillSubmenuPosition"
+        />
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -1045,6 +1143,7 @@ defineExpose({
   box-shadow: var(--shadow-md);
   padding: var(--spacing-xs);
   z-index: 1000;
+  overflow: visible;
 }
 
 .dropdown-menu--wide {
@@ -1135,6 +1234,27 @@ defineExpose({
   margin-left: auto;
   font-size: 14px;
   color: var(--content-text-tertiary);
+}
+
+.menu-submenu-wrapper {
+  position: relative;
+}
+
+.menu-item--submenu.active {
+  background: var(--btn-ghost-hover);
+}
+
+.skill-submenu {
+  background: var(--content-bg);
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--spacing-xs);
+}
+
+.skill-submenu--teleported {
+  position: fixed;
+  z-index: 10001;
 }
 
 .menu-divider {

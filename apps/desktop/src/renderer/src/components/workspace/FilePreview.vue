@@ -85,7 +85,8 @@ watch(
     showAddExtensionPrompt.value = false
     mdPreviewMode.value = isMarkdown.value
     resetLanguageSelection()
-  }
+  },
+  { immediate: true }
 )
 
 async function onImageError(): Promise<void> {

@@ -89,7 +89,7 @@ export const FileTreeNode = defineComponent({
             onContextmenu: (e: MouseEvent) => emit('contextMenu', e, entry)
           },
           [
-            h('span', { class: 'expand-icon' }, expanded ? '▾' : '▸'),
+            h('span', { class: ['expand-icon', { expanded }] }, '▸'),
             h('span', { class: 'file-name', title: entry.relativePath }, entry.name)
           ]
         ),
