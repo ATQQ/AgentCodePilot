@@ -66,6 +66,7 @@ declare module 'vue' {
     SearchDialog: typeof import('./src/components/layout/SearchDialog.vue')['default']
     SideTreeFolderBtn: typeof import('./src/components/workspace/SideTreeFolderBtn.vue')['default']
     SideTreePanel: typeof import('./src/components/workspace/SideTreePanel.vue')['default']
+    SkillPicker: typeof import('./src/components/skills/SkillPicker.vue')['default']
     TerminalFolderPicker: typeof import('./src/components/terminal/TerminalFolderPicker.vue')['default']
     TerminalTabs: typeof import('./src/components/terminal/TerminalTabs.vue')['default']
     TerminalView: typeof import('./src/components/terminal/TerminalView.vue')['default']

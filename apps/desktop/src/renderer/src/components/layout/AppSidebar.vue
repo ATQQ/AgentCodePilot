@@ -15,6 +15,7 @@ import {
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
 import { useChatStore } from '@renderer/stores/chat.store'
 import { useLayoutStore } from '@renderer/stores/layout.store'
+import { useSidebarStore } from '@renderer/stores/sidebar.store'
 import { formatRelativeTime } from '@renderer/composables/useRelativeTime'
 import { formatShortcutKey } from '@renderer/composables/useShortcutLabel'
 import type { Conversation } from '@renderer/types'
@@ -25,6 +26,7 @@ const route = useRoute()
 const workspaceStore = useWorkspaceStore()
 const chatStore = useChatStore()
 const layoutStore = useLayoutStore()
+const sidebarStore = useSidebarStore()
 const openSearch = inject<() => void>('openSearch', () => {})
 
 const topNavItems = [
@@ -32,9 +34,6 @@ const topNavItems = [
   { name: 'search', path: '/search', icon: Search, labelKey: 'sidebar.search', shortcutKey: 'g' }
   // { name: 'skills', path: '/skills', icon: MagicStick, labelKey: 'sidebar.skills' }
 ]
-
-const collapsedProjects = ref<Set<string>>(new Set())
-const collapsedSections = ref<Set<string>>(new Set())
 
 type SidebarSection = 'workspaces' | 'projects' | 'conversations'
 
@@ -136,27 +135,19 @@ function isActive(path: string): boolean {
 }
 
 function toggleProjectCollapse(projId: string): void {
-  if (collapsedProjects.value.has(projId)) {
-    collapsedProjects.value.delete(projId)
-  } else {
-    collapsedProjects.value.add(projId)
-  }
+  sidebarStore.toggleProjectCollapse(projId)
 }
 
 function isProjectCollapsed(projId: string): boolean {
-  return collapsedProjects.value.has(projId)
+  return sidebarStore.isProjectCollapsed(projId)
 }
 
 function toggleSectionCollapse(section: SidebarSection): void {
-  if (collapsedSections.value.has(section)) {
-    collapsedSections.value.delete(section)
-  } else {
-    collapsedSections.value.add(section)
-  }
+  sidebarStore.toggleSectionCollapse(section)
 }
 
 function isSectionCollapsed(section: SidebarSection): boolean {
-  return collapsedSections.value.has(section)
+  return sidebarStore.isSectionCollapsed(section)
 }
 
 function isProjectHeaderActive(projectId: string): boolean {

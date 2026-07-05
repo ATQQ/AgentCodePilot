@@ -148,6 +148,10 @@ const agentAPI = {
     runUtility: (payload: import('./types').AgentUtilityPayload) =>
       ipcRenderer.invoke(IPC_CHANNELS.AGENT_RUN_UTILITY, payload)
   },
+  skills: {
+    scan: (workspaceCwd?: string | null) =>
+      ipcRenderer.invoke(IPC_CHANNELS.SKILLS_SCAN, workspaceCwd)
+  },
   terminal: {
     create: (scopeKey: string, cwd: string, title?: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.TERMINAL_CREATE, scopeKey, cwd, title),

@@ -10,6 +10,7 @@ export type {
   GitStatusResult,
   GitDiffScope,
   GitDiffResult,
+  GitChangeType,
   FileEntry,
   TerminalInfo,
   TerminalDataEvent,
@@ -17,6 +18,8 @@ export type {
   PlanReference,
   PlanInfo,
   PlanOwnerType,
+  SkillReference,
+  ScannedSkill,
   FilePreviewSettings,
   AiPromptsSettings,
   ExternalAppsSettings,
@@ -70,6 +73,7 @@ export interface Message {
   agentId?: string
   planMode?: boolean
   planRefs?: import('../../../preload/types').PlanReference[]
+  skillRefs?: import('../../../preload/types').SkillReference[]
   usage?: {
     inputTokens: number
     outputTokens: number

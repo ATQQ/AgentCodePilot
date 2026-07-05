@@ -1,5 +1,5 @@
 import { defineComponent, h, type PropType, type VNode } from 'vue'
-import type { FileEntry } from '@renderer/types'
+import type { FileEntry, GitChangeType } from '@renderer/types'
 import { analyzeFileEntryCompression } from '@renderer/utils/treeCompression'
 import { getFileLanguageIconHtml } from '@renderer/utils/fileLanguageIcon'
 
@@ -19,7 +19,11 @@ export const FileTreeNode = defineComponent({
     depth: { type: Number, default: 0 },
     getItems: { type: Function as PropType<(dir: string) => FileEntry[]>, required: true },
     isExpanded: { type: Function as PropType<(dir: string) => boolean>, required: true },
-    activeFilePath: { type: String as PropType<string | null>, default: null }
+    activeFilePath: { type: String as PropType<string | null>, default: null },
+    getGitChangeType: {
+      type: Function as PropType<(relativePath: string) => GitChangeType | undefined>,
+      default: undefined
+    }
   },
   emits: ['clickEntry', 'contextMenu'],
   setup(props, { emit }) {
@@ -44,11 +48,19 @@ export const FileTreeNode = defineComponent({
       )
     }
 
+    function gitClassForEntry(entry: FileEntry): string | undefined {
+      if (entry.isDirectory) return undefined
+      const changeType = props.getGitChangeType?.(entry.relativePath)
+      if (!changeType) return undefined
+      return `git-${changeType}`
+    }
+
     function renderFileRow(entry: FileEntry, depth: number): VNode {
+      const gitClass = gitClassForEntry(entry)
       return h(
         'button',
         {
-          class: ['file-row', 'leaf', { active: props.activeFilePath === entry.path }],
+          class: ['file-row', 'leaf', { active: props.activeFilePath === entry.path }, gitClass],
           style: { paddingLeft: `${8 + depth * 14}px` },
           onClick: () => emit('clickEntry', entry),
           onContextmenu: (e: MouseEvent) => emit('contextMenu', e, entry)
@@ -89,6 +101,7 @@ export const FileTreeNode = defineComponent({
             getItems: props.getItems,
             isExpanded: props.isExpanded,
             activeFilePath: props.activeFilePath,
+            getGitChangeType: props.getGitChangeType,
             onClickEntry: (e: FileEntry) => emit('clickEntry', e),
             onContextMenu: (e: MouseEvent, f: FileEntry) => emit('contextMenu', e, f)
           })
@@ -120,6 +133,7 @@ export const FileTreeNode = defineComponent({
                 getItems: props.getItems,
                 isExpanded: props.isExpanded,
                 activeFilePath: props.activeFilePath,
+                getGitChangeType: props.getGitChangeType,
                 onClickEntry: (e: FileEntry) => emit('clickEntry', e),
                 onContextMenu: (e: MouseEvent, f: FileEntry) => emit('contextMenu', e, f)
               })

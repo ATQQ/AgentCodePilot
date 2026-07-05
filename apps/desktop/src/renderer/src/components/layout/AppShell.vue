@@ -31,7 +31,8 @@ const needsGitPolling = computed(() => {
   if (layoutStore.homeRouteActive) return false
   return (
     layoutStore.showBottomTerminal ||
-    (layoutStore.showExtensionPanel && layoutStore.activeExtensionTab === 'review')
+    (layoutStore.showExtensionPanel &&
+      (layoutStore.activeExtensionTab === 'review' || layoutStore.activeExtensionTab === 'files'))
   )
 })
 

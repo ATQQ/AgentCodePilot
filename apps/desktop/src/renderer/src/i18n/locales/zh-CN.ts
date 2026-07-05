@@ -36,7 +36,15 @@ export default {
       attachUrl: '附加外部链接内容',
       planMode: '计划模式',
       referencePlan: '引用计划',
+      referenceSkill: '引用技能',
       pursueGoals: '追求目标'
+    },
+    skillPicker: {
+      searchPlaceholder: '搜索技能…',
+      loading: '加载技能中…',
+      empty: '未找到可用技能',
+      workspaceGroup: '工作区',
+      globalGroup: '全局'
     },
     urlPlaceholder: '输入 URL 链接...',
     planModeActive: '计划模式已开启，点击关闭 (⇧ Tab)',
@@ -85,6 +93,7 @@ export default {
     stoppedBadge: '已手动停止',
     planModeTag: '计划模式',
     planRefTag: '引用计划: {title}',
+    skillRefTag: '技能 {name}',
     previewAttachment: '预览图片',
     showInFolder: '在访达中显示',
     expandMessage: '展开全文',

@@ -32,6 +32,7 @@ export interface MessageRow {
   debug_output: string | null
   plan_mode: number | null
   plan_refs: string | null
+  skill_refs: string | null
   agent_id: string | null
   tool_calls: string | null
   stopped: number | null
@@ -254,14 +255,15 @@ export function addMessage(msg: {
   debugOutput?: string | null
   planMode?: boolean | null
   planRefs?: string | null
+  skillRefs?: string | null
   agentId?: string | null
   toolCalls?: string | null
   stopped?: boolean | null
 }): void {
   const db = getDatabase()
   db.prepare(
-    `INSERT INTO messages (id, conversation_id, role, content, created_at, attachments, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, raw_input, debug_input, debug_output, plan_mode, plan_refs, agent_id, tool_calls, stopped)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO messages (id, conversation_id, role, content, created_at, attachments, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, raw_input, debug_input, debug_output, plan_mode, plan_refs, skill_refs, agent_id, tool_calls, stopped)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     msg.id,
     msg.conversationId,
@@ -279,6 +281,7 @@ export function addMessage(msg: {
     msg.debugOutput ?? null,
     msg.planMode ? 1 : 0,
     msg.planRefs ?? null,
+    msg.skillRefs ?? null,
     msg.agentId ?? null,
     msg.toolCalls ?? null,
     msg.stopped ? 1 : 0

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
-import type { GitStatusResult, GitChangedFile, GitDiffScope } from '@renderer/types'
+import { ref, watch, computed } from 'vue'
+import type { GitStatusResult, GitChangedFile, GitDiffScope, GitChangeType } from '@renderer/types'
 import { formatGitOperationError } from '@renderer/utils/gitError'
 import { usePanelContextStore } from './panelContext.store'
 import { useLayoutStore } from './layout.store'
@@ -50,6 +50,18 @@ export const useGitStore = defineStore('git', () => {
 
   const panelContext = usePanelContextStore()
   const layoutStore = useLayoutStore()
+
+  const changeTypeByPath = computed(() => {
+    const map = new Map<string, GitChangeType>()
+    for (const file of status.value?.files ?? []) {
+      if (file.changeType) map.set(file.path, file.changeType)
+    }
+    return map
+  })
+
+  function getChangeTypeForPath(relativePath: string): GitChangeType | undefined {
+    return changeTypeByPath.value.get(relativePath)
+  }
 
   function isFilesLoading(scope: GitDiffScope): boolean {
     return filesLoadingByScope.value[scope]
@@ -545,6 +557,8 @@ export const useGitStore = defineStore('git', () => {
     loadDiffForSelection,
     changedFilesByScope,
     getScopeSummary,
+    getChangeTypeForPath,
+    changeTypeByPath,
     openTabsByScope,
     getOpenTabs,
     openFileTab,

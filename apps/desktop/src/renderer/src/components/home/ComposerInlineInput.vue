@@ -6,6 +6,11 @@ import {
   formatFileReferenceTooltip,
   serializeEditorContent
 } from '@renderer/utils/fileReference'
+import type { SkillReference } from '@renderer/types'
+import {
+  extractSkillRefsFromEditor,
+  formatSkillReferenceLabel
+} from '@renderer/utils/skillReference'
 
 const props = defineProps<{
   placeholder?: string
@@ -132,6 +137,50 @@ function insertNodesAtSelection(nodes: Node[]): void {
   selection.addRange(after)
 }
 
+function createSkillRefChip(ref: SkillReference): HTMLSpanElement {
+  const chip = document.createElement('span')
+  chip.className = 'inline-skill-ref'
+  chip.contentEditable = 'false'
+  chip.dataset.name = ref.name
+  chip.dataset.path = ref.path
+  chip.dataset.scope = ref.scope
+
+  const label = document.createElement('span')
+  label.className = 'inline-skill-ref-label'
+  label.textContent = formatSkillReferenceLabel(ref)
+
+  const removeBtn = document.createElement('button')
+  removeBtn.type = 'button'
+  removeBtn.className = 'inline-skill-ref-remove'
+  removeBtn.tabIndex = -1
+  removeBtn.textContent = '×'
+  removeBtn.addEventListener('mousedown', (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+  })
+  removeBtn.addEventListener('click', (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    chip.remove()
+    syncEmptyState()
+    resizeEditor()
+    emit('input')
+    editorRef.value?.focus()
+  })
+
+  chip.append(label, removeBtn)
+  return chip
+}
+
+function insertSkillRef(ref: SkillReference): void {
+  const chip = createSkillRefChip(ref)
+  const trailingSpace = document.createTextNode(' ')
+  insertNodesAtSelection([chip, trailingSpace])
+  syncEmptyState()
+  resizeEditor()
+  emit('input')
+}
+
 function insertFileRef(ref: FileReference): void {
   const chip = createFileRefChip(ref)
   const trailingSpace = document.createTextNode(' ')
@@ -153,6 +202,12 @@ function getContent(): string {
   const editor = getEditor()
   if (!editor) return ''
   return serializeEditorContent(editor)
+}
+
+function getSkillRefs(): SkillReference[] {
+  const editor = getEditor()
+  if (!editor) return []
+  return extractSkillRefsFromEditor(editor)
 }
 
 function clear(): void {
@@ -315,8 +370,10 @@ onUnmounted(() => {
 
 defineExpose({
   insertFileRef,
+  insertSkillRef,
   insertText,
   getContent,
+  getSkillRefs,
   clear,
   setText,
   focus,
@@ -435,6 +492,51 @@ defineExpose({
 }
 
 .composer-editor :deep(.inline-file-ref-remove:hover) {
+  background: color-mix(in srgb, var(--content-text-secondary) 16%, transparent);
+  color: var(--content-text);
+}
+
+.composer-editor :deep(.inline-skill-ref) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 4px);
+  margin: 0 1px;
+  padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, #6366f1 35%, var(--sidebar-border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, #6366f1 12%, var(--content-bg));
+  color: var(--content-text);
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+  vertical-align: baseline;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.composer-editor :deep(.inline-skill-ref-label) {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.composer-editor :deep(.inline-skill-ref-remove) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--content-text-tertiary);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.composer-editor :deep(.inline-skill-ref-remove:hover) {
   background: color-mix(in srgb, var(--content-text-secondary) 16%, transparent);
   color: var(--content-text);
 }

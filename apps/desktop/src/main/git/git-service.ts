@@ -7,11 +7,20 @@ import { promisify } from 'util'
 
 const execFileAsync = promisify(execFile)
 
+export type GitChangeType =
+  | 'modified'
+  | 'added'
+  | 'untracked'
+  | 'deleted'
+  | 'renamed'
+  | 'conflict'
+
 export interface GitChangedFile {
   path: string
   additions: number
   deletions: number
   status: string
+  changeType?: GitChangeType
 }
 
 export interface GitStatusResult {
@@ -45,6 +54,15 @@ async function isGitAvailable(): Promise<boolean> {
 
 function isGitRepo(cwd: string): boolean {
   return existsSync(join(cwd, '.git'))
+}
+
+export function resolveGitChangeType(index: string, workingDir: string): GitChangeType {
+  if (workingDir === '?' || index === '?') return 'untracked'
+  if (index === 'A' || workingDir === 'A') return 'added'
+  if (index === 'D' || workingDir === 'D') return 'deleted'
+  if (index === 'R' || workingDir === 'R') return 'renamed'
+  if (index === 'U' || workingDir === 'U') return 'conflict'
+  return 'modified'
 }
 
 export async function getGitStatus(cwd: string): Promise<GitStatusResult> {
@@ -90,7 +108,8 @@ export async function getGitStatus(cwd: string): Promise<GitStatusResult> {
       path: f.path,
       additions: 0,
       deletions: 0,
-      status: f.index !== ' ' && f.working_dir === ' ' ? 'staged' : 'unstaged'
+      status: f.index !== ' ' && f.working_dir === ' ' ? 'staged' : 'unstaged',
+      changeType: resolveGitChangeType(f.index, f.working_dir)
     }))
 
     return {
@@ -152,6 +171,9 @@ export async function getChangedFiles(cwd: string, scope: GitDiffScope): Promise
   for (const filePath of unique) {
     try {
       const fileStatus = status.files.find((f) => f.path === filePath)
+      const changeType = fileStatus
+        ? resolveGitChangeType(fileStatus.index, fileStatus.working_dir)
+        : 'modified'
 
       if (scope === 'unstaged' && isUntrackedPath(filePath, status.files)) {
         try {
@@ -160,10 +182,17 @@ export async function getChangedFiles(cwd: string, scope: GitDiffScope): Promise
             path: filePath,
             additions: countLines(content),
             deletions: 0,
-            status: scope
+            status: scope,
+            changeType: 'untracked'
           })
         } catch {
-          result.push({ path: filePath, additions: 0, deletions: 0, status: scope })
+          result.push({
+            path: filePath,
+            additions: 0,
+            deletions: 0,
+            status: scope,
+            changeType: 'untracked'
+          })
         }
         continue
       }
@@ -187,10 +216,17 @@ export async function getChangedFiles(cwd: string, scope: GitDiffScope): Promise
         path: filePath,
         additions,
         deletions,
-        status: scope
+        status: scope,
+        changeType
       })
     } catch {
-      result.push({ path: filePath, additions: 0, deletions: 0, status: scope })
+      result.push({
+        path: filePath,
+        additions: 0,
+        deletions: 0,
+        status: scope,
+        changeType: 'modified'
+      })
     }
   }
 

@@ -50,6 +50,7 @@ import {
   formatMessageContentWithAttachments
 } from './file/prompt-attachments'
 import { buildAgentPrompt } from './file/plan-prompt'
+import { scanSkills } from './skills/skill-scanner'
 import { savePlanFromAssistantMessage } from './file/plan-service'
 import { readPlanFile } from './file/plans'
 import type { PlanDetail, PlanInfo, PlansListPayload } from '../preload/types'
@@ -462,19 +463,21 @@ function registerIpcHandlers(): void {
         createdAt: now,
         attachments: persistedAttachments ? JSON.stringify(persistedAttachments) : null,
         planMode: payload.planMode ?? false,
-        planRefs: payload.planRefs?.length ? JSON.stringify(payload.planRefs) : null
+        planRefs: payload.planRefs?.length ? JSON.stringify(payload.planRefs) : null,
+        skillRefs: payload.skillRefs?.length ? JSON.stringify(payload.skillRefs) : null
       })
 
       return { id, title, cwd, attachments: persistedAttachments }
     }
   )
 
-  ipcMain.handle(IPC_CHANNELS.CHAT_SEND_FIRST, (_e, payload: SendMessagePayload): void => {
+  ipcMain.handle(IPC_CHANNELS.CHAT_SEND_FIRST, async (_e, payload: SendMessagePayload): Promise<void> => {
     const assistantMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-a`
-    const prompt = buildAgentPrompt({
+    const prompt = await buildAgentPrompt({
       content: payload.content,
       attachments: payload.attachments,
       planRefs: payload.planRefs,
+      skillRefs: payload.skillRefs,
       planMode: payload.planMode,
       conversationId: payload.conversationId
     })
@@ -506,7 +509,9 @@ function registerIpcHandlers(): void {
     supervisedRun(runInput, emitAgentEvent)
   })
 
-  ipcMain.handle(IPC_CHANNELS.CHAT_SEND, (_e, payload: SendMessagePayload): SendMessageResult => {
+  ipcMain.handle(
+    IPC_CHANNELS.CHAT_SEND,
+    async (_e, payload: SendMessagePayload): Promise<SendMessageResult> => {
     const userMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
     const assistantMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-a`
     const now = new Date().toISOString()
@@ -524,13 +529,15 @@ function registerIpcHandlers(): void {
       createdAt: now,
       attachments: persistedAttachments ? JSON.stringify(persistedAttachments) : null,
       planMode: payload.planMode ?? false,
-      planRefs: payload.planRefs?.length ? JSON.stringify(payload.planRefs) : null
+      planRefs: payload.planRefs?.length ? JSON.stringify(payload.planRefs) : null,
+      skillRefs: payload.skillRefs?.length ? JSON.stringify(payload.skillRefs) : null
     })
 
-    const prompt = buildAgentPrompt({
+    const prompt = await buildAgentPrompt({
       content: payload.content,
       attachments: persistedAttachments ?? payload.attachments,
       planRefs: payload.planRefs,
+      skillRefs: payload.skillRefs,
       planMode: payload.planMode,
       conversationId: payload.conversationId
     })
@@ -566,7 +573,8 @@ function registerIpcHandlers(): void {
       assistantMessageId: assistantMsgId,
       attachments: persistedAttachments
     })
-  })
+  }
+  )
 
   ipcMain.handle(IPC_CHANNELS.CHAT_STOP, (_e, conversationId: string): void => {
     cancelApprovalsForConversation(conversationId)
@@ -621,6 +629,13 @@ function registerIpcHandlers(): void {
         if (r.plan_refs) {
           try {
             msg.planRefs = JSON.parse(r.plan_refs)
+          } catch {
+            /* ignore */
+          }
+        }
+        if (r.skill_refs) {
+          try {
+            msg.skillRefs = JSON.parse(r.skill_refs)
           } catch {
             /* ignore */
           }
@@ -911,6 +926,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.GIT_RECENT_LOG, (_e, cwd: string, limit?: number) =>
     getRecentLog(cwd, limit ?? 10)
+  )
+
+  ipcMain.handle(IPC_CHANNELS.SKILLS_SCAN, (_e, workspaceCwd?: string | null) =>
+    scanSkills(workspaceCwd)
   )
 
   ipcMain.handle(IPC_CHANNELS.AGENT_RUN_UTILITY, async (_e, payload) => {

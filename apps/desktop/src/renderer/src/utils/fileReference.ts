@@ -84,6 +84,12 @@ export function serializeEditorContent(root: HTMLElement): string {
       return
     }
 
+    if (el.classList.contains('inline-skill-ref')) {
+      const name = el.dataset.name ?? ''
+      if (name) parts.push(`[skill:${name}]`)
+      return
+    }
+
     if (el.tagName === 'BR') {
       parts.push('\n')
       return

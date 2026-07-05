@@ -142,11 +142,22 @@ const isTerminalTab = computed(() => layoutStore.activeExtensionTab === 'termina
 
     <div class="panel-content">
       <Suspense>
-        <DiffView v-if="layoutStore.activeExtensionTab === 'review'" />
-        <TerminalTabs v-else-if="isTerminalTab" embedded />
-        <BrowserView v-else-if="layoutStore.activeExtensionTab === 'browser'" />
-        <FileTree v-else-if="layoutStore.activeExtensionTab === 'files'" />
-        <PlansPanel v-else-if="layoutStore.activeExtensionTab === 'plans'" />
+        <div class="panel-stack">
+          <DiffView
+            v-show="layoutStore.activeExtensionTab === 'review'"
+            class="panel-pane"
+          />
+          <TerminalTabs v-show="isTerminalTab" class="panel-pane" embedded />
+          <BrowserView
+            v-show="layoutStore.activeExtensionTab === 'browser'"
+            class="panel-pane"
+          />
+          <FileTree v-show="layoutStore.activeExtensionTab === 'files'" class="panel-pane" />
+          <PlansPanel
+            v-show="layoutStore.activeExtensionTab === 'plans'"
+            class="panel-pane"
+          />
+        </div>
       </Suspense>
     </div>
   </div>
@@ -237,5 +248,22 @@ const isTerminalTab = computed(() => layoutStore.activeExtensionTab === 'termina
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  position: relative;
+  min-height: 0;
+}
+
+.panel-stack {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.panel-pane {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 </style>

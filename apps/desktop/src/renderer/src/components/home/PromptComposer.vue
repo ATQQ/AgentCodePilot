@@ -2,17 +2,12 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Plus, Top, CircleCheck, CircleClose } from '@element-plus/icons-vue'
-import type {
-  Attachment,
-  ApprovalLevel,
-  FileAttachment,
-  UrlAttachment,
-  PlanReference
-} from '@renderer/types'
+import type { Attachment, ApprovalLevel, FileAttachment, UrlAttachment, PlanReference, SkillReference } from '@renderer/types'
 import { toLocalFileUrl } from '@renderer/utils/localFile'
 import { useImagePreview } from '@renderer/composables/useImagePreview'
 import { useComposerStore } from '@renderer/stores/composer.store'
 import PlanPicker from '@renderer/components/plans/PlanPicker.vue'
+import SkillPicker from '@renderer/components/skills/SkillPicker.vue'
 import ComposerInlineInput from './ComposerInlineInput.vue'
 
 const { t } = useI18n()
@@ -65,12 +60,16 @@ watch(
     } else if (consumed.fileRef) {
       inlineInputRef.value?.insertFileRef(consumed.fileRef)
       syncInlineContentState()
+    } else if (consumed.skillRef) {
+      inlineInputRef.value?.insertSkillRef(consumed.skillRef)
+      syncInlineContentState()
     }
   }
 )
 const showAddMenu = ref(false)
 const showApprovalMenu = ref(false)
 const showPlanPicker = ref(false)
+const showSkillPicker = ref(false)
 const planRefs = ref<PlanReference[]>([])
 // const pursueGoals = ref(false) // TODO: 目标模式，后续实现
 const attachments = ref<Attachment[]>([])
@@ -93,7 +92,13 @@ const planMode = computed({
 const approvalLevel = computed(() => props.approvalLevel ?? 'auto')
 
 const emit = defineEmits<{
-  submit: [text: string, attachments: Attachment[], planMode: boolean, planRefs: PlanReference[]]
+  submit: [
+    text: string,
+    attachments: Attachment[],
+    planMode: boolean,
+    planRefs: PlanReference[],
+    skillRefs: SkillReference[]
+  ]
   stop: []
   cancelQueue: [index: number]
   approvalChange: [level: ApprovalLevel]
@@ -117,10 +122,12 @@ const hasComposerContent = computed(
 
 function handleSubmit(): void {
   const text = inlineInputRef.value?.getContent() ?? ''
-  if (!text && attachments.value.length === 0 && planRefs.value.length === 0) return
+  const skillRefs = inlineInputRef.value?.getSkillRefs() ?? []
+  if (!text && attachments.value.length === 0 && planRefs.value.length === 0 && skillRefs.length === 0)
+    return
   const refs = [...planRefs.value]
   const effectivePlanMode = refs.length > 0 ? false : planMode.value
-  emit('submit', text, [...attachments.value], effectivePlanMode, refs)
+  emit('submit', text, [...attachments.value], effectivePlanMode, refs, skillRefs)
   inlineInputRef.value?.clear()
   inlineHasContent.value = false
   attachments.value = []
@@ -139,6 +146,17 @@ function addPlanRef(plan: PlanReference): void {
 
 function removePlanRef(id: string): void {
   planRefs.value = planRefs.value.filter((p) => p.id !== id)
+}
+
+function openSkillPicker(): void {
+  showAddMenu.value = false
+  showSkillPicker.value = true
+}
+
+function handleSkillPickerSelect(skill: SkillReference): void {
+  inlineInputRef.value?.insertSkillRef(skill)
+  syncInlineContentState()
+  showSkillPicker.value = false
 }
 
 function openPlanPicker(): void {
@@ -409,6 +427,10 @@ defineExpose({
                 <span class="menu-icon">&#x1F4CB;</span>
                 <span>{{ t('composer.addMenu.referencePlan') }}</span>
               </button>
+              <button class="menu-item" @click="openSkillPicker">
+                <span class="menu-icon">&#x2728;</span>
+                <span>{{ t('composer.addMenu.referenceSkill') }}</span>
+              </button>
               <!-- TODO: 目标模式，后续实现
               <button class="menu-item menu-item--toggle" @click.stop="pursueGoals = !pursueGoals">
                 <span class="menu-icon">&#x1F3AF;</span>
@@ -521,6 +543,11 @@ defineExpose({
       :visible="showPlanPicker"
       @close="showPlanPicker = false"
       @select="handlePlanPickerSelect"
+    />
+    <SkillPicker
+      :visible="showSkillPicker"
+      @close="showSkillPicker = false"
+      @select="handleSkillPickerSelect"
     />
   </div>
 </template>

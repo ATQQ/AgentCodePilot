@@ -1,7 +1,8 @@
-import type { AttachmentPayload, PlanReference } from '../../preload/types'
+import type { AttachmentPayload, PlanReference, SkillReference } from '../../preload/types'
 import * as repo from '../database/repositories'
 import { readPlanFile, resolvePlanAbsolutePath } from './plans'
 import { buildPromptWithAttachments } from './prompt-attachments'
+import { buildPromptWithSkillRefs } from './skill-prompt'
 
 const NEW_PLAN_PATTERN = /新.{0,4}计划|重新规划|另.{0,2}计划|new plan|start over/i
 
@@ -119,15 +120,20 @@ function withReplyLanguageInstructions(prompt: string): string {
   return `${instructions}\n\n${prompt}`
 }
 
-export function buildAgentPrompt(options: {
+export async function buildAgentPrompt(options: {
   content: string
   attachments?: AttachmentPayload[]
   planRefs?: PlanReference[]
+  skillRefs?: SkillReference[]
   planMode?: boolean
   conversationId?: string
-}): string {
-  const { content, attachments, planRefs, planMode, conversationId } = options
-  const withAttachments = buildPromptWithAttachments(content, attachments)
+}): Promise<string> {
+  const { content, attachments, planRefs, skillRefs, planMode, conversationId } = options
+  let withAttachments = buildPromptWithAttachments(content, attachments)
+
+  if (skillRefs?.length) {
+    withAttachments = await buildPromptWithSkillRefs(withAttachments, skillRefs)
+  }
 
   if (planMode && conversationId) {
     const latestPlan = userRequestsNewPlan(content)

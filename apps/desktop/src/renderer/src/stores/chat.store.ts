@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import type { Attachment, ApprovalRequest, Conversation, Message, ToolCall } from '@renderer/types'
-import type { AgentEvent, AttachmentPayload, PlanReference } from '../../../preload/types'
+import type { AgentEvent, AttachmentPayload, PlanReference, SkillReference } from '../../../preload/types'
 import type { ApprovalLevel } from '@renderer/types'
 import { useWorkspaceStore } from './workspace.store'
 import { useModelStore } from './model.store'
@@ -30,6 +30,7 @@ export const useChatStore = defineStore('chat', () => {
       modelId?: string
       planMode?: boolean
       planRefs?: PlanReference[]
+      skillRefs?: SkillReference[]
     }[]
   >([])
   const pendingAgentByConversation = ref<Map<string, string>>(new Map())
@@ -466,6 +467,7 @@ export const useChatStore = defineStore('chat', () => {
       agentId: m.agentId,
       planMode: m.planMode,
       planRefs: m.planRefs,
+      skillRefs: m.skillRefs,
       attachments: m.attachments?.map((att) => enrichAttachment(att as Attachment)),
       toolCalls: m.toolCalls,
       usage: m.usage,
@@ -498,11 +500,13 @@ export const useChatStore = defineStore('chat', () => {
     attachments?: Attachment[],
     planMode?: boolean,
     modelId?: string,
-    planRefs?: PlanReference[]
+    planRefs?: PlanReference[],
+    skillRefs?: SkillReference[]
   ): Promise<string> {
     const modelStore = useModelStore()
     const resolvedModelId = modelId ?? modelStore.getEffectiveModelId()
     const plainPlanRefs = toPlainPlanRefs(planRefs)
+    const plainSkillRefs = toPlainSkillRefs(skillRefs)
     const effectivePlanMode = plainPlanRefs?.length ? false : (planMode ?? false)
     const result = await window.agentAPI.chat.createConversation({
       agentId,
@@ -511,7 +515,8 @@ export const useChatStore = defineStore('chat', () => {
       projectId,
       attachments: toAttachmentPayloads(attachments),
       planMode: effectivePlanMode,
-      planRefs: plainPlanRefs
+      planRefs: plainPlanRefs,
+      skillRefs: plainSkillRefs
     })
 
     const persistedAttachments =
@@ -528,6 +533,7 @@ export const useChatStore = defineStore('chat', () => {
       createdAt: now,
       ...(effectivePlanMode ? { planMode: true } : {}),
       ...(plainPlanRefs?.length ? { planRefs: plainPlanRefs } : {}),
+      ...(plainSkillRefs?.length ? { skillRefs: plainSkillRefs } : {}),
       attachments: persistedAttachments
     }
     conversations.value.unshift({
@@ -559,7 +565,8 @@ export const useChatStore = defineStore('chat', () => {
     content: string,
     attachments?: Attachment[],
     planMode?: boolean,
-    planRefs?: PlanReference[]
+    planRefs?: PlanReference[],
+    skillRefs?: SkillReference[]
   ): void {
     const conv = conversations.value.find((c) => c.id === conversationId)
     if (!conv) return
@@ -571,6 +578,7 @@ export const useChatStore = defineStore('chat', () => {
       createdAt: now,
       ...(planMode ? { planMode: true } : {}),
       ...(planRefs?.length ? { planRefs } : {}),
+      ...(skillRefs?.length ? { skillRefs } : {}),
       attachments: attachments && attachments.length > 0 ? attachments : undefined
     })
     conv.updatedAt = now
@@ -589,18 +597,25 @@ export const useChatStore = defineStore('chat', () => {
     })
   }
 
+  function toPlainSkillRefs(skillRefs?: SkillReference[]): SkillReference[] | undefined {
+    if (!skillRefs?.length) return undefined
+    return skillRefs.map((ref) => ({ name: ref.name, path: ref.path, scope: ref.scope }))
+  }
+
   async function sendMessage(
     conversationId: string,
     content: string,
     agentId: string,
     attachments?: Attachment[],
     planMode?: boolean,
-    planRefs?: PlanReference[]
+    planRefs?: PlanReference[],
+    skillRefs?: SkillReference[]
   ): Promise<void> {
     const conv = conversations.value.find((c) => c.id === conversationId)
     const modelStore = useModelStore()
     const modelId = modelStore.getEffectiveModelId(conv?.modelId)
     const effectivePlanMode = planRefs?.length ? false : (planMode ?? false)
+    const plainSkillRefs = toPlainSkillRefs(skillRefs)
     if (isConversationBusy(conversationId)) {
       queuedMessages.value.push({
         conversationId,
@@ -608,7 +623,8 @@ export const useChatStore = defineStore('chat', () => {
         agentId,
         modelId,
         planMode: effectivePlanMode,
-        planRefs: toPlainPlanRefs(planRefs)
+        planRefs: toPlainPlanRefs(planRefs),
+        skillRefs: plainSkillRefs
       })
       return
     }
@@ -620,7 +636,8 @@ export const useChatStore = defineStore('chat', () => {
       content,
       attachments,
       effectivePlanMode,
-      toPlainPlanRefs(planRefs)
+      toPlainPlanRefs(planRefs),
+      plainSkillRefs
     )
     removeCompletedConversation(conversationId)
     markThinkingStarted(conversationId)
@@ -638,7 +655,8 @@ export const useChatStore = defineStore('chat', () => {
         workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
         attachments: toAttachmentPayloads(attachments),
         planMode: effectivePlanMode,
-        planRefs: toPlainPlanRefs(planRefs)
+        planRefs: toPlainPlanRefs(planRefs),
+        skillRefs: plainSkillRefs
       })
       setActiveAssistantMessage(conversationId, result.assistantMessageId)
       ensureAssistantPlaceholder(conversationId, result.assistantMessageId)
@@ -677,7 +695,7 @@ export const useChatStore = defineStore('chat', () => {
     if (idx === -1) return
     const next = queuedMessages.value.splice(idx, 1)[0]
     setPendingAgent(next.conversationId, next.agentId)
-    addMessage(next.conversationId, 'user', next.content, undefined, next.planMode, next.planRefs)
+    addMessage(next.conversationId, 'user', next.content, undefined, next.planMode, next.planRefs, next.skillRefs)
     clearActiveAssistantMessage(next.conversationId)
     removeCompletedConversation(next.conversationId)
     markThinkingStarted(next.conversationId)
@@ -696,7 +714,8 @@ export const useChatStore = defineStore('chat', () => {
         cwd: conv?.cwd || workspaceStore.currentCwd,
         workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
         planMode: next.planMode ?? false,
-        planRefs: toPlainPlanRefs(next.planRefs)
+        planRefs: toPlainPlanRefs(next.planRefs),
+        skillRefs: toPlainSkillRefs(next.skillRefs)
       })
       .then((result) => {
         setActiveAssistantMessage(next.conversationId, result.assistantMessageId)
@@ -708,6 +727,7 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function handleAgentEvent(event: AgentEvent): void {
+    try {
     switch (event.type) {
       case 'message.started': {
         removeCompletedConversation(event.conversationId)
@@ -941,6 +961,9 @@ export const useChatStore = defineStore('chat', () => {
         }
         break
       }
+    }
+    } catch (err) {
+      console.error('handleAgentEvent failed', event.type, err)
     }
   }
 

@@ -46,6 +46,7 @@ export const IPC_CHANNELS = {
   GIT_PUSH: 'git:push',
   GIT_STAGED_DIFF: 'git:stagedDiff',
   GIT_RECENT_LOG: 'git:recentLog',
+  SKILLS_SCAN: 'skills:scan',
   AGENT_RUN_UTILITY: 'agent:runUtility',
   FILE_LIST: 'file:list',
   FILE_READ: 'file:read',
@@ -86,6 +87,17 @@ export interface PlanReference {
   title: string
 }
 
+export interface SkillReference {
+  name: string
+  path: string
+  scope: 'workspace' | 'global'
+}
+
+export interface ScannedSkill extends SkillReference {
+  id: string
+  description: string
+}
+
 export interface SendMessagePayload {
   conversationId: string
   content: string
@@ -96,6 +108,7 @@ export interface SendMessagePayload {
   attachments?: AttachmentPayload[]
   planMode?: boolean
   planRefs?: PlanReference[]
+  skillRefs?: SkillReference[]
 }
 
 export interface SendMessageResult {
@@ -111,6 +124,7 @@ export interface CreateConversationPayload {
   attachments?: AttachmentPayload[]
   planMode?: boolean
   planRefs?: PlanReference[]
+  skillRefs?: SkillReference[]
 }
 
 export type ReplyLanguage = 'auto' | 'zh-CN' | 'en' | 'ja' | 'ko'
@@ -223,11 +237,20 @@ export interface GatewayStatus {
   token: string
 }
 
+export type GitChangeType =
+  | 'modified'
+  | 'added'
+  | 'untracked'
+  | 'deleted'
+  | 'renamed'
+  | 'conflict'
+
 export interface GitChangedFile {
   path: string
   additions: number
   deletions: number
   status: string
+  changeType?: GitChangeType
 }
 
 export interface GitStatusResult {
@@ -374,6 +397,7 @@ export interface MessageInfo {
   agentId?: string
   planMode?: boolean
   planRefs?: PlanReference[]
+  skillRefs?: SkillReference[]
   attachments?: AttachmentPayload[]
   toolCalls?: ToolUseInfo[]
   usage?: TokenUsage
@@ -590,6 +614,9 @@ export interface AgentAPI {
   }
   agent: {
     runUtility: (payload: AgentUtilityPayload) => Promise<string>
+  }
+  skills: {
+    scan: (workspaceCwd?: string | null) => Promise<ScannedSkill[]>
   }
   terminal: {
     create: (scopeKey: string, cwd: string, title?: string) => Promise<TerminalInfo>

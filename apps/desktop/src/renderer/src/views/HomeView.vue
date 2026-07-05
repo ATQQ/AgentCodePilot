@@ -10,7 +10,7 @@ import { useAgentStore } from '@renderer/stores/agent.store'
 import { useModelStore } from '@renderer/stores/model.store'
 import { useWorkspaceStore } from '@renderer/stores/workspace.store'
 import { useComposerStore } from '@renderer/stores/composer.store'
-import type { Attachment, PlanReference } from '@renderer/types'
+import type { Attachment, PlanReference, SkillReference } from '@renderer/types'
 
 const router = useRouter()
 const chatStore = useChatStore()
@@ -28,11 +28,15 @@ async function handleSubmit(
   text: string,
   attachments: Attachment[],
   planMode: boolean,
-  planRefs: PlanReference[]
+  planRefs: PlanReference[],
+  skillRefs: SkillReference[]
 ): Promise<void> {
   const agentId = agentStore.selectedAgentId
   const projectId = workspaceStore.selectedProjectId
   const plainPlanRefs = toPlainPlanRefs(planRefs)
+  const plainSkillRefs = skillRefs.length
+    ? skillRefs.map((ref) => ({ name: ref.name, path: ref.path, scope: ref.scope }))
+    : undefined
   const effectivePlanMode = plainPlanRefs?.length ? false : planMode
   const convId = await chatStore.createConversation(
     agentId,
@@ -41,7 +45,8 @@ async function handleSubmit(
     attachments,
     effectivePlanMode,
     undefined,
-    plainPlanRefs
+    plainPlanRefs,
+    plainSkillRefs
   )
   composerStore.transferHomePlanModeToConversation(convId)
   if (effectivePlanMode) composerStore.setPlanMode(convId, true)
@@ -64,7 +69,8 @@ async function handleSubmit(
     attachments:
       attachmentPayloads && attachmentPayloads.length > 0 ? attachmentPayloads : undefined,
     planMode: effectivePlanMode,
-    planRefs: plainPlanRefs
+    planRefs: plainPlanRefs,
+    skillRefs: plainSkillRefs
   })
 }
 </script>

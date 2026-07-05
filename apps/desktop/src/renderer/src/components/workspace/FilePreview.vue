@@ -31,6 +31,7 @@ const imageLoadFailed = ref(false)
 const showAddExtensionPrompt = ref(false)
 const selectedLanguage = ref('plaintext')
 const mdPreviewMode = ref(false)
+const mdPreviewContentRef = ref<HTMLElement | null>(null)
 
 const fileName = computed(() => props.filePath.split('/').pop() ?? props.filePath)
 
@@ -82,7 +83,7 @@ watch(
   () => {
     initImageSrc()
     showAddExtensionPrompt.value = false
-    mdPreviewMode.value = false
+    mdPreviewMode.value = isMarkdown.value
     resetLanguageSelection()
   }
 )
@@ -109,6 +110,7 @@ async function saveFile(): Promise<void> {
   const ok = await fileStore.saveFile()
   if (ok) {
     fileStore.setEditMode(false)
+    if (isMarkdown.value) mdPreviewMode.value = true
   }
 }
 
@@ -116,6 +118,7 @@ async function saveFileFromShortcut(): Promise<void> {
   const ok = await fileStore.saveFile()
   if (ok) {
     fileStore.setEditMode(false)
+    if (isMarkdown.value) mdPreviewMode.value = true
     ElMessage.success(t('workspace.filePreview.saved'))
   } else {
     ElMessage.error(t('workspace.filePreview.saveFailed'))
@@ -130,6 +133,22 @@ function enterEditModeFromShortcut(): void {
 
 function toggleMdPreview(): void {
   mdPreviewMode.value = !mdPreviewMode.value
+}
+
+function handleMdPreviewClick(e: MouseEvent): void {
+  const anchor = (e.target as HTMLElement).closest('a[href^="#"]')
+  if (!anchor) return
+  const href = anchor.getAttribute('href')
+  if (!href || href === '#') return
+  e.preventDefault()
+  e.stopPropagation()
+  const id = decodeURIComponent(href.slice(1))
+  const container = mdPreviewContentRef.value
+  if (!container) return
+  const target =
+    container.querySelector(`#${CSS.escape(id)}`) ??
+    container.querySelector(`[id="${CSS.escape(id)}"]`)
+  target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 function previewHtmlInBrowser(): void {
@@ -265,7 +284,9 @@ onUnmounted(() => {
 
       <div
         v-else-if="fileKind === 'text' && mdPreviewMode"
+        ref="mdPreviewContentRef"
         class="md-preview-content elegant-scroll"
+        @click.capture="handleMdPreviewClick"
       >
         <MarkdownRender
           mode="docs"

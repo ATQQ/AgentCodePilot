@@ -6,6 +6,7 @@ import { useFileExplorerStore } from '@renderer/stores/fileExplorer.store'
 import { usePanelContextStore } from '@renderer/stores/panelContext.store'
 import { useComposerStore } from '@renderer/stores/composer.store'
 import { useLayoutStore } from '@renderer/stores/layout.store'
+import { useGitStore } from '@renderer/stores/git.store'
 import type { FileEntry } from '@renderer/types'
 import { getFileLanguageIconHtml } from '@renderer/utils/fileLanguageIcon'
 import { getBaseName, getParentDir, joinWorkspacePath } from '@renderer/utils/workspacePath'
@@ -22,6 +23,7 @@ const fileStore = useFileExplorerStore()
 const panelContext = usePanelContextStore()
 const composerStore = useComposerStore()
 const layoutStore = useLayoutStore()
+const gitStore = useGitStore()
 
 const treeCollapsed = ref(false)
 const contextMenuRef = ref<InstanceType<typeof FileTreeContextMenu> | null>(null)
@@ -217,6 +219,10 @@ function getItems(dir: string): FileEntry[] {
   return fileStore.childrenCache[dir] ?? []
 }
 
+function getGitChangeType(relativePath: string) {
+  return gitStore.getChangeTypeForPath(relativePath)
+}
+
 function onTabSelect(path: string): void {
   fileStore.selectTab(path)
 }
@@ -242,9 +248,10 @@ function onCloseAll(): void {
       <div class="ft-body">
         <div class="main-pane">
           <SideTreeFolderBtn
-            :title="treeCollapsed ? '展开文件树' : '收起文件树'"
+            v-if="treeCollapsed"
+            title="展开文件树"
             floating
-            @click="treeCollapsed = !treeCollapsed"
+            @click="treeCollapsed = false"
           />
 
           <EditorFileTabs
@@ -275,6 +282,7 @@ function onCloseAll(): void {
         >
           <template #header>
             <input v-model="fileStore.filter" class="filter-input" placeholder="筛选文件…" />
+            <SideTreeFolderBtn title="收起文件树" @click="treeCollapsed = true" />
           </template>
 
           <div class="tree-content" @contextmenu="onTreeBlankContextMenu">
@@ -302,6 +310,7 @@ function onCloseAll(): void {
               :get-items="getItems"
               :is-expanded="fileStore.isExpanded"
               :active-file-path="fileStore.openFilePath"
+              :get-git-change-type="getGitChangeType"
               @click-entry="onEntryClick"
               @context-menu="showContextMenu"
             />
@@ -452,6 +461,28 @@ function onCloseAll(): void {
   justify-content: center;
   color: var(--content-text-tertiary);
   font-size: var(--font-size-sm);
+}
+
+:deep(.file-row.git-untracked .file-name),
+:deep(.file-row.git-added .file-name) {
+  color: #73c991;
+}
+
+:deep(.file-row.git-modified .file-name) {
+  color: #e2c08d;
+}
+
+:deep(.file-row.git-deleted .file-name) {
+  color: #c74e39;
+  text-decoration: line-through;
+}
+
+:deep(.file-row.git-renamed .file-name) {
+  color: #e2c08d;
+}
+
+:deep(.file-row.git-conflict .file-name) {
+  color: #c74e39;
 }
 
 :deep(.file-tree-node) {

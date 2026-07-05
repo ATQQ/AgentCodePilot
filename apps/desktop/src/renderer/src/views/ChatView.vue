@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch, ref, computed, onMounted, onUnmounted } from 'vue'
+import { watch, ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import MarkdownRender from 'markstream-vue'
@@ -16,7 +16,7 @@ import CollapsibleUserMessageText from '@renderer/components/chat/CollapsibleUse
 import ChatMessageList from '@renderer/components/chat/ChatMessageList.vue'
 import { getAgentIcon } from '@renderer/utils/agentIcons'
 import { formatTokenUsageSummary } from '@renderer/utils/formatTokenUsage'
-import type { Attachment, Message, PlanReference, ApprovalRequest } from '@renderer/types'
+import type { Attachment, Message, PlanReference, ApprovalRequest, SkillReference } from '@renderer/types'
 import { useLayoutStore, type LayoutStore } from '@renderer/stores/layout.store'
 import { usePlanStore } from '@renderer/stores/plan.store'
 import { useComposerStore } from '@renderer/stores/composer.store'
@@ -36,6 +36,17 @@ const messageListRef = ref<InstanceType<typeof ChatMessageList> | null>(null)
 const { onScroll, scheduleScrollToBottom, forceScrollToBottom } = useAutoScroll(
   () => messageListRef.value?.scrollContainer ?? null
 )
+
+function scrollToLatestOnSend(): void {
+  forceScrollToBottom(true)
+  messageListRef.value?.scrollToBottom()
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      forceScrollToBottom(true)
+      messageListRef.value?.scrollToBottom()
+    })
+  })
+}
 const chatViewRef = ref<HTMLElement | null>(null)
 const composerRef = ref<InstanceType<typeof PromptComposer> | null>(null)
 const copiedMessageId = ref<string | null>(null)
@@ -110,7 +121,7 @@ watch(
   () => chatStore.isStoppable,
   (stoppable, wasStoppable) => {
     if (stoppable && !wasStoppable) {
-      scheduleScrollToBottom()
+      scrollToLatestOnSend()
     }
   }
 )
@@ -190,7 +201,7 @@ watch(
     if (active) {
       refreshWaitingSeconds()
       waitingTimer = setInterval(refreshWaitingSeconds, 1000)
-      scheduleScrollToBottom()
+      scrollToLatestOnSend()
     } else if (waitingTimer) {
       clearInterval(waitingTimer)
       waitingTimer = null
@@ -294,10 +305,11 @@ function handleSubmit(
   text: string,
   attachments: Attachment[],
   planMode: boolean,
-  planRefs: PlanReference[]
+  planRefs: PlanReference[],
+  skillRefs: SkillReference[]
 ): void {
   if (
-    (!text && attachments.length === 0 && planRefs.length === 0) ||
+    (!text && attachments.length === 0 && planRefs.length === 0 && skillRefs.length === 0) ||
     !chatStore.activeConversationId
   )
     return
@@ -307,8 +319,10 @@ function handleSubmit(
     agentStore.selectedAgentId,
     attachments,
     planMode,
-    planRefs
+    planRefs,
+    skillRefs
   )
+  scrollToLatestOnSend()
 }
 
 watch(
@@ -324,8 +338,10 @@ watch(
       agentStore.selectedAgentId,
       undefined,
       false,
-      [execute.plan]
+      [execute.plan],
+      undefined
     )
+    scrollToLatestOnSend()
   }
 )
 
@@ -528,8 +544,8 @@ function toggleUserMessageExpanded(messageId: string): void {
                         !chatStore.wasMessageStreamed(msg.id)
                       "
                       :typewriter="chatStore.isMessageStreaming(msg.id)"
-                      :max-live-nodes="chatStore.isMessageStreaming(msg.id) ? 0 : 280"
-                      :render-code-blocks-as-pre="false"
+                      :max-live-nodes="chatStore.isMessageStreaming(msg.id) ? 120 : 280"
+                      :render-code-blocks-as-pre="chatStore.isMessageStreaming(msg.id)"
                       :is-dark="isDark"
                       :code-block-props="CODE_BLOCK_PROPS"
                     />
@@ -564,6 +580,13 @@ function toggleUserMessageExpanded(messageId: string): void {
                     }}</span>
                     <span v-for="planRef in msg.planRefs" :key="planRef.id" class="plan-ref-tag">
                       {{ t('chat.planRefTag', { title: planRef.title }) }}
+                    </span>
+                    <span
+                      v-for="skillRef in msg.skillRefs"
+                      :key="`${skillRef.path}-${skillRef.name}`"
+                      class="skill-ref-tag"
+                    >
+                      {{ t('chat.skillRefTag', { name: skillRef.name }) }}
                     </span>
                     <div v-if="msg.attachments?.length" class="message-attachments">
                       <div
@@ -998,6 +1021,18 @@ html.dark .agent-avatar[data-agent='codex'] {
   border-radius: var(--radius-full);
   background: color-mix(in srgb, var(--accent-color) 10%, transparent);
   color: var(--accent-color);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.skill-ref-tag {
+  display: inline-block;
+  margin-right: 6px;
+  margin-bottom: 6px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, #6366f1 12%, transparent);
+  color: #6366f1;
   font-size: 11px;
   font-weight: 500;
 }

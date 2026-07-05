@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { Attachment, FileReference, PlanReference } from '@renderer/types'
+import type { Attachment, FileReference, PlanReference, SkillReference } from '@renderer/types'
 import { usePanelContextStore } from './panelContext.store'
 import { createFileReference } from '@renderer/utils/fileReference'
 
@@ -10,6 +10,7 @@ export interface ComposerInsertRequest {
   attachment?: Attachment
   planRef?: PlanReference
   fileRef?: FileReference
+  skillRef?: SkillReference
 }
 
 export interface ExecutePlanRequest {
@@ -66,6 +67,10 @@ export const useComposerStore = defineStore('composer', () => {
     pendingInsert.value = { id: `ins-${Date.now()}`, planRef: plan }
   }
 
+  function addSkillReference(skill: SkillReference): void {
+    pendingInsert.value = { id: `ins-${Date.now()}`, skillRef: skill }
+  }
+
   function executePlan(plan: PlanReference, message: string): void {
     pendingExecutePlan.value = { id: `exec-${Date.now()}`, plan, message }
   }
@@ -94,6 +99,7 @@ export const useComposerStore = defineStore('composer', () => {
     addAttachment,
     addFileReference,
     addPlanReference,
+    addSkillReference,
     executePlan,
     consumeInsert,
     consumeExecutePlan
