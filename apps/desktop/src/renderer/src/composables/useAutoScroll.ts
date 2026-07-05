@@ -2,14 +2,20 @@ import { nextTick, onUnmounted, type Ref } from 'vue'
 
 const BOTTOM_THRESHOLD = 80
 
-export function useAutoScroll(containerRef: Ref<HTMLElement | null> | (() => HTMLElement | null)): {
+type AutoScrollContainerRef = Ref<HTMLElement | null> | (() => HTMLElement | null)
+
+interface AutoScrollResult {
   onScroll: () => void
   scheduleScrollToBottom: (instant?: boolean) => void
   forceScrollToBottom: (instant?: boolean) => void
   scrollToBottom: (instant?: boolean) => void
-} {
+  beginLayoutTransition: (ms?: number) => void
+}
+
+export function useAutoScroll(containerRef: AutoScrollContainerRef): AutoScrollResult {
   let rafId: number | null = null
   let userPinnedToBottom = true
+  let suppressPinUpdatesUntil = 0
 
   function getContainer(): HTMLElement | null {
     return typeof containerRef === 'function' ? containerRef() : containerRef.value
@@ -22,7 +28,13 @@ export function useAutoScroll(containerRef: Ref<HTMLElement | null> | (() => HTM
   }
 
   function onScroll(): void {
+    if (Date.now() < suppressPinUpdatesUntil) return
     userPinnedToBottom = isNearBottom()
+  }
+
+  function beginLayoutTransition(ms = 250): void {
+    suppressPinUpdatesUntil = Date.now() + ms
+    userPinnedToBottom = true
   }
 
   function scrollToBottom(instant = false): void {
@@ -59,6 +71,7 @@ export function useAutoScroll(containerRef: Ref<HTMLElement | null> | (() => HTM
     onScroll,
     scheduleScrollToBottom,
     forceScrollToBottom,
-    scrollToBottom
+    scrollToBottom,
+    beginLayoutTransition
   }
 }

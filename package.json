@@ -22,11 +22,26 @@
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm build",
     "icons:generate": "node scripts/generate-icons.mjs",
     "icons:sync": "node scripts/sync-icons.mjs",
-    "verify:cursor-sdk": "node scripts/verify-cursor-sdk.mjs"
+    "verify:cursor-sdk": "node scripts/verify-cursor-sdk.mjs",
+    "prepare": "simple-git-hooks"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm lint-staged",
+    "pre-push": "pnpm typecheck"
+  },
+  "lint-staged": {
+    "apps/desktop/**/*.{js,mjs,ts,vue}": [
+      "eslint --cache --fix --config apps/desktop/eslint.config.mjs",
+      "prettier --write --ignore-path .prettierignore"
+    ],
+    "apps/desktop/**/*.{json,yaml,yml,md,css,html}": "prettier --write --ignore-path .prettierignore",
+    "*.{json,yaml,yml,md}": "prettier --write --ignore-path .prettierignore"
   },
   "devDependencies": {
+    "lint-staged": "^16.1.2",
     "png-to-ico": "^2.1.8",
-    "sharp": "^0.34.3"
+    "sharp": "^0.34.3",
+    "simple-git-hooks": "^2.13.0"
   },
   "engines": {
     "node": ">=18.0.0",

@@ -16,7 +16,13 @@ import CollapsibleUserMessageText from '@renderer/components/chat/CollapsibleUse
 import ChatMessageList from '@renderer/components/chat/ChatMessageList.vue'
 import { getAgentIcon } from '@renderer/utils/agentIcons'
 import { formatTokenUsageSummary } from '@renderer/utils/formatTokenUsage'
-import type { Attachment, Message, PlanReference, ApprovalRequest, SkillReference } from '@renderer/types'
+import type {
+  Attachment,
+  Message,
+  PlanReference,
+  ApprovalRequest,
+  SkillReference
+} from '@renderer/types'
 import { useLayoutStore, type LayoutStore } from '@renderer/stores/layout.store'
 import { usePlanStore } from '@renderer/stores/plan.store'
 import { useComposerStore } from '@renderer/stores/composer.store'
@@ -33,9 +39,10 @@ const layoutStore: LayoutStore = useLayoutStore()
 const planStore = usePlanStore()
 const composerStore = useComposerStore()
 const messageListRef = ref<InstanceType<typeof ChatMessageList> | null>(null)
-const { onScroll, scheduleScrollToBottom, forceScrollToBottom } = useAutoScroll(
-  () => messageListRef.value?.scrollContainer ?? null
-)
+const { onScroll, scheduleScrollToBottom, forceScrollToBottom, beginLayoutTransition } =
+  useAutoScroll(() => messageListRef.value?.scrollContainer ?? null)
+
+const BOTTOM_SCROLL_THRESHOLD = 80
 
 function scrollToLatestOnSend(): void {
   forceScrollToBottom(true)
@@ -227,6 +234,19 @@ watch(
       chatStore.pendingApprovalConversationIds.size
     ] as const,
   () => scheduleScrollToBottom()
+)
+
+watch(
+  () => [layoutStore.showBottomTerminal, layoutStore.bottomPanelHeight] as const,
+  () => {
+    const el = messageListRef.value?.scrollContainer
+    if (!el) return
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= BOTTOM_SCROLL_THRESHOLD
+    if (!nearBottom) return
+    beginLayoutTransition(250)
+    scrollToLatestOnSend()
+    setTimeout(() => scrollToLatestOnSend(), 250)
+  }
 )
 
 const pendingApprovalMessageIds = computed(() => {
@@ -457,7 +477,7 @@ function toggleUserMessageExpanded(messageId: string): void {
               v-if="conversationPlanCount > 0"
               type="button"
               class="plans-header-btn"
-              @click="openPlansPanel()"
+              @click="openPlansPanel"
             >
               {{ t('plans.headerButton', { count: conversationPlanCount }) }}
             </button>
@@ -566,7 +586,7 @@ function toggleUserMessageExpanded(messageId: string): void {
                       v-if="getPlanIdForMessage(msg.id)"
                       type="button"
                       class="view-plan-link"
-                      @click="openPlansPanel(getPlanIdForMessage(msg.id))"
+                      @click="() => openPlansPanel(getPlanIdForMessage(msg.id))"
                     >
                       {{ t('plans.viewPlan') }}
                     </button>
@@ -606,7 +626,7 @@ function toggleUserMessageExpanded(messageId: string): void {
                             type="button"
                             class="msg-attachment-chip msg-attachment-action"
                             :title="t('chat.showInFolder')"
-                            @click="openAttachment(att)"
+                            @click="() => openAttachment(att)"
                           >
                             &#x1F4C4; {{ att.name }}
                           </button>
@@ -617,7 +637,7 @@ function toggleUserMessageExpanded(messageId: string): void {
                               >&#x1F517; #{{ Number(attachmentIndex) + 1 }} {{ att.url }}</span
                             >
                             <span class="msg-attachment-tooltip">
-                              <button class="tooltip-copy" @click.stop="copyText(att.url)">
+                              <button class="tooltip-copy" @click.stop="() => copyText(att.url)">
                                 <svg
                                   width="12"
                                   height="12"
@@ -645,12 +665,16 @@ function toggleUserMessageExpanded(messageId: string): void {
                       :content="msg.content"
                       :expanded="isUserMessageExpanded(msg.id)"
                       :plan-mode="msg.planMode"
-                      @toggle="toggleUserMessageExpanded(msg.id)"
+                      @toggle="() => toggleUserMessageExpanded(msg.id)"
                     />
                   </template>
                 </div>
                 <div class="message-actions">
-                  <button class="action-btn" :title="t('chat.copy')" @click="copyMessage(msg)">
+                  <button
+                    class="action-btn"
+                    :title="t('chat.copy')"
+                    @click="() => copyMessage(msg)"
+                  >
                     <svg
                       v-if="copiedMessageId === msg.id"
                       width="14"
@@ -683,7 +707,7 @@ function toggleUserMessageExpanded(messageId: string): void {
                     v-if="msg.role === 'user'"
                     class="action-btn"
                     :title="t('chat.resend')"
-                    @click="resendMessage(msg.content)"
+                    @click="() => resendMessage(msg.content)"
                   >
                     <svg
                       width="14"
