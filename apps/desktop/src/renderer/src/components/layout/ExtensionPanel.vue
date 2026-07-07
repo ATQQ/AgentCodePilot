@@ -143,20 +143,11 @@ const isTerminalTab = computed(() => layoutStore.activeExtensionTab === 'termina
     <div class="panel-content">
       <Suspense>
         <div class="panel-stack">
-          <DiffView
-            v-show="layoutStore.activeExtensionTab === 'review'"
-            class="panel-pane"
-          />
+          <DiffView v-show="layoutStore.activeExtensionTab === 'review'" class="panel-pane" />
           <TerminalTabs v-show="isTerminalTab" class="panel-pane" embedded />
-          <BrowserView
-            v-show="layoutStore.activeExtensionTab === 'browser'"
-            class="panel-pane"
-          />
+          <BrowserView v-show="layoutStore.activeExtensionTab === 'browser'" class="panel-pane" />
           <FileTree v-show="layoutStore.activeExtensionTab === 'files'" class="panel-pane" />
-          <PlansPanel
-            v-show="layoutStore.activeExtensionTab === 'plans'"
-            class="panel-pane"
-          />
+          <PlansPanel v-show="layoutStore.activeExtensionTab === 'plans'" class="panel-pane" />
         </div>
       </Suspense>
     </div>

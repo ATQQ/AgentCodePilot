@@ -57,10 +57,21 @@ function handleKeydown(e: KeyboardEvent): void {
         role="presentation"
         @click.self="handleClose"
       >
-        <div class="git-log-dialog" role="dialog" aria-modal="true" @click.stop @keydown="handleKeydown">
+        <div
+          class="git-log-dialog"
+          role="dialog"
+          aria-modal="true"
+          @click.stop
+          @keydown="handleKeydown"
+        >
           <div class="dialog-header">
             <h3 class="dialog-title">{{ title }}</h3>
-            <button type="button" class="dialog-close" :title="t('common.close')" @click="handleClose">
+            <button
+              type="button"
+              class="dialog-close"
+              :title="t('common.close')"
+              @click="handleClose"
+            >
               ×
             </button>
           </div>

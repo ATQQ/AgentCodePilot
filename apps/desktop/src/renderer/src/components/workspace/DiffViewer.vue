@@ -110,13 +110,16 @@ function onDiscard(paths: string[]): void {
           name: paths[0].split('/').pop() ?? paths[0]
         })
       : (() => {
-          const commonPrefix = paths.reduce((prefix, path) => {
-            let next = prefix
-            while (next && !path.startsWith(`${next}/`) && path !== next) {
-              next = next.slice(0, next.lastIndexOf('/'))
-            }
-            return next
-          }, paths[0].slice(0, paths[0].lastIndexOf('/')))
+          const commonPrefix = paths.reduce(
+            (prefix, path) => {
+              let next = prefix
+              while (next && !path.startsWith(`${next}/`) && path !== next) {
+                next = next.slice(0, next.lastIndexOf('/'))
+              }
+              return next
+            },
+            paths[0].slice(0, paths[0].lastIndexOf('/'))
+          )
           const dirName = commonPrefix.split('/').pop() || commonPrefix || '目录'
           return t('review.discardDirConfirm', { name: dirName, count: paths.length })
         })()

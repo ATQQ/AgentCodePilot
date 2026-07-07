@@ -28,7 +28,10 @@ function parseFrontmatter(content: string): { name?: string; description?: strin
   return { name, description }
 }
 
-async function scanSkillDir(rootDir: string, scope: 'workspace' | 'global'): Promise<ScannedSkill[]> {
+async function scanSkillDir(
+  rootDir: string,
+  scope: 'workspace' | 'global'
+): Promise<ScannedSkill[]> {
   const results: ScannedSkill[] = []
   if (!existsSync(rootDir)) return results
 
@@ -51,7 +54,11 @@ async function scanSkillDir(rootDir: string, scope: 'workspace' | 'global'): Pro
       try {
         const content = await readFile(fullPath, 'utf-8')
         const meta = parseFrontmatter(content)
-        const dirName = fullPath.replace(/[/\\]SKILL\.md$/, '').split(/[/\\]/).pop() ?? 'skill'
+        const dirName =
+          fullPath
+            .replace(/[/\\]SKILL\.md$/, '')
+            .split(/[/\\]/)
+            .pop() ?? 'skill'
         results.push({
           id: `${scope}:${fullPath}`,
           name: meta.name ?? dirName,

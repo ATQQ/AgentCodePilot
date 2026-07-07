@@ -2,7 +2,14 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Plus, Top, CircleCheck, CircleClose } from '@element-plus/icons-vue'
-import type { Attachment, ApprovalLevel, FileAttachment, UrlAttachment, PlanReference, SkillReference } from '@renderer/types'
+import type {
+  Attachment,
+  ApprovalLevel,
+  FileAttachment,
+  UrlAttachment,
+  PlanReference,
+  SkillReference
+} from '@renderer/types'
 import { toLocalFileUrl } from '@renderer/utils/localFile'
 import { useImagePreview } from '@renderer/composables/useImagePreview'
 import { useComposerStore } from '@renderer/stores/composer.store'
@@ -130,7 +137,12 @@ const hasComposerContent = computed(
 function handleSubmit(): void {
   const text = inlineInputRef.value?.getContent() ?? ''
   const skillRefs = inlineInputRef.value?.getSkillRefs() ?? []
-  if (!text && attachments.value.length === 0 && planRefs.value.length === 0 && skillRefs.length === 0)
+  if (
+    !text &&
+    attachments.value.length === 0 &&
+    planRefs.value.length === 0 &&
+    skillRefs.length === 0
+  )
     return
   const refs = [...planRefs.value]
   const effectivePlanMode = refs.length > 0 ? false : planMode.value

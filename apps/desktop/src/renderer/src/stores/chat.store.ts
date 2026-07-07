@@ -1,7 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import type { Attachment, ApprovalRequest, Conversation, Message, ToolCall } from '@renderer/types'
-import type { AgentEvent, AttachmentPayload, PlanReference, SkillReference } from '../../../preload/types'
+import type {
+  AgentEvent,
+  AttachmentPayload,
+  PlanReference,
+  SkillReference
+} from '../../../preload/types'
 import type { ApprovalLevel } from '@renderer/types'
 import { useWorkspaceStore } from './workspace.store'
 import { useModelStore } from './model.store'
@@ -695,7 +700,15 @@ export const useChatStore = defineStore('chat', () => {
     if (idx === -1) return
     const next = queuedMessages.value.splice(idx, 1)[0]
     setPendingAgent(next.conversationId, next.agentId)
-    addMessage(next.conversationId, 'user', next.content, undefined, next.planMode, next.planRefs, next.skillRefs)
+    addMessage(
+      next.conversationId,
+      'user',
+      next.content,
+      undefined,
+      next.planMode,
+      next.planRefs,
+      next.skillRefs
+    )
     clearActiveAssistantMessage(next.conversationId)
     removeCompletedConversation(next.conversationId)
     markThinkingStarted(next.conversationId)
@@ -728,198 +741,110 @@ export const useChatStore = defineStore('chat', () => {
 
   function handleAgentEvent(event: AgentEvent): void {
     try {
-    switch (event.type) {
-      case 'message.started': {
-        removeCompletedConversation(event.conversationId)
-        setActiveAssistantMessage(event.conversationId, event.messageId)
-        ensureAssistantPlaceholder(event.conversationId, event.messageId)
-        addStreamingConversation(event.conversationId)
-        removeWaitingConversation(event.conversationId)
-        touchStreamActivity(event.conversationId)
-        break
-      }
-      case 'message.delta': {
-        if (!isActiveAssistantMessage(event.conversationId, event.messageId)) return
-        markMessageStreamed(event.messageId)
-        const conv = conversations.value.find((c) => c.id === event.conversationId)
-        if (!conv) return
-        removeWaitingConversation(event.conversationId)
-        touchStreamActivity(event.conversationId)
-        const msg = ensureAssistantPlaceholder(event.conversationId, event.messageId)
-        if (!msg) return
-        msg.content += event.delta
-        break
-      }
-      case 'message.completed': {
-        const isCurrentRun = isActiveAssistantMessage(event.conversationId, event.messageId)
-        const conv = conversations.value.find((c) => c.id === event.conversationId)
-        if (conv) {
-          conv.updatedAt = new Date().toISOString()
-          let msg = conv.messages.find((m) => m.id === event.messageId)
-          if (event.stopped) {
-            const stoppedText = '已手动终止 AI 回复'
-            if (!msg) {
-              msg = {
-                id: event.messageId,
-                role: 'assistant',
-                content: stoppedText,
-                createdAt: new Date().toISOString(),
-                stopped: true
+      switch (event.type) {
+        case 'message.started': {
+          removeCompletedConversation(event.conversationId)
+          setActiveAssistantMessage(event.conversationId, event.messageId)
+          ensureAssistantPlaceholder(event.conversationId, event.messageId)
+          addStreamingConversation(event.conversationId)
+          removeWaitingConversation(event.conversationId)
+          touchStreamActivity(event.conversationId)
+          break
+        }
+        case 'message.delta': {
+          if (!isActiveAssistantMessage(event.conversationId, event.messageId)) return
+          markMessageStreamed(event.messageId)
+          const conv = conversations.value.find((c) => c.id === event.conversationId)
+          if (!conv) return
+          removeWaitingConversation(event.conversationId)
+          touchStreamActivity(event.conversationId)
+          const msg = ensureAssistantPlaceholder(event.conversationId, event.messageId)
+          if (!msg) return
+          msg.content += event.delta
+          break
+        }
+        case 'message.completed': {
+          const isCurrentRun = isActiveAssistantMessage(event.conversationId, event.messageId)
+          const conv = conversations.value.find((c) => c.id === event.conversationId)
+          if (conv) {
+            conv.updatedAt = new Date().toISOString()
+            let msg = conv.messages.find((m) => m.id === event.messageId)
+            if (event.stopped) {
+              const stoppedText = '已手动终止 AI 回复'
+              if (!msg) {
+                msg = {
+                  id: event.messageId,
+                  role: 'assistant',
+                  content: stoppedText,
+                  createdAt: new Date().toISOString(),
+                  stopped: true
+                }
+                assignAgentToAssistantMessage(event.conversationId, msg)
+                conv.messages.push(msg)
+              } else {
+                if (!msg.content.trim()) {
+                  msg.content = stoppedText
+                }
+                msg.stopped = true
               }
-              assignAgentToAssistantMessage(event.conversationId, msg)
-              conv.messages.push(msg)
-            } else {
-              if (!msg.content.trim()) {
-                msg.content = stoppedText
-              }
-              msg.stopped = true
             }
-          }
-          if (msg) {
-            assignAgentToAssistantMessage(event.conversationId, msg)
-            if (event.usage) msg.usage = event.usage
-            if (event.debugInput) msg.debugInput = event.debugInput
-            if (event.debugOutput) msg.debugOutput = event.debugOutput
-            if (!event.stopped && msg.toolCalls) {
-              for (const tc of msg.toolCalls) {
-                if (tc.status === 'pending' || tc.status === 'running') {
-                  tc.status = 'completed'
+            if (msg) {
+              assignAgentToAssistantMessage(event.conversationId, msg)
+              if (event.usage) msg.usage = event.usage
+              if (event.debugInput) msg.debugInput = event.debugInput
+              if (event.debugOutput) msg.debugOutput = event.debugOutput
+              if (!event.stopped && msg.toolCalls) {
+                for (const tc of msg.toolCalls) {
+                  if (tc.status === 'pending' || tc.status === 'running') {
+                    tc.status = 'completed'
+                  }
                 }
               }
             }
           }
-        }
-        if (!event.stopped) {
-          markConversationCompleted(event.conversationId)
-        }
-        if (!isCurrentRun) break
-        removeWaitingConversation(event.conversationId)
-        removeStreamingConversation(event.conversationId)
-        clearActiveAssistantMessage(event.conversationId)
-        clearThinkingStarted(event.conversationId)
-        clearStreamActivity(event.conversationId)
-        flushQueueForConversation(event.conversationId)
-        break
-      }
-      case 'message.error': {
-        const hasActiveId = activeAssistantMessageIds.value.has(event.conversationId)
-        const isCurrentRun =
-          isActiveAssistantMessage(event.conversationId, event.messageId) ||
-          (waitingConversationIds.value.has(event.conversationId) && !hasActiveId)
-        if (!isCurrentRun) break
-        const conv = conversations.value.find((c) => c.id === event.conversationId)
-        if (conv) {
-          const pendingAgent = getPendingAgent(event.conversationId)
-          addMessage(
-            event.conversationId,
-            'assistant',
-            `[Error] ${formatAgentErrorMessage(event.error)}`
-          )
-          const lastMsg = conv.messages[conv.messages.length - 1]
-          if (lastMsg?.role === 'assistant' && pendingAgent) {
-            lastMsg.agentId = pendingAgent
+          if (!event.stopped) {
+            markConversationCompleted(event.conversationId)
           }
+          if (!isCurrentRun) break
+          removeWaitingConversation(event.conversationId)
+          removeStreamingConversation(event.conversationId)
+          clearActiveAssistantMessage(event.conversationId)
+          clearThinkingStarted(event.conversationId)
+          clearStreamActivity(event.conversationId)
+          flushQueueForConversation(event.conversationId)
+          break
         }
-        removeWaitingConversation(event.conversationId)
-        removeStreamingConversation(event.conversationId)
-        clearActiveAssistantMessage(event.conversationId)
-        clearThinkingStarted(event.conversationId)
-        clearStreamActivity(event.conversationId)
-        flushQueueForConversation(event.conversationId)
-        break
-      }
-      case 'tool.started': {
-        touchStreamActivity(event.conversationId)
-        const conv = conversations.value.find((c) => c.id === event.conversationId)
-        if (!conv) return
-        let msg = conv.messages.find((m) => m.id === event.messageId)
-        if (!msg) {
-          msg = {
-            id: event.messageId,
-            role: 'assistant',
-            content: '',
-            createdAt: new Date().toISOString()
-          }
-          assignAgentToAssistantMessage(event.conversationId, msg)
-          conv.messages.push(msg)
-        }
-        if (!msg.toolCalls) msg.toolCalls = []
-        const existing = msg.toolCalls.find((t) => t.toolUseId === event.tool.toolUseId)
-        if (!existing) {
-          msg.toolCalls.push({ ...event.tool })
-        }
-        break
-      }
-      case 'tool.input_updated': {
-        const conv = conversations.value.find((c) => c.id === event.conversationId)
-        if (!conv) return
-        const msg = conv.messages.find((m) => m.id === event.messageId)
-        if (!msg?.toolCalls) return
-        const resolvedToolUseId = resolveToolUseId(event.messageId, event.toolUseId)
-        const tc = msg.toolCalls.find((t) => t.toolUseId === resolvedToolUseId)
-        if (tc) {
-          tc.input = event.input
-          dedupeToolCallByFingerprint(
-            msg,
-            event.messageId,
-            resolvedToolUseId,
-            tc.toolName,
-            event.input
-          )
-          const activeTool = msg.toolCalls.find((t) => t.toolUseId === resolvedToolUseId)
-          if (activeTool?.status === 'pending') {
-            const hasRunning = msg.toolCalls.some(
-              (t) => t.toolUseId !== resolvedToolUseId && t.status === 'running'
+        case 'message.error': {
+          const hasActiveId = activeAssistantMessageIds.value.has(event.conversationId)
+          const isCurrentRun =
+            isActiveAssistantMessage(event.conversationId, event.messageId) ||
+            (waitingConversationIds.value.has(event.conversationId) && !hasActiveId)
+          if (!isCurrentRun) break
+          const conv = conversations.value.find((c) => c.id === event.conversationId)
+          if (conv) {
+            const pendingAgent = getPendingAgent(event.conversationId)
+            addMessage(
+              event.conversationId,
+              'assistant',
+              `[Error] ${formatAgentErrorMessage(event.error)}`
             )
-            if (!hasRunning) {
-              markToolRunning(activeTool)
+            const lastMsg = conv.messages[conv.messages.length - 1]
+            if (lastMsg?.role === 'assistant' && pendingAgent) {
+              lastMsg.agentId = pendingAgent
             }
           }
+          removeWaitingConversation(event.conversationId)
+          removeStreamingConversation(event.conversationId)
+          clearActiveAssistantMessage(event.conversationId)
+          clearThinkingStarted(event.conversationId)
+          clearStreamActivity(event.conversationId)
+          flushQueueForConversation(event.conversationId)
+          break
         }
-        break
-      }
-      case 'tool.progress': {
-        touchStreamActivity(event.conversationId)
-        const conv = conversations.value.find((c) => c.id === event.conversationId)
-        if (!conv) return
-        const msg = conv.messages.find((m) => m.id === event.messageId)
-        if (!msg?.toolCalls) return
-        const resolvedToolUseId = resolveToolUseId(event.messageId, event.toolUseId)
-        const tc = msg.toolCalls.find((t) => t.toolUseId === resolvedToolUseId)
-        if (tc) {
-          markToolRunning(tc)
-          tc.elapsedSeconds = event.elapsedSeconds
-        }
-        break
-      }
-      case 'tool.completed': {
-        touchStreamActivity(event.conversationId)
-        const conv = conversations.value.find((c) => c.id === event.conversationId)
-        if (!conv) return
-        const msg = conv.messages.find((m) => m.id === event.messageId)
-        if (!msg?.toolCalls) return
-        const resolvedToolUseId = resolveToolUseId(event.messageId, event.toolUseId)
-        const tc = msg.toolCalls.find((t) => t.toolUseId === resolvedToolUseId)
-        if (tc) {
-          const wasFinished = tc.status === 'completed' || tc.status === 'error'
-          tc.status = event.status ?? 'completed'
-          if (event.summary) tc.summary = event.summary
-          if (event.elapsedSeconds != null) tc.elapsedSeconds = event.elapsedSeconds
-          if (!wasFinished) {
-            const nextPending = msg.toolCalls.find((t) => t.status === 'pending')
-            if (nextPending) {
-              const hasRunning = msg.toolCalls.some((t) => t.status === 'running')
-              if (!hasRunning) {
-                markToolRunning(nextPending)
-              }
-            }
-          }
-        }
-        break
-      }
-      case 'approval.requested': {
-        const conv = conversations.value.find((c) => c.id === event.conversationId)
-        if (conv) {
+        case 'tool.started': {
+          touchStreamActivity(event.conversationId)
+          const conv = conversations.value.find((c) => c.id === event.conversationId)
+          if (!conv) return
           let msg = conv.messages.find((m) => m.id === event.messageId)
           if (!msg) {
             msg = {
@@ -928,40 +853,128 @@ export const useChatStore = defineStore('chat', () => {
               content: '',
               createdAt: new Date().toISOString()
             }
+            assignAgentToAssistantMessage(event.conversationId, msg)
             conv.messages.push(msg)
           }
+          if (!msg.toolCalls) msg.toolCalls = []
+          const existing = msg.toolCalls.find((t) => t.toolUseId === event.tool.toolUseId)
+          if (!existing) {
+            msg.toolCalls.push({ ...event.tool })
+          }
+          break
         }
-        const next = new Map(pendingApprovals.value)
-        next.set(event.requestId, {
-          requestId: event.requestId,
-          conversationId: event.conversationId,
-          messageId: event.messageId,
-          toolUseId: event.toolUseId,
-          toolName: event.toolName,
-          displayName: event.displayName,
-          title: event.title,
-          description: event.description,
-          detail: event.detail,
-          decisionReason: event.decisionReason,
-          status: 'pending'
-        })
-        pendingApprovals.value = next
-        removeWaitingConversation(event.conversationId)
-        break
-      }
-      case 'approval.resolved': {
-        const existing = pendingApprovals.value.get(event.requestId)
-        if (existing) {
+        case 'tool.input_updated': {
+          const conv = conversations.value.find((c) => c.id === event.conversationId)
+          if (!conv) return
+          const msg = conv.messages.find((m) => m.id === event.messageId)
+          if (!msg?.toolCalls) return
+          const resolvedToolUseId = resolveToolUseId(event.messageId, event.toolUseId)
+          const tc = msg.toolCalls.find((t) => t.toolUseId === resolvedToolUseId)
+          if (tc) {
+            tc.input = event.input
+            dedupeToolCallByFingerprint(
+              msg,
+              event.messageId,
+              resolvedToolUseId,
+              tc.toolName,
+              event.input
+            )
+            const activeTool = msg.toolCalls.find((t) => t.toolUseId === resolvedToolUseId)
+            if (activeTool?.status === 'pending') {
+              const hasRunning = msg.toolCalls.some(
+                (t) => t.toolUseId !== resolvedToolUseId && t.status === 'running'
+              )
+              if (!hasRunning) {
+                markToolRunning(activeTool)
+              }
+            }
+          }
+          break
+        }
+        case 'tool.progress': {
+          touchStreamActivity(event.conversationId)
+          const conv = conversations.value.find((c) => c.id === event.conversationId)
+          if (!conv) return
+          const msg = conv.messages.find((m) => m.id === event.messageId)
+          if (!msg?.toolCalls) return
+          const resolvedToolUseId = resolveToolUseId(event.messageId, event.toolUseId)
+          const tc = msg.toolCalls.find((t) => t.toolUseId === resolvedToolUseId)
+          if (tc) {
+            markToolRunning(tc)
+            tc.elapsedSeconds = event.elapsedSeconds
+          }
+          break
+        }
+        case 'tool.completed': {
+          touchStreamActivity(event.conversationId)
+          const conv = conversations.value.find((c) => c.id === event.conversationId)
+          if (!conv) return
+          const msg = conv.messages.find((m) => m.id === event.messageId)
+          if (!msg?.toolCalls) return
+          const resolvedToolUseId = resolveToolUseId(event.messageId, event.toolUseId)
+          const tc = msg.toolCalls.find((t) => t.toolUseId === resolvedToolUseId)
+          if (tc) {
+            const wasFinished = tc.status === 'completed' || tc.status === 'error'
+            tc.status = event.status ?? 'completed'
+            if (event.summary) tc.summary = event.summary
+            if (event.elapsedSeconds != null) tc.elapsedSeconds = event.elapsedSeconds
+            if (!wasFinished) {
+              const nextPending = msg.toolCalls.find((t) => t.status === 'pending')
+              if (nextPending) {
+                const hasRunning = msg.toolCalls.some((t) => t.status === 'running')
+                if (!hasRunning) {
+                  markToolRunning(nextPending)
+                }
+              }
+            }
+          }
+          break
+        }
+        case 'approval.requested': {
+          const conv = conversations.value.find((c) => c.id === event.conversationId)
+          if (conv) {
+            let msg = conv.messages.find((m) => m.id === event.messageId)
+            if (!msg) {
+              msg = {
+                id: event.messageId,
+                role: 'assistant',
+                content: '',
+                createdAt: new Date().toISOString()
+              }
+              conv.messages.push(msg)
+            }
+          }
           const next = new Map(pendingApprovals.value)
           next.set(event.requestId, {
-            ...existing,
-            status: event.allowed ? 'allowed' : 'denied'
+            requestId: event.requestId,
+            conversationId: event.conversationId,
+            messageId: event.messageId,
+            toolUseId: event.toolUseId,
+            toolName: event.toolName,
+            displayName: event.displayName,
+            title: event.title,
+            description: event.description,
+            detail: event.detail,
+            decisionReason: event.decisionReason,
+            status: 'pending'
           })
           pendingApprovals.value = next
+          removeWaitingConversation(event.conversationId)
+          break
         }
-        break
+        case 'approval.resolved': {
+          const existing = pendingApprovals.value.get(event.requestId)
+          if (existing) {
+            const next = new Map(pendingApprovals.value)
+            next.set(event.requestId, {
+              ...existing,
+              status: event.allowed ? 'allowed' : 'denied'
+            })
+            pendingApprovals.value = next
+          }
+          break
+        }
       }
-    }
     } catch (err) {
       console.error('handleAgentEvent failed', event.type, err)
     }

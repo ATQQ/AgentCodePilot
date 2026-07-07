@@ -471,109 +471,112 @@ function registerIpcHandlers(): void {
     }
   )
 
-  ipcMain.handle(IPC_CHANNELS.CHAT_SEND_FIRST, async (_e, payload: SendMessagePayload): Promise<void> => {
-    const assistantMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-a`
-    const prompt = await buildAgentPrompt({
-      content: payload.content,
-      attachments: payload.attachments,
-      planRefs: payload.planRefs,
-      skillRefs: payload.skillRefs,
-      planMode: payload.planMode,
-      conversationId: payload.conversationId
-    })
-    streamingMessages.set(
-      assistantMsgId,
-      createStreamingEntry(payload.conversationId, prompt, payload.agentId)
-    )
-    const runContext = getConversationRunContext(payload.conversationId)
-    const approvalLevel = getRunApprovalLevel(payload.conversationId)
-    const runInput = {
-      conversationId: payload.conversationId,
-      messageId: assistantMsgId,
-      content: prompt,
-      agentId: payload.agentId,
-      model: payload.modelId,
-      cwd: resolveConversationCwd(payload.conversationId, payload.cwd),
-      workspaceFolders: resolveConversationWorkspaceFolders(
-        payload.conversationId,
-        payload.workspaceFolders
-      ),
-      agentSessionId: runContext.agentSessionId,
-      conversationHistory: runContext.conversationHistory,
-      attachmentDirectories: collectAttachmentDirectories(payload.attachments),
-      approvalLevel,
-      planMode: payload.planMode ?? false,
-      maxTurns: getMaxAgentTurns()
-    }
+  ipcMain.handle(
+    IPC_CHANNELS.CHAT_SEND_FIRST,
+    async (_e, payload: SendMessagePayload): Promise<void> => {
+      const assistantMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-a`
+      const prompt = await buildAgentPrompt({
+        content: payload.content,
+        attachments: payload.attachments,
+        planRefs: payload.planRefs,
+        skillRefs: payload.skillRefs,
+        planMode: payload.planMode,
+        conversationId: payload.conversationId
+      })
+      streamingMessages.set(
+        assistantMsgId,
+        createStreamingEntry(payload.conversationId, prompt, payload.agentId)
+      )
+      const runContext = getConversationRunContext(payload.conversationId)
+      const approvalLevel = getRunApprovalLevel(payload.conversationId)
+      const runInput = {
+        conversationId: payload.conversationId,
+        messageId: assistantMsgId,
+        content: prompt,
+        agentId: payload.agentId,
+        model: payload.modelId,
+        cwd: resolveConversationCwd(payload.conversationId, payload.cwd),
+        workspaceFolders: resolveConversationWorkspaceFolders(
+          payload.conversationId,
+          payload.workspaceFolders
+        ),
+        agentSessionId: runContext.agentSessionId,
+        conversationHistory: runContext.conversationHistory,
+        attachmentDirectories: collectAttachmentDirectories(payload.attachments),
+        approvalLevel,
+        planMode: payload.planMode ?? false,
+        maxTurns: getMaxAgentTurns()
+      }
 
-    supervisedRun(runInput, emitAgentEvent)
-  })
+      supervisedRun(runInput, emitAgentEvent)
+    }
+  )
 
   ipcMain.handle(
     IPC_CHANNELS.CHAT_SEND,
     async (_e, payload: SendMessagePayload): Promise<SendMessageResult> => {
-    const userMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
-    const assistantMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-a`
-    const now = new Date().toISOString()
-    const persistedAttachments = persistAttachments(
-      payload.conversationId,
-      userMsgId,
-      payload.attachments
-    )
-
-    repo.addMessage({
-      id: userMsgId,
-      conversationId: payload.conversationId,
-      role: 'user',
-      content: payload.content,
-      createdAt: now,
-      attachments: persistedAttachments ? JSON.stringify(persistedAttachments) : null,
-      planMode: payload.planMode ?? false,
-      planRefs: payload.planRefs?.length ? JSON.stringify(payload.planRefs) : null,
-      skillRefs: payload.skillRefs?.length ? JSON.stringify(payload.skillRefs) : null
-    })
-
-    const prompt = await buildAgentPrompt({
-      content: payload.content,
-      attachments: persistedAttachments ?? payload.attachments,
-      planRefs: payload.planRefs,
-      skillRefs: payload.skillRefs,
-      planMode: payload.planMode,
-      conversationId: payload.conversationId
-    })
-    streamingMessages.set(
-      assistantMsgId,
-      createStreamingEntry(payload.conversationId, prompt, payload.agentId)
-    )
-    const runContext = getConversationRunContext(payload.conversationId)
-    const approvalLevel = getRunApprovalLevel(payload.conversationId)
-    const runInput = {
-      conversationId: payload.conversationId,
-      messageId: assistantMsgId,
-      content: prompt,
-      agentId: payload.agentId,
-      model: payload.modelId,
-      cwd: resolveConversationCwd(payload.conversationId, payload.cwd),
-      workspaceFolders: resolveConversationWorkspaceFolders(
+      const userMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      const assistantMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}-a`
+      const now = new Date().toISOString()
+      const persistedAttachments = persistAttachments(
         payload.conversationId,
-        payload.workspaceFolders
-      ),
-      agentSessionId: runContext.agentSessionId,
-      conversationHistory: runContext.conversationHistory,
-      attachmentDirectories: collectAttachmentDirectories(
-        persistedAttachments ?? payload.attachments
-      ),
-      approvalLevel,
-      planMode: payload.planMode ?? false,
-      maxTurns: getMaxAgentTurns()
-    }
+        userMsgId,
+        payload.attachments
+      )
 
-    supervisedRun(runInput, emitAgentEvent)
-    return cloneForIpc({
-      assistantMessageId: assistantMsgId,
-      attachments: persistedAttachments
-    })
-  }
+      repo.addMessage({
+        id: userMsgId,
+        conversationId: payload.conversationId,
+        role: 'user',
+        content: payload.content,
+        createdAt: now,
+        attachments: persistedAttachments ? JSON.stringify(persistedAttachments) : null,
+        planMode: payload.planMode ?? false,
+        planRefs: payload.planRefs?.length ? JSON.stringify(payload.planRefs) : null,
+        skillRefs: payload.skillRefs?.length ? JSON.stringify(payload.skillRefs) : null
+      })
+
+      const prompt = await buildAgentPrompt({
+        content: payload.content,
+        attachments: persistedAttachments ?? payload.attachments,
+        planRefs: payload.planRefs,
+        skillRefs: payload.skillRefs,
+        planMode: payload.planMode,
+        conversationId: payload.conversationId
+      })
+      streamingMessages.set(
+        assistantMsgId,
+        createStreamingEntry(payload.conversationId, prompt, payload.agentId)
+      )
+      const runContext = getConversationRunContext(payload.conversationId)
+      const approvalLevel = getRunApprovalLevel(payload.conversationId)
+      const runInput = {
+        conversationId: payload.conversationId,
+        messageId: assistantMsgId,
+        content: prompt,
+        agentId: payload.agentId,
+        model: payload.modelId,
+        cwd: resolveConversationCwd(payload.conversationId, payload.cwd),
+        workspaceFolders: resolveConversationWorkspaceFolders(
+          payload.conversationId,
+          payload.workspaceFolders
+        ),
+        agentSessionId: runContext.agentSessionId,
+        conversationHistory: runContext.conversationHistory,
+        attachmentDirectories: collectAttachmentDirectories(
+          persistedAttachments ?? payload.attachments
+        ),
+        approvalLevel,
+        planMode: payload.planMode ?? false,
+        maxTurns: getMaxAgentTurns()
+      }
+
+      supervisedRun(runInput, emitAgentEvent)
+      return cloneForIpc({
+        assistantMessageId: assistantMsgId,
+        attachments: persistedAttachments
+      })
+    }
   )
 
   ipcMain.handle(IPC_CHANNELS.CHAT_STOP, (_e, conversationId: string): void => {

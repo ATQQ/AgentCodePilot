@@ -312,6 +312,10 @@ function openPlansPanel(planId?: string): void {
   layoutStore.openPlansPanel(planId)
 }
 
+function handleOpenPlansPanelClick(): void {
+  openPlansPanel()
+}
+
 async function maybeAutoOpenPlansPanelAfterPlanRun(): Promise<void> {
   const planId = findLatestPlanModePlanId()
   if (!planId) return
@@ -477,7 +481,7 @@ function toggleUserMessageExpanded(messageId: string): void {
               v-if="conversationPlanCount > 0"
               type="button"
               class="plans-header-btn"
-              @click="openPlansPanel"
+              @click="handleOpenPlansPanelClick"
             >
               {{ t('plans.headerButton', { count: conversationPlanCount }) }}
             </button>

@@ -237,13 +237,7 @@ export interface GatewayStatus {
   token: string
 }
 
-export type GitChangeType =
-  | 'modified'
-  | 'added'
-  | 'untracked'
-  | 'deleted'
-  | 'renamed'
-  | 'conflict'
+export type GitChangeType = 'modified' | 'added' | 'untracked' | 'deleted' | 'renamed' | 'conflict'
 
 export interface GitChangedFile {
   path: string

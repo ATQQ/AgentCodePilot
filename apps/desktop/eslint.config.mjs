@@ -27,6 +27,7 @@ export default defineConfig(
       'vue/require-default-prop': 'off',
       'vue/multi-word-component-names': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
+      '@typescript-eslint/explicit-function-return-type': 'off',
       // Vue 模板内联多语句 v-on 在无分号时会编译失败（与 Prettier semi:false 叠加更易踩坑）。
       // 优先使用方法引用；需要传参时用箭头函数。存量内联写法逐步迁移，先 warn。
       'vue/v-on-handler-style': ['warn', ['method', 'inline-function']],

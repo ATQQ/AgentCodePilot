@@ -1,10 +1,7 @@
 import { defineComponent, h, type PropType, type VNode } from 'vue'
 import { RefreshLeft, Plus } from '@element-plus/icons-vue'
 import type { PathTreeNode } from '@renderer/utils/pathTree'
-import {
-  aggregateDirStats,
-  collectFilePathsUnder
-} from '@renderer/utils/pathTree'
+import { aggregateDirStats, collectFilePathsUnder } from '@renderer/utils/pathTree'
 import {
   analyzeSingleBranchCompression,
   type CompressibleTreeNode
@@ -146,9 +143,7 @@ export const GitTreeNode = defineComponent({
           }),
           h('span', { class: 'file-name', title: node.path }, node.name),
           node.fileMeta ? renderActionButtons([filePath]) : null,
-          node.fileMeta
-            ? renderStats(node.fileMeta.additions, node.fileMeta.deletions)
-            : null
+          node.fileMeta ? renderStats(node.fileMeta.additions, node.fileMeta.deletions) : null
         ]
       )
     }

@@ -7,7 +7,10 @@ export function formatGitOperationError(
   }
 
   let log = err.message.trim()
-  log = log.replace(/^GitError:\s*/i, '').replace(/^Error:\s*/i, '').trim()
+  log = log
+    .replace(/^GitError:\s*/i, '')
+    .replace(/^Error:\s*/i, '')
+    .trim()
 
   const stackIdx = log.indexOf('\n    at ')
   if (stackIdx > 0) {
@@ -18,7 +21,10 @@ export function formatGitOperationError(
     return { summary: fallback, log: fallback }
   }
 
-  const lines = log.split('\n').map((line) => line.trim()).filter(Boolean)
+  const lines = log
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
   const summaryLine =
     lines.find(
       (line) =>
