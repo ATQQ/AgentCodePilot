@@ -11,6 +11,9 @@ export function ensureMonacoBootstrap(): Promise<void> {
       // stream-monaco / markstream load editor.api first unless the full bundle is already
       // registered. Import every contribution + service up front.
       await import('monaco-editor')
+      // DiffEditor breadcrumbs need IOutlineModelService; Vite may tree-shake the
+      // side-effect registration out of the main monaco-editor entry.
+      await import('monaco-editor/esm/vs/editor/contrib/documentSymbols/browser/outlineModel.js')
       bootstrapped = true
     })()
   }

@@ -1,4 +1,5 @@
 import { enableKatex, enableMermaid, preloadCodeBlockRuntime } from 'markstream-vue'
+import { ensureMonacoBootstrap } from '@renderer/utils/monacoBootstrap'
 
 let peersReady = false
 let peersPromise: Promise<void> | null = null
@@ -10,12 +11,15 @@ export function setupMarkstreamCore(): void {
 export function ensureMarkstreamPeers(): Promise<void> {
   if (peersReady) return Promise.resolve()
   if (!peersPromise) {
-    peersPromise = Promise.resolve().then(() => {
+    peersPromise = (async () => {
       enableMermaid()
       enableKatex()
-      preloadCodeBlockRuntime()
+      // Register Monaco services (incl. IOutlineModelService) before stream-monaco boots,
+      // otherwise DiffEditor breadcrumbs throw and restore can hang on loading.
+      await ensureMonacoBootstrap()
+      await preloadCodeBlockRuntime()
       peersReady = true
-    })
+    })()
   }
   return peersPromise
 }

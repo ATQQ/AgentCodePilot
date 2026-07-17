@@ -51,6 +51,8 @@ const {
 const BOTTOM_SCROLL_THRESHOLD = 48
 const TOP_SCROLL_THRESHOLD = 200
 const showBackToTop = ref(false)
+/** Ignore content-driven scroll-to-bottom while a thread restore may still be settling. */
+let suppressContentScrollUntil = 0
 
 function handleScroll(): void {
   onScroll()
@@ -119,13 +121,12 @@ onUnmounted(() => {
 watch(
   () => chatStore.activeConversationId,
   () => {
-    forceScrollToBottom()
-    // 延迟到 rAF，确保在 ChatMessageList 的 restoreThreadState 之后再滚动
-    nextTick(() => {
-      requestAnimationFrame(() => {
-        messageListRef.value?.scrollToBottom()
-      })
-    })
+    // 滚底/恢复由 ChatMessageList 按保存锚点处理；稍后按真实 scrollTop 同步 pin
+    suppressContentScrollUntil = Date.now() + 600
+    window.setTimeout(() => {
+      onScroll()
+      showBackToTop.value = !isNearTop(TOP_SCROLL_THRESHOLD)
+    }, 550)
     void loadAssistantPlanMap()
   }
 )
@@ -257,6 +258,7 @@ watch(
   () => {
     // 流式输出时由 MarkstreamVirtualTimeline 的 stick-to-bottom="auto" 处理自动滚动
     if (chatStore.isStreaming || !isPinnedToBottom.value) return
+    if (Date.now() < suppressContentScrollUntil) return
     nextTick(() => messageListRef.value?.scrollToBottom())
   }
 )
@@ -962,6 +964,7 @@ function toggleUserMessageExpanded(messageId: string): void {
   -webkit-user-select: text;
   user-select: text;
   --scroll-thumb: var(--content-text-tertiary);
+  overscroll-behavior-y: none;
 }
 
 .message {

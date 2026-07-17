@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import {
   MarkstreamVirtualTimeline,
   type MarkstreamThreadVirtualState,
@@ -12,6 +12,11 @@ import {
   layoutWidthBucket,
   type ChatTimelineItem
 } from '@renderer/composables/useChatTimelineItems'
+
+/** Cap restore overlay so rapid switches / Monaco settle never stick forever. */
+const RESTORE_MAX_LOADING_MS = 2000
+/** Retries after virtual/DOM heights finish settling (Monaco, markdown, resize). */
+const BOTTOM_SETTLE_DELAYS_MS = [0, 32, 100, 250, 500] as const
 
 interface TimelineExpose {
   $el: HTMLElement
@@ -40,6 +45,10 @@ const scrollContainer = ref<HTMLElement | null>(null)
 const initialThreadState = ref<MarkstreamThreadVirtualState | null>(null)
 const lastThreadState = ref<MarkstreamThreadVirtualState | null>(null)
 const savedThreadStates = new Map<string, MarkstreamThreadVirtualState>()
+/** Invalidate in-flight nextTick restores when user switches again quickly. */
+let restoreGeneration = 0
+let bottomSettleGeneration = 0
+const bottomSettleTimers: number[] = []
 
 const timelineItems = useChatTimelineItems({
   messages: () => props.messages,
@@ -57,6 +66,46 @@ function syncScrollContainer(): void {
   scrollContainer.value = el instanceof HTMLElement ? el : null
 }
 
+function clearBottomSettleTimers(): void {
+  for (const id of bottomSettleTimers) window.clearTimeout(id)
+  bottomSettleTimers.length = 0
+}
+
+/**
+ * Library scrollToBottom uses max(virtualTotal, scrollHeight), but right after switch/resize
+ * both can still be settling. Sync DOM scrollHeight on retries so we actually reach the end
+ * (avoids "stuck a little above bottom").
+ */
+function scrollToBottomNow(): void {
+  timelineRef.value?.scrollToBottom()
+  const el = scrollContainer.value ?? timelineRef.value?.$el
+  if (el instanceof HTMLElement) {
+    el.scrollTop = el.scrollHeight
+  }
+  emit('scroll')
+}
+
+function scrollToBottomSettled(): void {
+  const gen = ++bottomSettleGeneration
+  clearBottomSettleTimers()
+  for (const ms of BOTTOM_SETTLE_DELAYS_MS) {
+    const id = window.setTimeout(() => {
+      if (gen !== bottomSettleGeneration) return
+      syncScrollContainer()
+      scrollToBottomNow()
+    }, ms)
+    bottomSettleTimers.push(id)
+  }
+}
+
+function wasPinnedToBottom(state: MarkstreamThreadVirtualState | null): boolean {
+  if (!state?.outerAnchor) return true
+  if (state.outerAnchor.type === 'bottom') {
+    return state.outerAnchor.distanceFromBottomPx <= 48
+  }
+  return false
+}
+
 function onScroll(): void {
   emit('scroll')
 }
@@ -68,7 +117,8 @@ function onThreadStateChange(state: MarkstreamThreadVirtualState): void {
 function estimateItemHeight(item: ChatTimelineItem): number {
   const expanded =
     item.message.role === 'user' ? (props.isUserMessageExpanded?.(item.message.id) ?? false) : false
-  return estimateTimelineItemHeight(item, expanded)
+  // Include row gap that used to live on the virtual item wrapper (must be in the height tree).
+  return estimateTimelineItemHeight(item, expanded) + 16
 }
 
 watch(
@@ -82,12 +132,33 @@ watch(
     }
     const restored = newId ? (savedThreadStates.get(newId) ?? null) : null
     initialThreadState.value = restored
+    const pinBottom = wasPinnedToBottom(restored)
+    const gen = ++restoreGeneration
     void nextTick(() => {
+      if (gen !== restoreGeneration) return
       timelineRef.value?.restoreThreadState(restored)
       syncScrollContainer()
+      if (pinBottom) {
+        scrollToBottomSettled()
+      } else {
+        // Sync parent pin from restored mid-thread position (avoid stick-to-bottom fighting restore).
+        emit('scroll')
+      }
     })
   }
 )
+
+// Width/theme remount: if host still wants stick, re-settle to real bottom after heights rebuild.
+watch(measurementKey, () => {
+  if (props.stickToBottom === false) return
+  void nextTick(() => {
+    requestAnimationFrame(() => {
+      syncScrollContainer()
+      if (props.stickToBottom === false) return
+      scrollToBottomSettled()
+    })
+  })
+})
 
 watch(timelineRef, () => syncScrollContainer(), { flush: 'post' })
 
@@ -95,9 +166,14 @@ onMounted(() => {
   syncScrollContainer()
 })
 
+onUnmounted(() => {
+  clearBottomSettleTimers()
+  bottomSettleGeneration++
+})
+
 defineExpose({
   scrollContainer,
-  scrollToBottom: () => timelineRef.value?.scrollToBottom()
+  scrollToBottom: scrollToBottomSettled
 })
 </script>
 
@@ -112,6 +188,7 @@ defineExpose({
     markdown-code-renderer="monaco"
     :markdown-fade="false"
     :stick-to-bottom="stickToBottom ?? 'auto'"
+    :restore-max-loading-ms="RESTORE_MAX_LOADING_MS"
     :overscan-px="1200"
     :initial-thread-state="initialThreadState"
     :estimate-item-height="estimateItemHeight"
@@ -138,9 +215,9 @@ defineExpose({
 .messages-container {
   flex: 1;
   min-height: 0;
+  overscroll-behavior-y: none;
 }
 
-.messages-container :deep(.markstream-virtual-timeline__item) {
-  padding-bottom: var(--spacing-lg);
-}
+/* Do NOT pad the virtual item wrapper — that height is invisible to Markstream's
+   totalHeight tree and leaves a "can still scroll a bit" gap after scrollToBottom. */
 </style>
