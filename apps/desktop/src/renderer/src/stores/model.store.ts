@@ -7,7 +7,7 @@ import i18n from '@renderer/i18n'
 import { useAgentStore } from './agent.store'
 import { useChatStore } from './chat.store'
 
-const MODEL_SELECTOR_AGENTS = ['claude-code', 'codex', 'cursor'] as const
+const MODEL_SELECTOR_AGENTS = ['claude-code', 'codex'] as const
 
 type AgentCatalogSnapshot = {
   models: AgentModelOption[]

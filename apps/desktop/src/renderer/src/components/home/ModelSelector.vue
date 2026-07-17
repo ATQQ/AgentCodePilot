@@ -10,9 +10,7 @@ const chatStore = useChatStore()
 
 const activeAgentId = computed(() => agentStore.selectedAgentId)
 
-const showSelector = computed(() =>
-  ['claude-code', 'codex', 'cursor'].includes(activeAgentId.value)
-)
+const showSelector = computed(() => ['claude-code', 'codex'].includes(activeAgentId.value))
 
 const currentModelId = computed(() =>
   modelStore.getEffectiveModelId(chatStore.activeConversation?.modelId)

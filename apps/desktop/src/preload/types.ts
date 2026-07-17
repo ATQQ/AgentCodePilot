@@ -320,6 +320,7 @@ export interface CodexAgentConfigPublic extends AgentAuthConfigPublic {
   sandbox?: 'read_only' | 'workspace_write' | 'full_access'
 }
 
+/** Kept for disabled Cursor Agent restore (see CURSOR_AGENT_DISABLED.md). */
 export interface CursorAgentConfigPublic extends AgentAuthConfigPublic {
   defaultModelId?: string
   mode?: 'agent' | 'plan'

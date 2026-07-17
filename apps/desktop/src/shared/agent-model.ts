@@ -20,6 +20,7 @@ export interface CodexAgentConfig extends AgentAuthConfig {
   sandbox?: CodexSandboxPreset
 }
 
+/** Kept for disabled Cursor Agent sources under runtime/cursor-*.ts (see CURSOR_AGENT_DISABLED.md). */
 export type CursorSettingSource = 'project' | 'user' | 'team' | 'mdm' | 'plugins' | 'all'
 
 export interface CursorAgentConfig extends AgentAuthConfig {
@@ -34,6 +35,7 @@ export interface AgentConfigSettings {
   models?: AgentModelOption[]
   mock?: MockAgentConfig
   codex?: CodexAgentConfig
+  /** Present when Cursor Agent is re-enabled. */
   cursor?: CursorAgentConfig
 }
 

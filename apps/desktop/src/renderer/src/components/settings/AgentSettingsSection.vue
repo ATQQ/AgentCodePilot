@@ -41,21 +41,13 @@ const discoveredSource = ref<ModelCatalogSource>('fallback')
 
 const configurableAgents = computed(() => agentStore.agents.filter((agent) => agent.enabled))
 
-const supportsModelConfig = computed(() =>
-  ['claude-code', 'codex', 'cursor'].includes(activeAgentId.value)
-)
+const supportsModelConfig = computed(() => ['claude-code', 'codex'].includes(activeAgentId.value))
 const supportsMockConfig = computed(() => activeAgentId.value === 'mock')
 const supportsCodexConfig = computed(() => activeAgentId.value === 'codex')
-const supportsCursorConfig = computed(() => activeAgentId.value === 'cursor')
 
 const draftCodexApiKey = ref('')
 const draftCodexHasApiKey = ref(false)
 const draftCodexSandbox = ref<'read_only' | 'workspace_write' | 'full_access'>('workspace_write')
-
-const draftCursorApiKey = ref('')
-const draftCursorHasApiKey = ref(false)
-const draftCursorMode = ref<'agent' | 'plan'>('agent')
-const draftCursorAutoReview = ref(false)
 
 const sourceLabel = computed(() => {
   const map: Record<ModelCatalogSource, string> = {
@@ -63,7 +55,7 @@ const sourceLabel = computed(() => {
     'claude-settings': t('settings.agentConfig.sourceClaudeSettings'),
     'codex-config': t('settings.agentConfig.sourceCodexConfig'),
     'codex-provider': t('settings.agentConfig.sourceCodexProvider'),
-    'cursor-sdk': t('settings.agentConfig.sourceCursorSdk'),
+    'cursor-sdk': 'Cursor SDK',
     'app-config': t('settings.agentConfig.sourceAppConfig'),
     fallback: t('settings.agentConfig.sourceFallback')
   }
@@ -99,11 +91,6 @@ async function loadAgent(agentId: string): Promise<void> {
     draftCodexApiKey.value = ''
     draftCodexHasApiKey.value = Boolean(config.codex?.hasApiKey)
     draftCodexSandbox.value = config.codex?.sandbox ?? 'workspace_write'
-
-    draftCursorApiKey.value = ''
-    draftCursorHasApiKey.value = Boolean(config.cursor?.hasApiKey)
-    draftCursorMode.value = config.cursor?.mode ?? 'agent'
-    draftCursorAutoReview.value = config.cursor?.autoReview ?? false
   } finally {
     loading.value = false
   }
@@ -187,19 +174,6 @@ async function saveConfig(): Promise<void> {
       }
     }
 
-    if (supportsCursorConfig.value) {
-      payload.cursor = {
-        defaultModelId: draftDefaultModelId.value,
-        mode: draftCursorMode.value,
-        autoReview: draftCursorAutoReview.value,
-        apiKey: draftCursorApiKey.value
-          ? draftCursorApiKey.value
-          : draftCursorHasApiKey.value
-            ? '__KEEP__'
-            : ''
-      }
-    }
-
     const catalog = await window.agentAPI.agents.updateConfig(activeAgentId.value, payload)
     syncDraftFromCatalog(catalog)
     ElMessage.success(t('common.saveSuccess'))
@@ -275,7 +249,7 @@ async function resetConfig(): Promise<void> {
         :key="agent.id"
         class="agent-tab"
         :class="{ active: activeAgentId === agent.id }"
-        @click="activeAgentId = agent.id"
+        @click="() => (activeAgentId = agent.id)"
       >
         <img :src="getAgentIcon(agent.id)" class="agent-tab-icon" width="16" height="16" alt="" />
         <span>{{ agent.name }}</span>
@@ -285,36 +259,20 @@ async function resetConfig(): Promise<void> {
     <div v-if="loading" class="loading-hint">{{ t('common.loading') }}</div>
 
     <template v-else-if="supportsModelConfig">
-      <div v-if="supportsCodexConfig || supportsCursorConfig" class="setting-card">
+      <div v-if="supportsCodexConfig" class="setting-card">
         <div class="setting-row">
           <div>
             <div class="setting-label">{{ t('settings.agentConfig.apiKey') }}</div>
             <div class="setting-desc">
-              {{
-                supportsCodexConfig
-                  ? t('settings.agentConfig.codexApiKeyDesc')
-                  : t('settings.agentConfig.cursorApiKeyDesc')
-              }}
+              {{ t('settings.agentConfig.codexApiKeyDesc') }}
             </div>
           </div>
           <input
-            v-if="supportsCodexConfig"
             v-model="draftCodexApiKey"
             type="password"
             class="field-input field-input--wide"
             :placeholder="
               draftCodexHasApiKey
-                ? t('settings.agentConfig.apiKeyConfigured')
-                : t('settings.agentConfig.apiKeyPlaceholder')
-            "
-          />
-          <input
-            v-else
-            v-model="draftCursorApiKey"
-            type="password"
-            class="field-input field-input--wide"
-            :placeholder="
-              draftCursorHasApiKey
                 ? t('settings.agentConfig.apiKeyConfigured')
                 : t('settings.agentConfig.apiKeyPlaceholder')
             "
@@ -335,33 +293,6 @@ async function resetConfig(): Promise<void> {
             </option>
             <option value="full_access">{{ t('settings.agentConfig.sandboxFullAccess') }}</option>
           </select>
-        </div>
-      </div>
-
-      <div v-if="supportsCursorConfig" class="setting-card">
-        <div class="setting-row">
-          <div>
-            <div class="setting-label">{{ t('settings.agentConfig.cursorMode') }}</div>
-            <div class="setting-desc">{{ t('settings.agentConfig.cursorModeDesc') }}</div>
-          </div>
-          <select v-model="draftCursorMode" class="model-select">
-            <option value="agent">{{ t('settings.agentConfig.cursorModeAgent') }}</option>
-            <option value="plan">{{ t('settings.agentConfig.cursorModePlan') }}</option>
-          </select>
-        </div>
-        <div class="setting-row">
-          <div>
-            <div class="setting-label">{{ t('settings.agentConfig.cursorAutoReview') }}</div>
-            <div class="setting-desc">{{ t('settings.agentConfig.cursorAutoReviewDesc') }}</div>
-          </div>
-          <button
-            type="button"
-            class="toggle-switch"
-            :class="{ active: draftCursorAutoReview }"
-            role="switch"
-            :aria-checked="draftCursorAutoReview"
-            @click="draftCursorAutoReview = !draftCursorAutoReview"
-          />
         </div>
       </div>
 
@@ -436,7 +367,7 @@ async function resetConfig(): Promise<void> {
               class="field-input field-input--wide"
               :placeholder="t('settings.agentConfig.modelDescription')"
             />
-            <button class="icon-btn" @click="removeModelRow(index)">×</button>
+            <button class="icon-btn" @click="() => removeModelRow(index)">×</button>
           </div>
           <button class="ghost-btn" @click="addModelRow">
             {{ t('settings.agentConfig.addModel') }}

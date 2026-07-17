@@ -22,7 +22,6 @@
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm build",
     "icons:generate": "node scripts/generate-icons.mjs",
     "icons:sync": "node scripts/sync-icons.mjs",
-    "verify:cursor-sdk": "node scripts/verify-cursor-sdk.mjs",
     "prepare": "simple-git-hooks"
   },
   "simple-git-hooks": {

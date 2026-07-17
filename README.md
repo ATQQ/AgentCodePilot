@@ -1,12 +1,12 @@
 # AgentCodePilot
 
-> 统一的 AI 编程 Agent 桌面应用 —— 在一个 App 里调度 Claude、Codex、Cursor 等多种 Agent。
+> 统一的 AI 编程 Agent 桌面应用 —— 在一个 App 里调度 Claude、Codex 等多种 Agent。
 
-AgentCodePilot 是一款面向编程场景的桌面 Agent 应用，交互形态参考 Cursor Agents、Codex Desktop、Claude Desktop。用户只需安装并启动一个应用，即可选择不同 Agent、绑定工作区、进行流式对话，并通过内置本地 API Gateway 对外暴露兼容 OpenAI / Anthropic 协议的接口。
+AgentCodePilot 是一款面向编程场景的桌面 Agent 应用，交互形态参考 Codex Desktop、Claude Desktop。用户只需安装并启动一个应用，即可选择不同 Agent、绑定工作区、进行流式对话，并通过内置本地 API Gateway 对外暴露兼容 OpenAI / Anthropic 协议的接口。
 
 ## 特性
 
-- **多 Agent 统一入口** — 在会话中切换 Claude Code、Codex、Cursor 及自定义 Agent，屏蔽不同 SDK 与协议差异
+- **多 Agent 统一入口** — 在会话中切换 Claude Code、Codex 及自定义 Agent，屏蔽不同 SDK 与协议差异
 - **工作区感知** — 支持选择项目目录与多文件夹工作区，Agent 在指定 `cwd` 下运行
 - **流式对话 UI** — 基于 Markstream 的 Markdown 渲染、Tool Call 展示与附件支持
 - **本地 API Gateway** — 可选开启 OpenAI-compatible / Anthropic-compatible 本地 HTTP 服务
@@ -170,7 +170,7 @@ Agent Runtime 通过统一 Adapter 接口接入不同 SDK；Gateway 将外部 HT
 - [x] CI 发布（GitHub Actions + Releases）
 - [x] Monaco Editor、终端集成
 - [ ] 本地 API Gateway
-- [ ] Codex / Cursor SDK 接入
+- [ ] Codex SDK 接入
 - [ ] MCP、Shell、Git 等工具能力
 - [ ] 代码签名与 macOS 公证
 - [ ] 自动更新

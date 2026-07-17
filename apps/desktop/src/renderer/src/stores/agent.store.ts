@@ -12,8 +12,8 @@ export const useAgentStore = defineStore('agent', () => {
   async function fetchAgents(): Promise<void> {
     const list = await window.agentAPI.agents.list()
     agents.value = list
-    if (!selectedAgentId.value && list.length > 0) {
-      selectedAgentId.value = list[0].id
+    if (!selectedAgentId.value || !list.some((a) => a.id === selectedAgentId.value)) {
+      selectedAgentId.value = list[0]?.id ?? ''
     }
   }
 

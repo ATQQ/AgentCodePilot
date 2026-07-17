@@ -3,7 +3,6 @@ import { computed } from 'vue'
 import { useAgentStore } from '@renderer/stores/agent.store'
 import claudeIcon from '@renderer/assets/claude-icon.svg'
 import codexIcon from '@renderer/assets/codex-icon.svg'
-import cursorIcon from '@renderer/assets/external-apps/cursor.svg'
 
 const props = withDefaults(defineProps<{ compact?: boolean }>(), { compact: false })
 
@@ -11,8 +10,7 @@ const agentStore = useAgentStore()
 
 const agentIcons: Record<string, string> = {
   'claude-code': claudeIcon,
-  codex: codexIcon,
-  cursor: cursorIcon
+  codex: codexIcon
 }
 
 const currentIcon = computed(() => agentIcons[agentStore.selectedAgentId] || claudeIcon)

@@ -15,7 +15,7 @@ const defaultConfig: RouterConfig = {
   rules: [
     { pattern: 'claude*', agentId: 'claude-code' },
     { pattern: 'codex*', agentId: 'codex' },
-    { pattern: 'cursor*', agentId: 'cursor' },
+    // { pattern: 'cursor*', agentId: 'cursor' }, // Cursor Agent disabled
     { pattern: 'gpt*', agentId: 'openai' },
     { pattern: 'custom*', agentId: 'custom' }
   ],

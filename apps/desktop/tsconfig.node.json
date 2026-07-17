@@ -1,6 +1,15 @@
 {
   "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
   "include": ["electron.vite.config.*", "src/main/**/*", "src/preload/**/*", "src/shared/**/*"],
+  "exclude": [
+    "src/main/runtime/cursor-agent.ts",
+    "src/main/runtime/cursor-cli-auth.ts",
+    "src/main/runtime/cursor-cli-runner.ts",
+    "src/main/runtime/cursor-executable.ts",
+    "src/main/runtime/cursor-model-catalog.ts",
+    "src/main/runtime/cursor-runtime.ts",
+    "src/main/runtime/cursor-sdk-loader.ts"
+  ],
   "compilerOptions": {
     "composite": true,
     "types": ["electron-vite/node"]

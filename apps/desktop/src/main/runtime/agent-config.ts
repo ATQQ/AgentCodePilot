@@ -36,6 +36,7 @@ export function saveAgentConfig(agentId: string, config: AgentConfigSettings): v
           apiKey: mergeAuthField(config.codex.apiKey, existing.codex?.apiKey)
         }
       : existing.codex,
+    // Cursor config merge kept so re-enabling adapter works without another config rewrite.
     cursor: config.cursor
       ? {
           ...existing.cursor,

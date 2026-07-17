@@ -5,7 +5,17 @@ import eslintPluginVue from 'eslint-plugin-vue'
 import vueParser from 'vue-eslint-parser'
 
 export default defineConfig(
-  { ignores: ['**/node_modules', '**/dist', '**/out'] },
+  {
+    ignores: [
+      '**/node_modules',
+      '**/dist',
+      '**/out',
+      // Cursor Agent sources kept but excluded from build/typecheck (see CURSOR_AGENT_DISABLED.md)
+      '**/src/main/runtime/cursor-*.ts',
+      '**/scripts/verify-cursor-sdk.mjs',
+      '**/scripts/lib/cursor-token-usage.mjs'
+    ]
+  },
   tseslint.configs.recommended,
   eslintPluginVue.configs['flat/recommended'],
   {

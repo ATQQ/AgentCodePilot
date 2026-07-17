@@ -24,7 +24,7 @@ function readOptionalNumber(raw: Record<string, unknown>, ...keys: string[]): nu
   return undefined
 }
 
-/** Map Cursor CLI `result.usage` or SDK usage payloads into app TokenUsage. */
+/** Map agent usage payloads into app TokenUsage. */
 export function mapRawTokenUsage(
   raw: Record<string, unknown> | undefined
 ): TokenUsageFields | undefined {
@@ -72,7 +72,7 @@ export function mapRawTokenUsage(
   }
 }
 
-/** Map @cursor/sdk TokenUsage (cacheWriteTokens) into app shape. */
+/** Used by disabled Cursor Agent (`cursor-agent.ts`) when re-enabled. */
 export function mapSdkTokenUsage(usage: {
   inputTokens: number
   outputTokens: number

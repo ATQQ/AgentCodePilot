@@ -1043,11 +1043,6 @@ html.dark .approval-inline-tag {
   border-color: transparent;
 }
 
-.agent-avatar[data-agent='cursor'] {
-  background: #eceef3;
-  border-color: transparent;
-}
-
 .agent-avatar[data-agent='codex'] {
   background: #e8f5ee;
   border-color: transparent;
@@ -1060,10 +1055,6 @@ html.dark .agent-avatar {
 
 html.dark .agent-avatar[data-agent='claude-code'] {
   background: rgba(245, 230, 223, 0.18);
-}
-
-html.dark .agent-avatar[data-agent='cursor'] {
-  background: rgba(236, 238, 243, 0.12);
 }
 
 html.dark .agent-avatar[data-agent='codex'] {
