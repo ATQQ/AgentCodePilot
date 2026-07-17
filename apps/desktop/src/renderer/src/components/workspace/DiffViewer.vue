@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch, defineAsyncComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Minus, Plus, RefreshLeft } from '@element-plus/icons-vue'
 import { useGitStore } from '@renderer/stores/git.store'
 import { useLayoutStore } from '@renderer/stores/layout.store'
 import { usePanelContextStore } from '@renderer/stores/panelContext.store'
@@ -9,8 +8,8 @@ import { useComposerStore } from '@renderer/stores/composer.store'
 import type { GitDiffScope } from '@renderer/types'
 import EditorFileTabs from './EditorFileTabs.vue'
 import SideTreePanel from './SideTreePanel.vue'
-import SideTreeFolderBtn from './SideTreeFolderBtn.vue'
 import MonacoDiffEditor from './MonacoDiffEditor.vue'
+import ReviewTreeActions from './ReviewTreeActions.vue'
 const GitChangedFileTree = defineAsyncComponent(
   () => import('@renderer/components/workspace/GitChangedFileTree.vue')
 )
@@ -201,7 +200,7 @@ watch(
             :key="opt.value"
             class="scope-btn"
             :class="{ active: layoutStore.reviewScope === opt.value }"
-            @click="onScopeChange(opt.value)"
+            @click="() => onScopeChange(opt.value)"
           >
             {{ opt.label }}
           </button>
@@ -234,46 +233,21 @@ watch(
         </div>
       </div>
 
-      <div class="dv-body">
-        <div class="main-pane">
-          <div class="side-tree-actions">
-            <template v-if="layoutStore.reviewScope === 'unstaged'">
-              <button
-                type="button"
-                class="side-tree-action-btn"
-                :title="t('review.discardAll')"
-                :disabled="bulkActionsDisabled"
-                @click="onDiscardAll"
-              >
-                <el-icon :size="14"><RefreshLeft /></el-icon>
-              </button>
-              <button
-                type="button"
-                class="side-tree-action-btn"
-                :title="t('review.stageAll')"
-                :disabled="bulkActionsDisabled"
-                @click="onStageAll"
-              >
-                <el-icon :size="14"><Plus /></el-icon>
-              </button>
-            </template>
-            <button
-              v-else
-              type="button"
-              class="side-tree-action-btn"
-              :title="t('review.unstageAll')"
-              :disabled="bulkActionsDisabled"
-              @click="onUnstageAll"
-            >
-              <el-icon :size="14"><Minus /></el-icon>
-            </button>
-            <SideTreeFolderBtn
-              :title="treeCollapsed ? t('review.expandTree') : t('review.collapseTree')"
-              @click="treeCollapsed = !treeCollapsed"
-            />
-          </div>
+      <GitCommitBar />
 
-          <GitCommitBar />
+      <div class="dv-work">
+        <div class="main-pane">
+          <ReviewTreeActions
+            v-if="treeCollapsed"
+            class="collapsed-tree-actions"
+            :scope="layoutStore.reviewScope"
+            :disabled="bulkActionsDisabled"
+            :tree-collapsed="true"
+            @discard-all="onDiscardAll"
+            @stage-all="onStageAll"
+            @unstage-all="onUnstageAll"
+            @toggle-tree="treeCollapsed = false"
+          />
 
           <EditorFileTabs
             :tabs="openTabs"
@@ -321,12 +295,22 @@ watch(
 
         <SideTreePanel
           v-if="!treeCollapsed"
-          overlay
           :width="layoutStore.sideTreeWidth"
           @update:width="layoutStore.sideTreeWidth = $event"
         >
           <template #header>
-            <input v-model="treeFilter" class="filter-input" placeholder="筛选文件…" />
+            <div class="tree-header-row">
+              <input v-model="treeFilter" class="filter-input" placeholder="筛选文件…" />
+              <ReviewTreeActions
+                :scope="layoutStore.reviewScope"
+                :disabled="bulkActionsDisabled"
+                :tree-collapsed="false"
+                @discard-all="onDiscardAll"
+                @stage-all="onStageAll"
+                @unstage-all="onUnstageAll"
+                @toggle-tree="treeCollapsed = true"
+              />
+            </div>
           </template>
 
           <div v-if="showFilesEmptyLoading" class="empty-msg">加载中…</div>
@@ -419,8 +403,9 @@ watch(
   color: #dc2626;
 }
 
-.dv-body {
-  position: relative;
+.dv-work {
+  display: flex;
+  flex-direction: row;
   flex: 1;
   min-height: 0;
   overflow: hidden;
@@ -428,52 +413,33 @@ watch(
 
 .main-pane {
   position: relative;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: var(--content-bg);
 }
 
-.side-tree-actions {
+.collapsed-tree-actions {
   position: absolute;
-  top: 8px;
+  top: 6px;
   right: 8px;
-  z-index: 31;
+  z-index: 5;
+}
+
+.tree-header-row {
   display: flex;
   align-items: center;
-  gap: 4px;
-}
-
-.side-tree-action-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 1px solid var(--sidebar-border);
-  border-radius: var(--radius-sm);
-  background: var(--content-bg);
-  color: var(--content-text-secondary);
-  cursor: pointer;
-  flex-shrink: 0;
-  box-shadow: var(--shadow-sm);
-  outline: none;
-}
-
-.side-tree-action-btn:hover:not(:disabled) {
-  background: var(--sidebar-item-hover);
-  color: var(--content-text);
-}
-
-.side-tree-action-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
 }
 
 .filter-input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 4px 8px;
   border: 1px solid var(--sidebar-border);
   border-radius: var(--radius-sm);

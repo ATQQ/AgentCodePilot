@@ -13,16 +13,21 @@ const { t } = useI18n()
 const showMenu = ref(false)
 const logDialogVisible = ref(false)
 const committing = ref(false)
+const pushing = ref(false)
 const msgInputRef = ref<HTMLTextAreaElement | null>(null)
 const MSG_INPUT_MIN_HEIGHT = 28
 const MSG_INPUT_MAX_HEIGHT = 160
 
 const branchName = computed(() => gitStore.status?.branch || '当前分支')
 const stagedFileCount = computed(() => gitStore.changedFilesByScope.staged.length)
-const canCommit = computed(
-  () => stagedFileCount.value > 0 && gitStore.commitMessage.trim().length > 0
-)
+const hasStagedChanges = computed(() => stagedFileCount.value > 0)
+const canCommit = computed(() => hasStagedChanges.value && gitStore.commitMessage.trim().length > 0)
+const canGenerate = computed(() => hasStagedChanges.value && !running.value)
+const aheadCount = computed(() => gitStore.status?.ahead ?? 0)
+const canPush = computed(() => !!gitStore.status?.isRepo && !committing.value && !pushing.value)
+const busy = computed(() => committing.value || pushing.value)
 const placeholder = computed(() => `消息 (⌘↵ 在「${branchName.value}」提交)`)
+const pushLabel = computed(() => (aheadCount.value > 0 ? `推送 ${aheadCount.value}` : '推送'))
 
 const activeErrorSummary = computed(() => gitStore.operationError || aiError.value)
 const activeErrorLog = computed(
@@ -52,12 +57,13 @@ onMounted(() => {
 })
 
 async function onGenerate(): Promise<void> {
+  if (!canGenerate.value) return
   const msg = await generateCommitMessage()
   if (msg) gitStore.commitMessage = msg
 }
 
 async function onCommit(): Promise<void> {
-  if (!canCommit.value || committing.value) return
+  if (!canCommit.value || busy.value) return
   committing.value = true
   try {
     await gitStore.commit()
@@ -67,21 +73,36 @@ async function onCommit(): Promise<void> {
 }
 
 async function onCommitAndPush(): Promise<void> {
-  if (!canCommit.value || committing.value) return
+  if (!canCommit.value || busy.value) return
   showMenu.value = false
   committing.value = true
   try {
     const ok = await gitStore.commit()
-    if (ok) await gitStore.push()
+    if (ok) {
+      pushing.value = true
+      await gitStore.push()
+    }
   } finally {
     committing.value = false
+    pushing.value = false
+  }
+}
+
+async function onPush(): Promise<void> {
+  if (!canPush.value) return
+  showMenu.value = false
+  pushing.value = true
+  try {
+    await gitStore.push()
+  } finally {
+    pushing.value = false
   }
 }
 
 function onKeydown(e: KeyboardEvent): void {
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
     e.preventDefault()
-    if (committing.value) return
+    if (busy.value) return
     void onCommit()
   }
 }
@@ -121,8 +142,12 @@ async function copyActiveError(): Promise<void> {
       <button
         class="gen-btn"
         type="button"
-        title="AI 生成提交消息（需有已暂存变更，使用当前对话 Agent）"
-        :disabled="running"
+        :title="
+          hasStagedChanges
+            ? 'AI 生成提交消息（使用当前对话 Agent）'
+            : '需有已暂存变更才能生成提交消息'
+        "
+        :disabled="!canGenerate"
         @click="onGenerate"
       >
         <svg
@@ -173,7 +198,7 @@ async function copyActiveError(): Promise<void> {
           class="commit-btn"
           type="button"
           :class="{ loading: committing }"
-          :disabled="!canCommit || committing"
+          :disabled="!canCommit || busy"
           @click="onCommit"
         >
           <span v-if="committing" class="commit-spinner" aria-hidden="true" />
@@ -182,7 +207,7 @@ async function copyActiveError(): Promise<void> {
         <button
           class="commit-menu-btn"
           type="button"
-          :disabled="!canCommit || committing"
+          :disabled="!canCommit || busy"
           title="更多提交选项"
           @click.stop="showMenu = !showMenu"
         >
@@ -192,6 +217,17 @@ async function copyActiveError(): Promise<void> {
           <button type="button" class="menu-item" @click="onCommitAndPush">提交并推送</button>
         </div>
       </div>
+      <button
+        class="push-btn"
+        type="button"
+        :class="{ loading: pushing }"
+        :disabled="!canPush"
+        :title="aheadCount > 0 ? `推送 ${aheadCount} 个提交` : '推送到远程'"
+        @click="onPush"
+      >
+        <span v-if="pushing" class="commit-spinner dark" aria-hidden="true" />
+        {{ pushing ? '推送中…' : pushLabel }}
+      </button>
     </div>
   </div>
 </template>
@@ -199,7 +235,6 @@ async function copyActiveError(): Promise<void> {
 <style scoped>
 .commit-bar {
   padding: 8px;
-  padding-right: 88px;
   border-bottom: 1px solid var(--sidebar-border);
   flex-shrink: 0;
   display: flex;
@@ -248,8 +283,6 @@ async function copyActiveError(): Promise<void> {
   background: var(--sidebar-bg);
   color: var(--content-text-secondary);
   cursor: pointer;
-  position: relative;
-  z-index: 32;
 }
 
 .gen-btn:hover:not(:disabled) {
@@ -315,12 +348,14 @@ async function copyActiveError(): Promise<void> {
 
 .action-row {
   display: flex;
+  gap: 6px;
 }
 
 .commit-split {
   position: relative;
   display: flex;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
 }
 
 .commit-btn {
@@ -350,6 +385,11 @@ async function copyActiveError(): Promise<void> {
   border-radius: 50%;
   animation: commit-spin 0.7s linear infinite;
   flex-shrink: 0;
+}
+
+.commit-spinner.dark {
+  border-color: color-mix(in srgb, var(--content-text) 25%, transparent);
+  border-top-color: var(--content-text);
 }
 
 @keyframes commit-spin {
@@ -406,5 +446,34 @@ async function copyActiveError(): Promise<void> {
 
 .menu-item:hover {
   background: var(--sidebar-item-hover);
+}
+
+.push-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 72px;
+  padding: 6px 12px;
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-sm);
+  background: var(--content-bg);
+  color: var(--content-text);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.push-btn.loading {
+  cursor: wait;
+}
+
+.push-btn:hover:not(:disabled) {
+  background: var(--sidebar-item-hover);
+}
+
+.push-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

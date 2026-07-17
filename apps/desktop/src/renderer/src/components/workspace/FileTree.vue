@@ -275,7 +275,6 @@ function onCloseAll(): void {
 
         <SideTreePanel
           v-if="!treeCollapsed"
-          overlay
           :width="layoutStore.sideTreeWidth"
           @update:width="layoutStore.sideTreeWidth = $event"
         >
@@ -290,7 +289,7 @@ function onCloseAll(): void {
                 :key="entry.path"
                 class="file-row leaf"
                 :class="{ active: !entry.isDirectory && fileStore.openFilePath === entry.path }"
-                @click="onEntryClick(entry)"
+                @click="() => onEntryClick(entry)"
                 @contextmenu="showContextMenu($event, entry)"
               >
                 <span v-if="entry.isDirectory" class="expand-icon">▸</span>
@@ -352,6 +351,8 @@ function onCloseAll(): void {
 
 .ft-body {
   position: relative;
+  display: flex;
+  flex-direction: row;
   flex: 1;
   min-height: 0;
   overflow: hidden;
@@ -359,7 +360,8 @@ function onCloseAll(): void {
 
 .main-pane {
   position: relative;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   height: 100%;
   display: flex;
   flex-direction: column;

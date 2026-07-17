@@ -4,13 +4,11 @@ import ResizableSplit from '@renderer/components/layout/ResizableSplit.vue'
 const props = withDefaults(
   defineProps<{
     width?: number
-    overlay?: boolean
     resizable?: boolean
     minWidth?: number
     maxWidth?: number
   }>(),
   {
-    overlay: false,
     resizable: true,
     minWidth: 160,
     maxWidth: 560
@@ -27,7 +25,7 @@ function onResize(next: number): void {
 </script>
 
 <template>
-  <aside class="side-tree-panel" :class="{ overlay }" :style="{ width: `${width ?? 220}px` }">
+  <aside class="side-tree-panel" :style="{ width: `${width ?? 220}px` }">
     <ResizableSplit
       v-if="resizable"
       direction="horizontal"
@@ -57,15 +55,6 @@ function onResize(next: number): void {
   border-left: 1px solid var(--sidebar-border);
   background: var(--sidebar-bg);
   overflow: hidden;
-}
-
-.side-tree-panel.overlay {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 30;
-  box-shadow: -4px 0 16px color-mix(in srgb, var(--content-bg) 40%, transparent);
 }
 
 .side-tree-inner {

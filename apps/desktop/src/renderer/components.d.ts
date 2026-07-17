@@ -61,6 +61,7 @@ declare module 'vue' {
     PlansPanel: typeof import('./src/components/plans/PlansPanel.vue')['default']
     PromptComposer: typeof import('./src/components/home/PromptComposer.vue')['default']
     ResizableSplit: typeof import('./src/components/layout/ResizableSplit.vue')['default']
+    ReviewTreeActions: typeof import('./src/components/workspace/ReviewTreeActions.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     SearchDialog: typeof import('./src/components/layout/SearchDialog.vue')['default']
