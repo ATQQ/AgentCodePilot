@@ -39,19 +39,28 @@ const layoutStore: LayoutStore = useLayoutStore()
 const planStore = usePlanStore()
 const composerStore = useComposerStore()
 const messageListRef = ref<InstanceType<typeof ChatMessageList> | null>(null)
-const { onScroll, scheduleScrollToBottom, forceScrollToBottom, beginLayoutTransition } =
-  useAutoScroll(() => messageListRef.value?.scrollContainer ?? null)
+const {
+  onScroll,
+  forceScrollToBottom,
+  beginLayoutTransition,
+  isNearTop,
+  scrollToTop,
+  isPinnedToBottom
+} = useAutoScroll(() => messageListRef.value?.scrollContainer ?? null)
 
-const BOTTOM_SCROLL_THRESHOLD = 80
+const BOTTOM_SCROLL_THRESHOLD = 48
+const TOP_SCROLL_THRESHOLD = 200
+const showBackToTop = ref(false)
+
+function handleScroll(): void {
+  onScroll()
+  showBackToTop.value = !isNearTop(TOP_SCROLL_THRESHOLD)
+}
 
 function scrollToLatestOnSend(): void {
-  forceScrollToBottom(true)
-  messageListRef.value?.scrollToBottom()
+  forceScrollToBottom()
   nextTick(() => {
-    requestAnimationFrame(() => {
-      forceScrollToBottom(true)
-      messageListRef.value?.scrollToBottom()
-    })
+    messageListRef.value?.scrollToBottom()
   })
 }
 const chatViewRef = ref<HTMLElement | null>(null)
@@ -85,7 +94,10 @@ let chatLayoutObserver: ResizeObserver | null = null
 onMounted(() => {
   void ensureMarkstreamPeers()
   if (chatStore.activeConversation?.messages.length) {
-    forceScrollToBottom(true)
+    forceScrollToBottom()
+    nextTick(() => {
+      messageListRef.value?.scrollToBottom()
+    })
   }
   void loadAssistantPlanMap()
 
@@ -107,7 +119,13 @@ onUnmounted(() => {
 watch(
   () => chatStore.activeConversationId,
   () => {
-    forceScrollToBottom(true)
+    forceScrollToBottom()
+    // 延迟到 rAF，确保在 ChatMessageList 的 restoreThreadState 之后再滚动
+    nextTick(() => {
+      requestAnimationFrame(() => {
+        messageListRef.value?.scrollToBottom()
+      })
+    })
     void loadAssistantPlanMap()
   }
 )
@@ -116,6 +134,9 @@ watch(
   () => chatStore.isStreaming,
   (streaming, wasStreaming) => {
     if (wasStreaming && !streaming) {
+      forceScrollToBottom()
+      // 流式结束后同步库内部滚动到底部，确保最终位置正确
+      nextTick(() => messageListRef.value?.scrollToBottom())
       void (async () => {
         await loadAssistantPlanMap()
         await maybeAutoOpenPlansPanelAfterPlanRun()
@@ -233,7 +254,11 @@ watch(
       chatStore.activeConversation?.messages.at(-1)?.content,
       chatStore.pendingApprovalConversationIds.size
     ] as const,
-  () => scheduleScrollToBottom()
+  () => {
+    // 流式输出时由 MarkstreamVirtualTimeline 的 stick-to-bottom="auto" 处理自动滚动
+    if (chatStore.isStreaming || !isPinnedToBottom.value) return
+    nextTick(() => messageListRef.value?.scrollToBottom())
+  }
 )
 
 watch(
@@ -493,279 +518,305 @@ function toggleUserMessageExpanded(messageId: string): void {
             </span>
           </div>
 
-          <ChatMessageList
-            ref="messageListRef"
-            :messages="chatStore.activeConversation.messages"
-            :conversation-id="chatStore.activeConversationId"
-            :is-dark="isDark"
-            :layout-width="layoutStore.chatLayoutWidth"
-            :is-message-streaming="chatStore.isMessageStreaming"
-            :has-pending-approval="hasPendingApprovalForMessage"
-            :is-user-message-expanded="isUserMessageExpanded"
-            @scroll="onScroll"
-          >
-            <template #message="{ msg, measureRef, markdownProps }">
-              <div
-                :ref="measureRef"
-                class="message"
-                :class="[msg.role, { 'message--plan': msg.role === 'user' && msg.planMode }]"
-              >
-                <div v-if="msg.role === 'assistant'" class="message-role">
-                  <span class="agent-avatar" :data-agent="getMessageAgentId(msg)">
-                    <img :src="getMessageAgentIcon(msg)" width="14" height="14" alt="" />
-                  </span>
-                  <span class="message-role-name">{{ getMessageAgentName(msg) }}</span>
-                  <span v-if="getPendingApproval(msg.id)" class="approval-inline-tag">
-                    {{ t('approval.waitingTag') }}
-                  </span>
-                  <span v-if="getPendingApproval(msg.id)" class="approval-inline-summary">
-                    APPROVAL {{ getPendingApproval(msg.id)?.toolName }}
-                    {{ getPendingApproval(msg.id)?.detail }}
-                  </span>
-                </div>
+          <div class="chat-messages-wrapper">
+            <ChatMessageList
+              ref="messageListRef"
+              :messages="chatStore.activeConversation.messages"
+              :conversation-id="chatStore.activeConversationId"
+              :is-dark="isDark"
+              :layout-width="layoutStore.chatLayoutWidth"
+              :is-message-streaming="chatStore.isMessageStreaming"
+              :has-pending-approval="hasPendingApprovalForMessage"
+              :is-user-message-expanded="isUserMessageExpanded"
+              :stick-to-bottom="isPinnedToBottom ? 'auto' : false"
+              @scroll="handleScroll"
+            >
+              <template #message="{ msg, measureRef, markdownProps }">
                 <div
-                  class="message-content"
-                  :class="{ 'message-content--plan': msg.role === 'user' && msg.planMode }"
+                  :ref="measureRef"
+                  class="message"
+                  :class="[msg.role, { 'message--plan': msg.role === 'user' && msg.planMode }]"
                 >
-                  <template v-if="msg.role === 'assistant'">
-                    <ApprovalRequestCard
-                      v-if="getPendingApproval(msg.id)"
-                      :request="getPendingApproval(msg.id)!"
-                      @respond="
-                        (allowed, scope) =>
-                          handleApprovalRespond(
-                            getPendingApproval(msg.id)!.requestId,
-                            allowed,
-                            scope
-                          )
-                      "
-                    />
-                    <ToolCallsSection
-                      v-if="msg.toolCalls?.length"
-                      :tool-calls="msg.toolCalls"
-                      :has-text-content="!!msg.content.trim()"
-                    />
-                    <div
-                      v-if="isThinkingMessage(msg)"
-                      class="thinking-indicator thinking-indicator--inline"
-                    >
-                      <div class="thinking-dots">
-                        <span class="dot"></span>
-                        <span class="dot"></span>
-                        <span class="dot"></span>
-                      </div>
-                      <span class="thinking-text"
-                        >{{ t('chat.thinking') }} {{ waitingSeconds }}s</span
-                      >
-                    </div>
-                    <MarkdownRender
-                      v-if="msg.content.trim() && !isThinkingMessage(msg)"
-                      v-bind="markdownProps"
-                      custom-id="chat"
-                      :smooth-streaming="chatStore.isMessageStreaming(msg.id) ? 'auto' : false"
-                      :fade="
-                        !chatStore.isMessageStreaming(msg.id) &&
-                        !chatStore.wasMessageStreamed(msg.id)
-                      "
-                      :typewriter="chatStore.isMessageStreaming(msg.id)"
-                      :max-live-nodes="chatStore.isMessageStreaming(msg.id) ? 120 : 280"
-                      :render-code-blocks-as-pre="chatStore.isMessageStreaming(msg.id)"
-                      :is-dark="isDark"
-                      :code-block-props="CODE_BLOCK_PROPS"
-                    />
-                    <div
-                      v-if="showStreamIdleIndicator(msg)"
-                      class="thinking-indicator thinking-indicator--inline thinking-indicator--trailing"
-                    >
-                      <div class="thinking-dots">
-                        <span class="dot"></span>
-                        <span class="dot"></span>
-                        <span class="dot"></span>
-                      </div>
-                      <span class="thinking-text"
-                        >{{ t('chat.thinking') }} {{ waitingSeconds }}s</span
-                      >
-                    </div>
-                    <button
-                      v-if="getPlanIdForMessage(msg.id)"
-                      type="button"
-                      class="view-plan-link"
-                      @click="() => openPlansPanel(getPlanIdForMessage(msg.id))"
-                    >
-                      {{ t('plans.viewPlan') }}
-                    </button>
-                    <span v-if="msg.stopped" class="stopped-badge">{{
-                      t('chat.stoppedBadge')
-                    }}</span>
-                  </template>
-                  <template v-else>
-                    <span v-if="msg.planMode" class="plan-mode-tag">{{
-                      t('chat.planModeTag')
-                    }}</span>
-                    <span v-for="planRef in msg.planRefs" :key="planRef.id" class="plan-ref-tag">
-                      {{ t('chat.planRefTag', { title: planRef.title }) }}
+                  <div v-if="msg.role === 'assistant'" class="message-role">
+                    <span class="agent-avatar" :data-agent="getMessageAgentId(msg)">
+                      <img :src="getMessageAgentIcon(msg)" width="14" height="14" alt="" />
                     </span>
-                    <span
-                      v-for="skillRef in msg.skillRefs"
-                      :key="`${skillRef.path}-${skillRef.name}`"
-                      class="skill-ref-tag"
-                    >
-                      {{ t('chat.skillRefTag', { name: skillRef.name }) }}
+                    <span class="message-role-name">{{ getMessageAgentName(msg) }}</span>
+                    <span v-if="getPendingApproval(msg.id)" class="approval-inline-tag">
+                      {{ t('approval.waitingTag') }}
                     </span>
-                    <div v-if="msg.attachments?.length" class="message-attachments">
+                    <span v-if="getPendingApproval(msg.id)" class="approval-inline-summary">
+                      APPROVAL {{ getPendingApproval(msg.id)?.toolName }}
+                      {{ getPendingApproval(msg.id)?.detail }}
+                    </span>
+                  </div>
+                  <div
+                    class="message-content"
+                    :class="{ 'message-content--plan': msg.role === 'user' && msg.planMode }"
+                  >
+                    <template v-if="msg.role === 'assistant'">
+                      <ApprovalRequestCard
+                        v-if="getPendingApproval(msg.id)"
+                        :request="getPendingApproval(msg.id)!"
+                        @respond="
+                          (allowed, scope) =>
+                            handleApprovalRespond(
+                              getPendingApproval(msg.id)!.requestId,
+                              allowed,
+                              scope
+                            )
+                        "
+                      />
+                      <ToolCallsSection
+                        v-if="msg.toolCalls?.length"
+                        :tool-calls="msg.toolCalls"
+                        :has-text-content="!!msg.content.trim()"
+                      />
                       <div
-                        v-for="(att, attachmentIndex) in msg.attachments"
-                        :key="att.id"
-                        class="msg-attachment"
+                        v-if="isThinkingMessage(msg)"
+                        class="thinking-indicator thinking-indicator--inline"
                       >
-                        <template v-if="att.type === 'image'">
-                          <MessageAttachmentImage
-                            :path="att.path"
-                            :name="att.name"
-                            :title="t('chat.previewAttachment')"
-                          />
-                        </template>
-                        <template v-else-if="att.type === 'file'">
-                          <button
-                            type="button"
-                            class="msg-attachment-chip msg-attachment-action"
-                            :title="t('chat.showInFolder')"
-                            @click="() => openAttachment(att)"
-                          >
-                            &#x1F4C4; {{ att.name }}
-                          </button>
-                        </template>
-                        <template v-else-if="att.type === 'url'">
-                          <span class="msg-attachment-chip msg-attachment-url">
-                            <span class="msg-url-label"
-                              >&#x1F517; #{{ Number(attachmentIndex) + 1 }} {{ att.url }}</span
-                            >
-                            <span class="msg-attachment-tooltip">
-                              <button class="tooltip-copy" @click.stop="() => copyText(att.url)">
-                                <svg
-                                  width="12"
-                                  height="12"
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  stroke-width="2"
-                                  stroke-linecap="round"
-                                  stroke-linejoin="round"
-                                >
-                                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                                  <path
-                                    d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-                                  />
-                                </svg>
-                              </button>
-                              <span class="tooltip-url">{{ att.url }}</span>
-                            </span>
-                          </span>
-                        </template>
+                        <div class="thinking-dots">
+                          <span class="dot"></span>
+                          <span class="dot"></span>
+                          <span class="dot"></span>
+                        </div>
+                        <span class="thinking-text"
+                          >{{ t('chat.thinking') }} {{ waitingSeconds }}s</span
+                        >
                       </div>
+                      <MarkdownRender
+                        v-if="msg.content.trim() && !isThinkingMessage(msg)"
+                        v-bind="markdownProps"
+                        custom-id="chat"
+                        :smooth-streaming="chatStore.isMessageStreaming(msg.id) ? 'auto' : false"
+                        :fade="
+                          !chatStore.isMessageStreaming(msg.id) &&
+                          !chatStore.wasMessageStreamed(msg.id)
+                        "
+                        :typewriter="chatStore.isMessageStreaming(msg.id)"
+                        :max-live-nodes="chatStore.isMessageStreaming(msg.id) ? 120 : 280"
+                        :code-block-stream="chatStore.isMessageStreaming(msg.id)"
+                        :is-dark="isDark"
+                        :code-block-props="CODE_BLOCK_PROPS"
+                      />
+                      <div
+                        v-if="showStreamIdleIndicator(msg)"
+                        class="thinking-indicator thinking-indicator--inline thinking-indicator--trailing"
+                      >
+                        <div class="thinking-dots">
+                          <span class="dot"></span>
+                          <span class="dot"></span>
+                          <span class="dot"></span>
+                        </div>
+                        <span class="thinking-text"
+                          >{{ t('chat.thinking') }} {{ waitingSeconds }}s</span
+                        >
+                      </div>
+                      <button
+                        v-if="getPlanIdForMessage(msg.id)"
+                        type="button"
+                        class="view-plan-link"
+                        @click="() => openPlansPanel(getPlanIdForMessage(msg.id))"
+                      >
+                        {{ t('plans.viewPlan') }}
+                      </button>
+                      <span v-if="msg.stopped" class="stopped-badge">{{
+                        t('chat.stoppedBadge')
+                      }}</span>
+                    </template>
+                    <template v-else>
+                      <span v-if="msg.planMode" class="plan-mode-tag">{{
+                        t('chat.planModeTag')
+                      }}</span>
+                      <span v-for="planRef in msg.planRefs" :key="planRef.id" class="plan-ref-tag">
+                        {{ t('chat.planRefTag', { title: planRef.title }) }}
+                      </span>
+                      <span
+                        v-for="skillRef in msg.skillRefs"
+                        :key="`${skillRef.path}-${skillRef.name}`"
+                        class="skill-ref-tag"
+                      >
+                        {{ t('chat.skillRefTag', { name: skillRef.name }) }}
+                      </span>
+                      <div v-if="msg.attachments?.length" class="message-attachments">
+                        <div
+                          v-for="(att, attachmentIndex) in msg.attachments"
+                          :key="att.id"
+                          class="msg-attachment"
+                        >
+                          <template v-if="att.type === 'image'">
+                            <MessageAttachmentImage
+                              :path="att.path"
+                              :name="att.name"
+                              :title="t('chat.previewAttachment')"
+                            />
+                          </template>
+                          <template v-else-if="att.type === 'file'">
+                            <button
+                              type="button"
+                              class="msg-attachment-chip msg-attachment-action"
+                              :title="t('chat.showInFolder')"
+                              @click="() => openAttachment(att)"
+                            >
+                              &#x1F4C4; {{ att.name }}
+                            </button>
+                          </template>
+                          <template v-else-if="att.type === 'url'">
+                            <span class="msg-attachment-chip msg-attachment-url">
+                              <span class="msg-url-label"
+                                >&#x1F517; #{{ Number(attachmentIndex) + 1 }} {{ att.url }}</span
+                              >
+                              <span class="msg-attachment-tooltip">
+                                <button class="tooltip-copy" @click.stop="() => copyText(att.url)">
+                                  <svg
+                                    width="12"
+                                    height="12"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                  >
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                    <path
+                                      d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                                    />
+                                  </svg>
+                                </button>
+                                <span class="tooltip-url">{{ att.url }}</span>
+                              </span>
+                            </span>
+                          </template>
+                        </div>
+                      </div>
+                      <CollapsibleUserMessageText
+                        v-if="msg.content"
+                        :content="msg.content"
+                        :expanded="isUserMessageExpanded(msg.id)"
+                        :plan-mode="msg.planMode"
+                        @toggle="() => toggleUserMessageExpanded(msg.id)"
+                      />
+                    </template>
+                  </div>
+                  <div class="message-actions">
+                    <button
+                      class="action-btn"
+                      :title="t('chat.copy')"
+                      @click="() => copyMessage(msg)"
+                    >
+                      <svg
+                        v-if="copiedMessageId === msg.id"
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                      <svg
+                        v-else
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                    </button>
+                    <button
+                      v-if="msg.role === 'user'"
+                      class="action-btn"
+                      :title="t('chat.resend')"
+                      @click="() => resendMessage(msg.content)"
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <polyline points="1 4 1 10 7 10" />
+                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                      </svg>
+                    </button>
+                    <span v-if="msg.usage" class="action-tokens">{{
+                      formatTokenUsageSummary(msg.usage)
+                    }}</span>
+                    <span class="action-time">{{ formatTime(msg.createdAt) }}</span>
+                  </div>
+                  <div v-if="debugMode && msg.role === 'assistant'" class="debug-panel">
+                    <div class="debug-section">
+                      <span class="debug-label">REQUEST</span>
+                      <pre class="debug-json elegant-scroll">{{
+                        msg.debugInput
+                          ? JSON.stringify(JSON.parse(msg.debugInput), null, 2)
+                          : '(无数据)'
+                      }}</pre>
                     </div>
-                    <CollapsibleUserMessageText
-                      v-if="msg.content"
-                      :content="msg.content"
-                      :expanded="isUserMessageExpanded(msg.id)"
-                      :plan-mode="msg.planMode"
-                      @toggle="() => toggleUserMessageExpanded(msg.id)"
-                    />
-                  </template>
-                </div>
-                <div class="message-actions">
-                  <button
-                    class="action-btn"
-                    :title="t('chat.copy')"
-                    @click="() => copyMessage(msg)"
-                  >
-                    <svg
-                      v-if="copiedMessageId === msg.id"
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    >
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                    <svg
-                      v-else
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    >
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                    </svg>
-                  </button>
-                  <button
-                    v-if="msg.role === 'user'"
-                    class="action-btn"
-                    :title="t('chat.resend')"
-                    @click="() => resendMessage(msg.content)"
-                  >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    >
-                      <polyline points="1 4 1 10 7 10" />
-                      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-                    </svg>
-                  </button>
-                  <span v-if="msg.usage" class="action-tokens">{{
-                    formatTokenUsageSummary(msg.usage)
-                  }}</span>
-                  <span class="action-time">{{ formatTime(msg.createdAt) }}</span>
-                </div>
-                <div v-if="debugMode && msg.role === 'assistant'" class="debug-panel">
-                  <div class="debug-section">
-                    <span class="debug-label">REQUEST</span>
-                    <pre class="debug-json elegant-scroll">{{
-                      msg.debugInput
-                        ? JSON.stringify(JSON.parse(msg.debugInput), null, 2)
-                        : '(无数据)'
-                    }}</pre>
-                  </div>
-                  <div class="debug-section">
-                    <span class="debug-label">RESPONSE</span>
-                    <pre class="debug-json elegant-scroll">{{
-                      msg.debugOutput
-                        ? JSON.stringify(JSON.parse(msg.debugOutput), null, 2)
-                        : '(无数据)'
-                    }}</pre>
+                    <div class="debug-section">
+                      <span class="debug-label">RESPONSE</span>
+                      <pre class="debug-json elegant-scroll">{{
+                        msg.debugOutput
+                          ? JSON.stringify(JSON.parse(msg.debugOutput), null, 2)
+                          : '(无数据)'
+                      }}</pre>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </template>
-            <template #after>
-              <div v-if="showStandaloneThinking" class="thinking-indicator">
-                <span class="agent-avatar" :data-agent="waitingAgentId">
-                  <img :src="waitingAgentIcon" width="14" height="14" alt="" />
-                </span>
-                <div class="thinking-dots">
-                  <span class="dot"></span>
-                  <span class="dot"></span>
-                  <span class="dot"></span>
+              </template>
+              <template #after>
+                <div v-if="showStandaloneThinking" class="thinking-indicator">
+                  <span class="agent-avatar" :data-agent="waitingAgentId">
+                    <img :src="waitingAgentIcon" width="14" height="14" alt="" />
+                  </span>
+                  <div class="thinking-dots">
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                    <span class="dot"></span>
+                  </div>
+                  <span class="thinking-text">{{ t('chat.thinking') }} {{ waitingSeconds }}s</span>
                 </div>
-                <span class="thinking-text">{{ t('chat.thinking') }} {{ waitingSeconds }}s</span>
-              </div>
-            </template>
-          </ChatMessageList>
+              </template>
+            </ChatMessageList>
+
+            <Transition name="back-to-top-fade">
+              <button
+                v-if="showBackToTop"
+                type="button"
+                class="back-to-top-btn"
+                :title="t('chat.backToTop')"
+                @click="scrollToTop"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polyline points="18 15 12 9 6 15" />
+                </svg>
+              </button>
+            </Transition>
+          </div>
 
           <div class="chat-input-area">
             <div v-if="isArchived" class="archived-banner">
@@ -840,6 +891,15 @@ function toggleUserMessageExpanded(messageId: string): void {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  position: relative;
+}
+
+.chat-messages-wrapper {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 .chat-layout--pinned-env .chat-main {
@@ -1426,5 +1486,46 @@ html.dark .agent-avatar[data-agent='codex'] {
   justify-content: center;
   height: 100%;
   color: var(--content-text-secondary);
+}
+
+.back-to-top-btn {
+  position: absolute;
+  right: var(--spacing-lg);
+  bottom: var(--spacing-md);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-full);
+  background: var(--content-bg);
+  color: var(--content-text-secondary);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    transform 0.15s;
+}
+
+.back-to-top-btn:hover {
+  background: var(--sidebar-hover);
+  color: var(--content-text);
+  transform: translateY(-2px);
+}
+
+.back-to-top-fade-enter-active,
+.back-to-top-fade-leave-active {
+  transition:
+    opacity 0.2s,
+    transform 0.2s;
+}
+
+.back-to-top-fade-enter-from,
+.back-to-top-fade-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
 }
 </style>

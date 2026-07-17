@@ -28,6 +28,7 @@ const props = defineProps<{
   isMessageStreaming: (messageId: string) => boolean
   hasPendingApproval: (messageId: string) => boolean
   isUserMessageExpanded?: (messageId: string) => boolean
+  stickToBottom?: boolean | 'auto'
 }>()
 
 const emit = defineEmits<{
@@ -110,7 +111,7 @@ defineExpose({
     markdown-mode="chat"
     markdown-code-renderer="monaco"
     :markdown-fade="false"
-    stick-to-bottom="auto"
+    :stick-to-bottom="stickToBottom ?? 'auto'"
     :overscan-px="1200"
     :initial-thread-state="initialThreadState"
     :estimate-item-height="estimateItemHeight"

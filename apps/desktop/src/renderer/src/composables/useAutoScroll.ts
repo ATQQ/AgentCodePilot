@@ -1,20 +1,22 @@
-import { nextTick, onUnmounted, type Ref } from 'vue'
+import { ref, type Ref } from 'vue'
 
-const BOTTOM_THRESHOLD = 80
+/** Align with MarkstreamVirtualTimeline unpin threshold (≤48px). */
+const BOTTOM_THRESHOLD = 48
 
 type AutoScrollContainerRef = Ref<HTMLElement | null> | (() => HTMLElement | null)
 
 interface AutoScrollResult {
   onScroll: () => void
-  scheduleScrollToBottom: (instant?: boolean) => void
-  forceScrollToBottom: (instant?: boolean) => void
-  scrollToBottom: (instant?: boolean) => void
+  /** Marks pinned; actual scroll must go through Markstream scrollToBottom. */
+  forceScrollToBottom: () => void
   beginLayoutTransition: (ms?: number) => void
+  isNearTop: (threshold?: number) => boolean
+  scrollToTop: () => void
+  isPinnedToBottom: Ref<boolean>
 }
 
 export function useAutoScroll(containerRef: AutoScrollContainerRef): AutoScrollResult {
-  let rafId: number | null = null
-  let userPinnedToBottom = true
+  const isPinnedToBottom = ref(true)
   let suppressPinUpdatesUntil = 0
 
   function getContainer(): HTMLElement | null {
@@ -29,49 +31,37 @@ export function useAutoScroll(containerRef: AutoScrollContainerRef): AutoScrollR
 
   function onScroll(): void {
     if (Date.now() < suppressPinUpdatesUntil) return
-    userPinnedToBottom = isNearBottom()
+    isPinnedToBottom.value = isNearBottom()
   }
 
   function beginLayoutTransition(ms = 250): void {
     suppressPinUpdatesUntil = Date.now() + ms
-    userPinnedToBottom = true
+    isPinnedToBottom.value = true
   }
 
-  function scrollToBottom(instant = false): void {
-    if (!userPinnedToBottom && !instant) return
+  function forceScrollToBottom(): void {
+    isPinnedToBottom.value = true
+  }
+
+  function isNearTop(threshold = 200): boolean {
+    const el = getContainer()
+    if (!el) return true
+    return el.scrollTop <= threshold
+  }
+
+  function scrollToTop(): void {
+    isPinnedToBottom.value = false
     const el = getContainer()
     if (!el) return
-    el.scrollTo({
-      top: el.scrollHeight,
-      behavior: instant ? 'instant' : 'smooth'
-    })
+    el.scrollTop = 0
   }
-
-  function scheduleScrollToBottom(instant = false): void {
-    if (rafId !== null) return
-    rafId = requestAnimationFrame(() => {
-      rafId = null
-      nextTick(() => scrollToBottom(instant))
-    })
-  }
-
-  function forceScrollToBottom(instant = true): void {
-    userPinnedToBottom = true
-    scheduleScrollToBottom(instant)
-  }
-
-  onUnmounted(() => {
-    if (rafId !== null) {
-      cancelAnimationFrame(rafId)
-      rafId = null
-    }
-  })
 
   return {
     onScroll,
-    scheduleScrollToBottom,
     forceScrollToBottom,
-    scrollToBottom,
-    beginLayoutTransition
+    beginLayoutTransition,
+    isNearTop,
+    scrollToTop,
+    isPinnedToBottom
   }
 }
