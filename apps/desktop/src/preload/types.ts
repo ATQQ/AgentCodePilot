@@ -399,6 +399,7 @@ export interface MessageInfo {
   debugInput?: string
   debugOutput?: string
   stopped?: boolean
+  error?: boolean
 }
 
 export type PlanOwnerType = 'conversation' | 'project' | 'workspace'

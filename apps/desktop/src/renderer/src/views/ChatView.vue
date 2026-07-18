@@ -156,7 +156,7 @@ watch(
 )
 
 function isThinkingMessage(msg: Message): boolean {
-  if (msg.role !== 'assistant' || msg.stopped) return false
+  if (msg.role !== 'assistant' || msg.stopped || msg.error) return false
   if (msg.content.trim() || msg.toolCalls?.length) return false
   const convId = chatStore.activeConversationId
   if (!convId || msg.id !== chatStore.getActiveAssistantMessageId(convId)) return false
@@ -169,7 +169,7 @@ function hasRunningTools(msg: Message): boolean {
 
 function showStreamIdleIndicator(msg: Message): boolean {
   const convId = chatStore.activeConversationId
-  if (!convId || msg.role !== 'assistant' || msg.stopped) return false
+  if (!convId || msg.role !== 'assistant' || msg.stopped || msg.error) return false
   if (msg.id !== chatStore.getActiveAssistantMessageId(convId)) return false
   if (!chatStore.isConversationBusy(convId)) return false
   if (!msg.content.trim() && !msg.toolCalls?.length) return false
@@ -625,6 +625,9 @@ function toggleUserMessageExpanded(messageId: string): void {
                       </button>
                       <span v-if="msg.stopped" class="stopped-badge">{{
                         t('chat.stoppedBadge')
+                      }}</span>
+                      <span v-else-if="msg.error" class="error-badge">{{
+                        t('chat.errorBadge')
                       }}</span>
                     </template>
                     <template v-else>
@@ -1144,6 +1147,16 @@ html.dark .agent-avatar[data-agent='codex'] {
   border-radius: var(--radius-full);
   background: color-mix(in srgb, var(--content-text-secondary) 12%, transparent);
   color: var(--content-text-secondary);
+  font-size: 11px;
+}
+
+.error-badge {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--el-color-danger) 12%, transparent);
+  color: var(--el-color-danger);
   font-size: 11px;
 }
 

@@ -27,7 +27,7 @@ export interface ChatTimelineItem {
 }
 
 export function buildMessageRevision(msg: Message, hasPendingApproval: boolean): string {
-  return `${msg.content.length}:${msg.toolCalls?.length ?? 0}:${hasPendingApproval ? 1 : 0}:${msg.stopped ? 1 : 0}`
+  return `${msg.content.length}:${msg.toolCalls?.length ?? 0}:${hasPendingApproval ? 1 : 0}:${msg.stopped ? 1 : 0}:${msg.error ? 1 : 0}`
 }
 
 export function mapMessageToTimelineItem(
@@ -94,6 +94,7 @@ export function estimateTimelineItemHeight(item: ChatTimelineItem, expanded = fa
     height += 48 * msg.toolCalls.length
   }
   if (msg.stopped) height += 28
+  if (msg.error) height += 28
   return height
 }
 

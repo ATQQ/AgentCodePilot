@@ -91,6 +91,7 @@ export default {
     thinking: '思考中',
     stoppedManually: '已手动终止 AI 回复',
     stoppedBadge: '已手动停止',
+    errorBadge: '运行异常',
     planModeTag: '计划模式',
     planRefTag: '引用计划: {title}',
     skillRefTag: '技能 {name}',

@@ -163,6 +163,32 @@ const AGENT_HISTORY_LIMIT = 50
 const DELTA_BATCH_MS = 16
 const STOPPED_ASSISTANT_TEXT = '已手动终止 AI 回复'
 
+function formatAgentErrorMessage(error: string): string {
+  if (/maximum number of turns|max_turns|回合上限/i.test(error)) {
+    return '已达到单次 Agent 回合上限。如需继续，请发送「继续」或把任务拆小后重试。'
+  }
+  return error
+}
+
+function isErrorMessageRow(m: repo.MessageRow): boolean {
+  return m.error === 1 || (m.role === 'assistant' && m.content.startsWith('[Error]'))
+}
+
+/** Drop failed turns (error assistant + its preceding user message) from LLM context. */
+function filterMessagesForAgentContext(messages: repo.MessageRow[]): repo.MessageRow[] {
+  const result: repo.MessageRow[] = []
+  for (const m of messages) {
+    if (isErrorMessageRow(m)) {
+      if (result.length > 0 && result[result.length - 1].role === 'user') {
+        result.pop()
+      }
+      continue
+    }
+    result.push(m)
+  }
+  return result
+}
+
 function finalizeToolCallsForSave(toolCalls: Map<string, ToolUseInfo>): ToolUseInfo[] {
   const nowMs = Date.now()
   return Array.from(toolCalls.values()).map((tool) => {
@@ -227,7 +253,9 @@ function getConversationRunContext(conversationId: string): {
   conversationHistory: { role: 'user' | 'assistant'; content: string }[]
 } {
   const conv = repo.getConversationById(conversationId)
-  const messages = repo.getRecentMessagesByConversation(conversationId, AGENT_HISTORY_LIMIT)
+  const messages = filterMessagesForAgentContext(
+    repo.getRecentMessagesByConversation(conversationId, AGENT_HISTORY_LIMIT)
+  )
 
   return {
     agentSessionId: conv?.agent_session_id ?? null,
@@ -321,11 +349,38 @@ function emitAgentEvent(event: AgentEvent): void {
       streamingMessages.delete(event.messageId)
     }
   } else if (event.type === 'message.error') {
-    for (const [msgId, entry] of streamingMessages) {
-      if (entry.conversationId === event.conversationId) {
-        streamingMessages.delete(msgId)
-        break
+    let messageId = event.messageId
+    let entry = streamingMessages.get(event.messageId)
+    if (!entry) {
+      for (const [msgId, e] of streamingMessages) {
+        if (e.conversationId === event.conversationId) {
+          messageId = msgId
+          entry = e
+          break
+        }
       }
+    }
+
+    try {
+      const errorText = `[Error] ${formatAgentErrorMessage(event.error)}`
+      const content = entry?.content.trim() ? `${entry.content.trim()}\n\n${errorText}` : errorText
+      const finalizedTools = entry ? finalizeToolCallsForSave(entry.toolCalls) : []
+      repo.addMessage({
+        id: messageId,
+        conversationId: event.conversationId,
+        role: 'assistant',
+        content,
+        createdAt: new Date().toISOString(),
+        agentId: entry?.agentId ?? null,
+        rawInput: entry?.rawInput || null,
+        error: true,
+        toolCalls: finalizedTools.length > 0 ? JSON.stringify(finalizedTools) : null
+      })
+    } catch (e) {
+      console.error('[emitAgentEvent] Failed to save error message to db:', e)
+    }
+    if (entry) {
+      streamingMessages.delete(messageId)
     }
   } else if (event.type === 'session.updated') {
     repo.setConversationSessionId(event.conversationId, event.sessionId)
@@ -677,6 +732,9 @@ function registerIpcHandlers(): void {
         }
         if (r.stopped === 1) {
           msg.stopped = true
+        }
+        if (r.error === 1) {
+          msg.error = true
         }
         return msg
       })

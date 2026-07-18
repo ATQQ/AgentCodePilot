@@ -36,6 +36,7 @@ export interface MessageRow {
   agent_id: string | null
   tool_calls: string | null
   stopped: number | null
+  error: number | null
 }
 
 export interface ProjectRow {
@@ -259,11 +260,12 @@ export function addMessage(msg: {
   agentId?: string | null
   toolCalls?: string | null
   stopped?: boolean | null
+  error?: boolean | null
 }): void {
   const db = getDatabase()
   db.prepare(
-    `INSERT INTO messages (id, conversation_id, role, content, created_at, attachments, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, raw_input, debug_input, debug_output, plan_mode, plan_refs, skill_refs, agent_id, tool_calls, stopped)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO messages (id, conversation_id, role, content, created_at, attachments, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, raw_input, debug_input, debug_output, plan_mode, plan_refs, skill_refs, agent_id, tool_calls, stopped, error)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     msg.id,
     msg.conversationId,
@@ -284,7 +286,8 @@ export function addMessage(msg: {
     msg.skillRefs ?? null,
     msg.agentId ?? null,
     msg.toolCalls ?? null,
-    msg.stopped ? 1 : 0
+    msg.stopped ? 1 : 0,
+    msg.error ? 1 : 0
   )
 
   db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(

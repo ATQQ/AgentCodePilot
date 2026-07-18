@@ -88,6 +88,7 @@ export interface Message {
   debugInput?: string
   debugOutput?: string
   stopped?: boolean
+  error?: boolean
 }
 
 export interface ApprovalRequest {

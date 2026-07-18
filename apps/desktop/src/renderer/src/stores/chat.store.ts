@@ -201,7 +201,11 @@ export const useChatStore = defineStore('chat', () => {
     const conv = conversations.value.find((c) => c.id === conversationId)
     const msg = conv?.messages.find((m) => m.id === activeId)
     return (
-      msg?.role === 'assistant' && !msg.content.trim() && !msg.toolCalls?.length && !msg.stopped
+      msg?.role === 'assistant' &&
+      !msg.content.trim() &&
+      !msg.toolCalls?.length &&
+      !msg.stopped &&
+      !msg.error
     )
   }
 
@@ -217,8 +221,9 @@ export const useChatStore = defineStore('chat', () => {
     const errMsg = formatAgentErrorMessage(error instanceof Error ? error.message : String(error))
     addMessage(conversationId, 'assistant', `[Error] ${errMsg}`)
     const lastMsg = conv.messages[conv.messages.length - 1]
-    if (lastMsg?.role === 'assistant' && pendingAgent) {
-      lastMsg.agentId = pendingAgent
+    if (lastMsg?.role === 'assistant') {
+      lastMsg.error = true
+      if (pendingAgent) lastMsg.agentId = pendingAgent
     }
   }
 
@@ -478,7 +483,8 @@ export const useChatStore = defineStore('chat', () => {
       usage: m.usage,
       debugInput: m.debugInput,
       debugOutput: m.debugOutput,
-      stopped: m.stopped
+      stopped: m.stopped,
+      error: m.error
     }))
   }
 
@@ -822,15 +828,23 @@ export const useChatStore = defineStore('chat', () => {
           if (!isCurrentRun) break
           const conv = conversations.value.find((c) => c.id === event.conversationId)
           if (conv) {
-            const pendingAgent = getPendingAgent(event.conversationId)
-            addMessage(
-              event.conversationId,
-              'assistant',
-              `[Error] ${formatAgentErrorMessage(event.error)}`
-            )
-            const lastMsg = conv.messages[conv.messages.length - 1]
-            if (lastMsg?.role === 'assistant' && pendingAgent) {
-              lastMsg.agentId = pendingAgent
+            conv.updatedAt = new Date().toISOString()
+            const errorText = `[Error] ${formatAgentErrorMessage(event.error)}`
+            let msg = conv.messages.find((m) => m.id === event.messageId)
+            if (!msg) {
+              msg = {
+                id: event.messageId,
+                role: 'assistant',
+                content: errorText,
+                createdAt: new Date().toISOString(),
+                error: true
+              }
+              assignAgentToAssistantMessage(event.conversationId, msg)
+              conv.messages.push(msg)
+            } else {
+              msg.content = msg.content.trim() ? `${msg.content.trim()}\n\n${errorText}` : errorText
+              msg.error = true
+              assignAgentToAssistantMessage(event.conversationId, msg)
             }
           }
           removeWaitingConversation(event.conversationId)
