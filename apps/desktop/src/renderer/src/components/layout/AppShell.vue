@@ -5,7 +5,7 @@ import AppSidebar from './AppSidebar.vue'
 import SearchDialog from './SearchDialog.vue'
 import TopBarControls from './TopBarControls.vue'
 import ResizableSplit from './ResizableSplit.vue'
-import { useUiStore } from '@renderer/stores/ui.store'
+import { useUiStore, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH } from '@renderer/stores/ui.store'
 import { useLayoutStore } from '@renderer/stores/layout.store'
 import { useGitStore } from '@renderer/stores/git.store'
 import { formatShortcutKey } from '@renderer/composables/useShortcutLabel'
@@ -121,7 +121,22 @@ provide('openSearch', () => uiStore.openSearch())
     <div class="workbench-body">
       <!-- Left sidebar -->
       <Transition name="sidebar-slide">
-        <AppSidebar v-show="!uiStore.sidebarCollapsed" />
+        <div
+          v-show="!uiStore.sidebarCollapsed"
+          class="sidebar-rail"
+          :style="{ width: `${uiStore.sidebarWidth}px`, minWidth: `${uiStore.sidebarWidth}px` }"
+        >
+          <AppSidebar />
+          <ResizableSplit
+            direction="horizontal"
+            :size="uiStore.sidebarWidth"
+            :min-size="SIDEBAR_MIN_WIDTH"
+            :max-size="SIDEBAR_MAX_WIDTH"
+            collapse-below-min
+            @update:size="uiStore.setSidebarWidth"
+            @collapse="uiStore.collapseSidebar()"
+          />
+        </div>
       </Transition>
 
       <!-- Center column: main content + bottom panel -->
@@ -219,6 +234,29 @@ provide('openSearch', () => uiStore.openSearch())
 .control-btn:hover {
   background: var(--sidebar-item-hover);
   color: var(--sidebar-text-active);
+}
+
+.sidebar-rail {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  height: 100%;
+  overflow: visible;
+  border-right: 1px solid var(--sidebar-border);
+}
+
+.sidebar-rail :deep(.sidebar) {
+  width: 100%;
+  min-width: 0;
+  border-right: none;
+}
+
+.sidebar-rail :deep(.resize-handle.horizontal) {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  z-index: 100;
 }
 
 .workbench-body {

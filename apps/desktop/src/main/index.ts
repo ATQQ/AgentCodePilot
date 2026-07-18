@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, nativeImage } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, nativeImage, screen } from 'electron'
 import { join } from 'path'
 import { existsSync, mkdirSync, writeFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -1080,12 +1080,99 @@ function registerIpcHandlers(): void {
   })
 }
 
+const WINDOW_BOUNDS_KEY = 'windowBounds'
+const WINDOW_MIN_WIDTH = 900
+const WINDOW_MIN_HEIGHT = 600
+const WINDOW_DEFAULT_WIDTH = 1200
+const WINDOW_DEFAULT_HEIGHT = 800
+
+interface WindowBoundsState {
+  x?: number
+  y?: number
+  width: number
+  height: number
+  isMaximized?: boolean
+}
+
+function loadWindowBounds(): WindowBoundsState {
+  try {
+    const raw = repo.getSetting(WINDOW_BOUNDS_KEY)
+    if (!raw) {
+      return { width: WINDOW_DEFAULT_WIDTH, height: WINDOW_DEFAULT_HEIGHT }
+    }
+    const parsed = JSON.parse(raw) as Partial<WindowBoundsState>
+    const width =
+      typeof parsed.width === 'number' && Number.isFinite(parsed.width)
+        ? Math.max(WINDOW_MIN_WIDTH, Math.round(parsed.width))
+        : WINDOW_DEFAULT_WIDTH
+    const height =
+      typeof parsed.height === 'number' && Number.isFinite(parsed.height)
+        ? Math.max(WINDOW_MIN_HEIGHT, Math.round(parsed.height))
+        : WINDOW_DEFAULT_HEIGHT
+    const state: WindowBoundsState = {
+      width,
+      height,
+      isMaximized: Boolean(parsed.isMaximized)
+    }
+    if (typeof parsed.x === 'number' && Number.isFinite(parsed.x)) {
+      state.x = Math.round(parsed.x)
+    }
+    if (typeof parsed.y === 'number' && Number.isFinite(parsed.y)) {
+      state.y = Math.round(parsed.y)
+    }
+    return ensureWindowBoundsVisible(state)
+  } catch {
+    return { width: WINDOW_DEFAULT_WIDTH, height: WINDOW_DEFAULT_HEIGHT }
+  }
+}
+
+/** Keep restored bounds on a visible display (handles disconnected external monitors). */
+function ensureWindowBoundsVisible(state: WindowBoundsState): WindowBoundsState {
+  if (state.x == null || state.y == null) return state
+
+  const bounds = {
+    x: state.x,
+    y: state.y,
+    width: state.width,
+    height: state.height
+  }
+  const display = screen.getDisplayMatching(bounds)
+  const area = display.workArea
+  const minVisible = 64
+
+  let { x, y, width, height } = bounds
+  width = Math.min(width, area.width)
+  height = Math.min(height, area.height)
+
+  if (x + width < area.x + minVisible) x = area.x
+  if (y + height < area.y + minVisible) y = area.y
+  if (x > area.x + area.width - minVisible) x = area.x + Math.max(0, area.width - width)
+  if (y > area.y + area.height - minVisible) y = area.y + Math.max(0, area.height - height)
+
+  return { ...state, x, y, width, height }
+}
+
+function saveWindowBounds(win: BrowserWindow): void {
+  if (win.isDestroyed()) return
+  const isMaximized = win.isMaximized()
+  const bounds = isMaximized ? win.getNormalBounds() : win.getBounds()
+  const state: WindowBoundsState = {
+    x: bounds.x,
+    y: bounds.y,
+    width: Math.max(WINDOW_MIN_WIDTH, bounds.width),
+    height: Math.max(WINDOW_MIN_HEIGHT, bounds.height),
+    isMaximized
+  }
+  repo.setSetting(WINDOW_BOUNDS_KEY, JSON.stringify(state))
+}
+
 function createWindow(): void {
-  mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 900,
-    minHeight: 600,
+  const saved = loadWindowBounds()
+  const windowOptions: Electron.BrowserWindowConstructorOptions = {
+    width: saved.width,
+    height: saved.height,
+    minWidth: WINDOW_MIN_WIDTH,
+    minHeight: WINDOW_MIN_HEIGHT,
     title: 'AgentCodePilot',
     show: false,
     autoHideMenuBar: true,
@@ -1097,11 +1184,36 @@ function createWindow(): void {
       sandbox: false,
       webviewTag: true
     }
-  })
+  }
+  if (saved.x != null && saved.y != null) {
+    windowOptions.x = saved.x
+    windowOptions.y = saved.y
+  }
+
+  mainWindow = new BrowserWindow(windowOptions)
+
+  let boundsSaveTimer: ReturnType<typeof setTimeout> | null = null
+  const scheduleSaveWindowBounds = (): void => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    if (boundsSaveTimer) clearTimeout(boundsSaveTimer)
+    boundsSaveTimer = setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) saveWindowBounds(mainWindow)
+    }, 400)
+  }
 
   mainWindow.on('ready-to-show', () => {
+    if (saved.isMaximized) {
+      mainWindow!.maximize()
+    }
     mainWindow!.show()
     setTerminalWindow(mainWindow)
+  })
+
+  mainWindow.on('resize', scheduleSaveWindowBounds)
+  mainWindow.on('move', scheduleSaveWindowBounds)
+  mainWindow.on('close', () => {
+    if (boundsSaveTimer) clearTimeout(boundsSaveTimer)
+    if (mainWindow && !mainWindow.isDestroyed()) saveWindowBounds(mainWindow)
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -1132,8 +1244,8 @@ app.whenReady().then(() => {
 
   logInfo('App', `Starting AgentCodePilot v${app.getVersion()}`)
   cleanOldLogs()
-  createWindow()
   getDatabase()
+  createWindow()
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

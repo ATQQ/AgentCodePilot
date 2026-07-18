@@ -20,7 +20,7 @@ const CHAT_LAYOUT_GUTTER = 32
 /**
  * 右侧面板宽度自适应
  *
- * 可用宽度 available = windowWidth - (侧边栏展开 ? SIDEBAR_WIDTH : 0)
+ * 可用宽度 available = windowWidth - (侧边栏展开 ? sidebarWidth : 0)
  *
  * 展开时初始宽度：
  *   preferred = floor(available × RIGHT_PANEL_OPEN_RATIO)
@@ -33,7 +33,6 @@ const CHAT_LAYOUT_GUTTER = 32
  *
  * 窗口缩放 / 侧边栏切换时仅 clamp 当前宽度，不重新计算 preferred。
  */
-const SIDEBAR_WIDTH = 220 // 左侧边栏占位，与 --sidebar-width 一致
 const RIGHT_PANEL_MIN_WIDTH = 260 // 右侧面板最小宽度，与 AppShell ResizableSplit min-size 一致
 const RIGHT_PANEL_MAX_RATIO = 0.75 // 右侧面板不超过可用宽度的 75%（拖拽上限）
 const RIGHT_PANEL_OPEN_RATIO = 0.42 // 展开时右侧面板占可用宽度的比例
@@ -255,7 +254,8 @@ export const useLayoutStore = defineStore('layout', (): LayoutStoreReturn => {
 
   /** 工作台主内容区可用宽度（扣除左侧边栏） */
   function getWorkbenchAvailableWidth(): number {
-    const sidebarWidth = useUiStore().sidebarCollapsed ? 0 : SIDEBAR_WIDTH
+    const ui = useUiStore()
+    const sidebarWidth = ui.sidebarCollapsed ? 0 : ui.sidebarWidth
     return windowWidth.value - sidebarWidth
   }
 
@@ -292,7 +292,10 @@ export const useLayoutStore = defineStore('layout', (): LayoutStoreReturn => {
   })
 
   watch(
-    () => useUiStore().sidebarCollapsed,
+    () => {
+      const ui = useUiStore()
+      return [ui.sidebarCollapsed, ui.sidebarWidth] as const
+    },
     () => {
       if (rightPanelVisible.value) clampRightPanelWidth()
     }

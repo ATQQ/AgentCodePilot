@@ -8,20 +8,25 @@ const props = withDefaults(
     minSize?: number
     maxSize?: number
     invert?: boolean
+    /** When true, dragging below minSize emits `collapse` once instead of clamping */
+    collapseBelowMin?: boolean
   }>(),
   {
     direction: 'horizontal',
     minSize: 200,
-    invert: false
+    invert: false,
+    collapseBelowMin: false
   }
 )
 
 const emit = defineEmits<{
   'update:size': [value: number]
+  collapse: []
 }>()
 
 const dragging = ref(false)
 const handleRef = ref<HTMLElement | null>(null)
+let collapseEmitted = false
 
 function setResizing(active: boolean): void {
   document.body.classList.toggle('panel-resizing', active)
@@ -36,6 +41,7 @@ function setResizing(active: boolean): void {
 function stopDragging(): void {
   if (!dragging.value) return
   dragging.value = false
+  collapseEmitted = false
   setResizing(false)
 }
 
@@ -44,6 +50,7 @@ function onPointerDown(e: PointerEvent): void {
   e.preventDefault()
   e.stopPropagation()
   dragging.value = true
+  collapseEmitted = false
   setResizing(true)
   handleRef.value?.setPointerCapture(e.pointerId)
 }
@@ -52,6 +59,19 @@ function onPointerMove(e: PointerEvent): void {
   if (!dragging.value) return
   const delta = props.direction === 'horizontal' ? e.movementX : e.movementY
   const next = props.invert ? props.size - delta : props.size + delta
+  if (props.collapseBelowMin && next < props.minSize) {
+    if (!collapseEmitted) {
+      collapseEmitted = true
+      try {
+        handleRef.value?.releasePointerCapture(e.pointerId)
+      } catch {
+        /* ignore */
+      }
+      emit('collapse')
+      stopDragging()
+    }
+    return
+  }
   let clamped = Math.max(props.minSize, next)
   if (props.maxSize != null) {
     clamped = Math.min(props.maxSize, clamped)

@@ -352,7 +352,7 @@ onUnmounted(() => {
           :key="item.name"
           class="nav-item"
           :class="{ active: isActive(item.path) }"
-          @click="navigate(item.path)"
+          @click="() => navigate(item.path)"
         >
           <el-icon :size="15"><component :is="item.icon" /></el-icon>
           <span class="nav-item-label">{{ t(item.labelKey) }}</span>
@@ -379,7 +379,7 @@ onUnmounted(() => {
             <div
               class="project-header"
               :class="{ active: isProjectHeaderActive(ws.id) }"
-              @click="toggleProjectCollapse(ws.id)"
+              @click="() => toggleProjectCollapse(ws.id)"
             >
               <el-icon
                 :size="10"
@@ -449,7 +449,7 @@ onUnmounted(() => {
                   :key="conv.id"
                   class="conv-item"
                   :class="{ active: chatStore.activeConversationId === conv.id }"
-                  @click="openConversation(conv.id)"
+                  @click="() => openConversation(conv.id)"
                   @contextmenu="showContextMenu($event, conv)"
                 >
                   <template v-if="renaming && renaming.id === conv.id">
@@ -525,7 +525,7 @@ onUnmounted(() => {
             <div
               class="project-header"
               :class="{ active: isProjectHeaderActive(proj.id) }"
-              @click="toggleProjectCollapse(proj.id)"
+              @click="() => toggleProjectCollapse(proj.id)"
             >
               <el-icon
                 :size="10"
@@ -584,7 +584,7 @@ onUnmounted(() => {
                   :key="conv.id"
                   class="conv-item"
                   :class="{ active: chatStore.activeConversationId === conv.id }"
-                  @click="openConversation(conv.id)"
+                  @click="() => openConversation(conv.id)"
                   @contextmenu="showContextMenu($event, conv)"
                 >
                   <template v-if="renaming && renaming.id === conv.id">
@@ -662,7 +662,7 @@ onUnmounted(() => {
               :key="conv.id"
               class="conv-item"
               :class="{ active: chatStore.activeConversationId === conv.id }"
-              @click="openConversation(conv.id)"
+              @click="() => openConversation(conv.id)"
               @contextmenu="showContextMenu($event, conv)"
             >
               <template v-if="renaming && renaming.id === conv.id">
@@ -813,8 +813,8 @@ onUnmounted(() => {
 
 <style scoped>
 .sidebar {
-  width: var(--sidebar-width);
-  min-width: var(--sidebar-width);
+  flex: 1;
+  min-width: 0;
   height: 100%;
   background: var(--sidebar-bg-translucent, rgba(249, 250, 251, 0.82));
   backdrop-filter: blur(20px);
