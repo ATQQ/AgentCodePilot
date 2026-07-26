@@ -1,8 +1,147 @@
+export type WireAdapter = 'openai-chat' | 'anthropic'
+
+/** Protocol endpoint: only address + key. Models are provider-shared. */
+export interface ProtocolEndpointConfig {
+  baseUrl: string
+  apiKey: string
+}
+
+export type ProtocolEndpointPublic = ProtocolEndpointConfig
+
+/** Which upstream protocol each client channel should use. */
+export interface ChannelProtocolBindings {
+  claudeCli?: WireAdapter
+  claudeDesktop?: WireAdapter
+  codex?: WireAdapter
+}
+
+export type GatewayChannel = keyof ChannelProtocolBindings
+
+export interface GatewayTakeoverFlags {
+  claudeCli: boolean
+  claudeDesktop: boolean
+  codex: boolean
+}
+
+export interface GatewayLoggingSettings {
+  /** Default false — process logs are not written until enabled. */
+  enabled: boolean
+  /** Separate HTTP viewer port (default 3457). */
+  viewerPort: number
+  /** Auto-open browser when enabling the viewer. */
+  openBrowser: boolean
+}
+
+export interface GatewaySettings {
+  enabled: boolean
+  host: string
+  port: number
+  token: string
+  defaultProviderId?: string
+  /** Per-channel upstream protocol (openai-chat / anthropic). */
+  channelProtocols: ChannelProtocolBindings
+  takeover: GatewayTakeoverFlags
+  logging: GatewayLoggingSettings
+}
+
+/** Runtime server config (subset used by http server). */
 export interface GatewayConfig {
   enabled: boolean
   host: string
   port: number
   token: string
+}
+
+/**
+ * Provider is global.
+ * - models / defaultModel / modelMap: configured once for the provider
+ * - protocols: only baseUrl + apiKey per wire protocol
+ * Channels select which protocol to use against the default provider.
+ */
+export interface GatewayProviderConfig {
+  protocols: Partial<Record<WireAdapter, ProtocolEndpointConfig>>
+  /** Preferred / primary protocol for display and legacy type field. */
+  adapter: WireAdapter
+  /** Convenience mirror of protocols[adapter].baseUrl */
+  baseUrl: string
+  /** Convenience mirror of protocols[adapter].apiKey */
+  apiKey: string
+  /** Shared model list for this provider. */
+  models?: string[]
+  /** Shared default model for this provider. */
+  defaultModel?: string
+  modelMap?: Record<string, string>
+}
+
+export interface GatewayProviderRecord {
+  id: string
+  name: string
+  type: string
+  config: GatewayProviderConfig
+}
+
+export interface GatewayProviderPublic {
+  id: string
+  name: string
+  type: string
+  config: {
+    adapter: WireAdapter
+    baseUrl: string
+    apiKey: string
+    models?: string[]
+    defaultModel?: string
+    modelMap?: Record<string, string>
+    hasApiKey: boolean
+    protocols: Partial<Record<WireAdapter, ProtocolEndpointPublic & { hasApiKey: boolean }>>
+  }
+}
+
+export interface UnifiedMessage {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+}
+
+export interface UnifiedTurn {
+  model: string
+  systemPrompt?: string
+  messages: UnifiedMessage[]
+  stream: boolean
+  temperature?: number
+  maxTokens?: number
+}
+
+/** @deprecated Prefer UnifiedTurn */
+export type UnifiedChatRequest = UnifiedTurn
+
+export interface AdapterEvent {
+  type: 'text_delta' | 'done' | 'error'
+  text?: string
+  error?: string
+  usage?: { inputTokens: number; outputTokens: number }
+}
+
+export interface BuiltUpstreamRequest {
+  url: string
+  headers: Record<string, string>
+  body: string
+}
+
+export interface RouteResult {
+  provider: GatewayProviderRecord
+  protocol: WireAdapter
+  endpoint: ProtocolEndpointConfig
+  upstreamModel: string
+}
+
+export type TakeoverApp = 'claude' | 'claude-desktop' | 'codex'
+
+export interface TakeoverStatus {
+  claudeCli: boolean
+  claudeDesktop: boolean
+  codex: boolean
+  backedUpAt: Partial<Record<TakeoverApp, string>>
+  proxyBaseUrl: string
+  claudeDesktopSupported: boolean
 }
 
 export interface OpenAIChatMessage {
@@ -69,11 +208,23 @@ export interface AnthropicResponse {
   usage: { input_tokens: number; output_tokens: number }
 }
 
-export interface UnifiedChatRequest {
+export interface ResponsesUsage {
+  input_tokens: number
+  output_tokens: number
+  total_tokens: number
+}
+
+export interface ResponsesInputItem {
+  type?: string
+  role?: string
+  content?: string | Array<{ type?: string; text?: string }>
+}
+
+export interface ResponsesRequest {
   model: string
-  systemPrompt?: string
-  messages: { role: 'user' | 'assistant'; content: string }[]
-  stream: boolean
+  input?: string | ResponsesInputItem[]
+  instructions?: string
+  stream?: boolean
   temperature?: number
-  maxTokens?: number
+  max_output_tokens?: number
 }

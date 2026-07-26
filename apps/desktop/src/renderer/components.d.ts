@@ -27,12 +27,19 @@ declare module 'vue' {
     DiffViewer: typeof import('./src/components/workspace/DiffViewer.vue')['default']
     EditorFileTabs: typeof import('./src/components/workspace/EditorFileTabs.vue')['default']
     EditorSelectionBubble: typeof import('./src/components/workspace/EditorSelectionBubble.vue')['default']
+    ElButton: typeof import('element-plus/es')['ElButton']
     ElDialog: typeof import('element-plus/es')['ElDialog']
     ElDropdown: typeof import('element-plus/es')['ElDropdown']
     ElDropdownItem: typeof import('element-plus/es')['ElDropdownItem']
     ElDropdownMenu: typeof import('element-plus/es')['ElDropdownMenu']
     ElEmpty: typeof import('element-plus/es')['ElEmpty']
     ElIcon: typeof import('element-plus/es')['ElIcon']
+    ElInput: typeof import('element-plus/es')['ElInput']
+    ElInputNumber: typeof import('element-plus/es')['ElInputNumber']
+    ElOption: typeof import('element-plus/es')['ElOption']
+    ElSelect: typeof import('element-plus/es')['ElSelect']
+    ElTabPane: typeof import('element-plus/es')['ElTabPane']
+    ElTabs: typeof import('element-plus/es')['ElTabs']
     EnvironmentInfoContent: typeof import('./src/components/environment/EnvironmentInfoContent.vue')['default']
     EnvironmentInfoPopover: typeof import('./src/components/environment/EnvironmentInfoPopover.vue')['default']
     ExtensionPanel: typeof import('./src/components/layout/ExtensionPanel.vue')['default']
@@ -45,6 +52,7 @@ declare module 'vue' {
     FileTree: typeof import('./src/components/workspace/FileTree.vue')['default']
     FileTreeContextMenu: typeof import('./src/components/workspace/FileTreeContextMenu.vue')['default']
     FolderSwitcher: typeof import('./src/components/layout/FolderSwitcher.vue')['default']
+    GatewaySettingsSection: typeof import('./src/components/settings/GatewaySettingsSection.vue')['default']
     GitChangedFileTree: typeof import('./src/components/workspace/GitChangedFileTree.vue')['default']
     GitCommitBar: typeof import('./src/components/workspace/GitCommitBar.vue')['default']
     GitOperationLogDialog: typeof import('./src/components/workspace/GitOperationLogDialog.vue')['default']
@@ -76,5 +84,8 @@ declare module 'vue' {
     TopBar: typeof import('./src/components/layout/TopBar.vue')['default']
     TopBarControls: typeof import('./src/components/layout/TopBarControls.vue')['default']
     WorkspaceSelector: typeof import('./src/components/home/WorkspaceSelector.vue')['default']
+  }
+  export interface GlobalDirectives {
+    vLoading: typeof import('element-plus/es')['ElLoadingDirective']
   }
 }

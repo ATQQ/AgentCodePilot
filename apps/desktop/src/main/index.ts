@@ -19,6 +19,7 @@ import type {
   MessageInfo,
   ProjectPayload,
   ProviderConfigPayload,
+  ProviderTestInputPayload,
   WorkspacePayload,
   SendMessagePayload,
   SendMessageResult,
@@ -40,7 +41,29 @@ import {
 } from './runtime/model-catalog'
 import { respondToApproval, cancelApprovalsForConversation } from './runtime/approval-manager'
 import type { ApprovalRespondPayload } from '../preload/types'
-import { startGateway, stopGateway, getGatewayConfig, isGatewayRunning } from './gateway'
+import {
+  startGateway,
+  stopGateway,
+  getGatewayConfig,
+  isGatewayRunning,
+  loadGatewaySettings,
+  updateGatewaySettings,
+  listPublicProviders,
+  saveProvider,
+  removeProvider,
+  PROVIDER_PRESETS,
+  testProviderConnectivity,
+  getTakeoverStatus,
+  setTakeover,
+  reapplyPreferredTakeovers,
+  maybeAutoStartGateway,
+  startLogViewer,
+  stopLogViewer,
+  getLogViewerUrl,
+  isLogViewerRunning,
+  getGatewayLogsDir,
+  type TakeoverUiApp
+} from './gateway'
 import { logInfo, logError, cleanOldLogs } from './logger'
 import { getDatabase, closeDatabase } from './database'
 import * as repo from './database/repositories'
@@ -248,7 +271,10 @@ function scheduleDeltaFlush(): void {
   deltaFlushTimer = setTimeout(flushDeltaBatch, DELTA_BATCH_MS)
 }
 
-function getConversationRunContext(conversationId: string): {
+function getConversationRunContext(
+  conversationId: string,
+  agentId?: string
+): {
   agentSessionId: string | null
   conversationHistory: { role: 'user' | 'assistant'; content: string }[]
 } {
@@ -257,8 +283,16 @@ function getConversationRunContext(conversationId: string): {
     repo.getRecentMessagesByConversation(conversationId, AGENT_HISTORY_LIMIT)
   )
 
+  let agentSessionId = conv?.agent_session_id ?? null
+  // Mid-conversation agent switch must not resume the previous agent's session.
+  if (agentId && conv && conv.agent_id !== agentId) {
+    repo.setConversationSessionId(conversationId, null)
+    repo.updateConversation(conversationId, { agentId })
+    agentSessionId = null
+  }
+
   return {
-    agentSessionId: conv?.agent_session_id ?? null,
+    agentSessionId,
     conversationHistory: messages.map((m) => ({
       role: m.role as 'user' | 'assistant',
       content:
@@ -377,7 +411,21 @@ function emitAgentEvent(event: AgentEvent): void {
         toolCalls: finalizedTools.length > 0 ? JSON.stringify(finalizedTools) : null
       })
     } catch (e) {
-      console.error('[emitAgentEvent] Failed to save error message to db:', e)
+      const code = (e as { code?: string } | null)?.code
+      // turn.failed + outer catch can both emit message.error for the same id
+      if (code === 'SQLITE_CONSTRAINT_PRIMARYKEY') {
+        try {
+          const errorText = `[Error] ${formatAgentErrorMessage(event.error)}`
+          const content = entry?.content.trim()
+            ? `${entry.content.trim()}\n\n${errorText}`
+            : errorText
+          repo.updateMessageContent(messageId, content)
+        } catch (updateErr) {
+          console.error('[emitAgentEvent] Failed to update error message:', updateErr)
+        }
+      } else {
+        console.error('[emitAgentEvent] Failed to save error message to db:', e)
+      }
     }
     if (entry) {
       streamingMessages.delete(messageId)
@@ -542,7 +590,7 @@ function registerIpcHandlers(): void {
         assistantMsgId,
         createStreamingEntry(payload.conversationId, prompt, payload.agentId)
       )
-      const runContext = getConversationRunContext(payload.conversationId)
+      const runContext = getConversationRunContext(payload.conversationId, payload.agentId)
       const approvalLevel = getRunApprovalLevel(payload.conversationId)
       const runInput = {
         conversationId: payload.conversationId,
@@ -603,7 +651,7 @@ function registerIpcHandlers(): void {
         assistantMsgId,
         createStreamingEntry(payload.conversationId, prompt, payload.agentId)
       )
-      const runContext = getConversationRunContext(payload.conversationId)
+      const runContext = getConversationRunContext(payload.conversationId, payload.agentId)
       const approvalLevel = getRunApprovalLevel(payload.conversationId)
       const runInput = {
         conversationId: payload.conversationId,
@@ -814,26 +862,34 @@ function registerIpcHandlers(): void {
 
   // --- Providers ---
 
-  ipcMain.handle(IPC_CHANNELS.PROVIDERS_LIST, (): ProviderConfigPayload[] => {
-    return repo.getAllProviderConfigs().map((p) => ({
-      id: p.id,
-      name: p.name,
-      type: p.type,
-      config: JSON.parse(p.config) as Record<string, unknown>
-    }))
+  ipcMain.handle(IPC_CHANNELS.PROVIDERS_LIST, () => {
+    return listPublicProviders()
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROVIDERS_SAVE, (_e, payload: ProviderConfigPayload): void => {
-    repo.saveProviderConfig({
+  ipcMain.handle(IPC_CHANNELS.PROVIDERS_SAVE, (_e, payload: ProviderConfigPayload) => {
+    return saveProvider({
       id: payload.id,
       name: payload.name,
       type: payload.type,
-      config: JSON.stringify(payload.config)
+      config: payload.config
     })
   })
 
   ipcMain.handle(IPC_CHANNELS.PROVIDERS_DELETE, (_e, id: string): void => {
-    repo.deleteProviderConfig(id)
+    removeProvider(id)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROVIDERS_PRESETS, () => {
+    return PROVIDER_PRESETS.map((p) => ({
+      id: p.id,
+      name: p.name,
+      type: p.type,
+      config: { ...p.config, apiKey: '' }
+    }))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROVIDERS_TEST, (_e, payload: ProviderTestInputPayload) => {
+    return testProviderConnectivity(payload || {})
   })
 
   // --- Settings ---
@@ -892,17 +948,124 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.GATEWAY_STATUS, (): GatewayStatus => {
     const cfg = getGatewayConfig()
-    return { running: isGatewayRunning(), host: cfg.host, port: cfg.port, token: cfg.token }
+    const settings = loadGatewaySettings()
+    return {
+      running: isGatewayRunning(),
+      host: cfg.host,
+      port: cfg.port,
+      token: cfg.token,
+      enabled: settings.enabled
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.GATEWAY_START, (): GatewayStatus => {
     const result = startGateway()
+    reapplyPreferredTakeovers()
     const cfg = getGatewayConfig()
-    return { running: true, host: cfg.host, port: cfg.port, token: result.token }
+    return {
+      running: true,
+      host: cfg.host,
+      port: cfg.port,
+      token: result.token,
+      enabled: true
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.GATEWAY_STOP, (): void => {
-    stopGateway()
+    stopGateway({ restoreTakeovers: true, persistDisabled: true })
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GATEWAY_GET_SETTINGS, () => {
+    return loadGatewaySettings()
+  })
+
+  ipcMain.handle(
+    IPC_CHANNELS.GATEWAY_UPDATE_SETTINGS,
+    (_e, payload: Partial<ReturnType<typeof loadGatewaySettings>>) => {
+      const prev = loadGatewaySettings()
+      const next = updateGatewaySettings(payload)
+      if (payload.enabled === true && !isGatewayRunning()) {
+        startGateway({
+          host: next.host,
+          port: next.port,
+          token: next.token
+        })
+        reapplyPreferredTakeovers()
+      } else if (payload.enabled === false && isGatewayRunning()) {
+        stopGateway({ restoreTakeovers: true })
+      } else if (
+        isGatewayRunning() &&
+        (payload.host !== undefined || payload.port !== undefined || payload.token !== undefined)
+      ) {
+        startGateway({
+          host: next.host,
+          port: next.port,
+          token: next.token
+        })
+        reapplyPreferredTakeovers()
+      }
+
+      if (payload.logging) {
+        if (next.logging.enabled) {
+          const portChanged =
+            payload.logging.viewerPort !== undefined &&
+            payload.logging.viewerPort !== prev.logging.viewerPort
+          if (portChanged && isLogViewerRunning()) {
+            stopLogViewer()
+            startLogViewer({ port: next.logging.viewerPort, openBrowser: false })
+          } else {
+            startLogViewer({
+              port: next.logging.viewerPort,
+              openBrowser:
+                !prev.logging.enabled ||
+                (payload.logging.openBrowser !== false && next.logging.openBrowser)
+            })
+          }
+        } else if (prev.logging.enabled) {
+          stopLogViewer()
+        }
+      }
+
+      return loadGatewaySettings()
+    }
+  )
+
+  ipcMain.handle(IPC_CHANNELS.GATEWAY_TAKEOVER_GET, () => {
+    return getTakeoverStatus()
+  })
+
+  ipcMain.handle(
+    IPC_CHANNELS.GATEWAY_TAKEOVER_SET,
+    (_e, appName: TakeoverUiApp, enabled: boolean) => {
+      return setTakeover(appName, enabled)
+    }
+  )
+
+  ipcMain.handle(IPC_CHANNELS.GATEWAY_LOG_VIEWER_STATUS, () => {
+    const settings = loadGatewaySettings()
+    return {
+      running: isLogViewerRunning(),
+      url: getLogViewerUrl(),
+      port: settings.logging.viewerPort,
+      logsDir: getGatewayLogsDir()
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GATEWAY_LOG_VIEWER_OPEN, () => {
+    const settings = loadGatewaySettings()
+    const result = startLogViewer({
+      port: settings.logging.viewerPort,
+      openBrowser: true
+    })
+    if (!settings.logging.enabled) {
+      updateGatewaySettings({ logging: { ...settings.logging, enabled: true } })
+    }
+    return {
+      running: true,
+      url: result.url,
+      port: result.port,
+      logsDir: getGatewayLogsDir()
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.DIALOG_SELECT_FOLDER, async (): Promise<string | null> => {
@@ -1245,6 +1408,7 @@ app.whenReady().then(() => {
   logInfo('App', `Starting AgentCodePilot v${app.getVersion()}`)
   cleanOldLogs()
   getDatabase()
+  maybeAutoStartGateway()
   createWindow()
 
   app.on('browser-window-created', (_, window) => {
@@ -1263,6 +1427,7 @@ function shutdownResources(): void {
   supervisedStopAll()
   cleanupAllTerminals()
   stopGateway()
+  stopLogViewer()
   closeDatabase()
 }
 

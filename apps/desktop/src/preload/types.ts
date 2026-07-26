@@ -33,9 +33,17 @@ export const IPC_CHANNELS = {
   PROVIDERS_LIST: 'providers:list',
   PROVIDERS_SAVE: 'providers:save',
   PROVIDERS_DELETE: 'providers:delete',
+  PROVIDERS_PRESETS: 'providers:presets',
+  PROVIDERS_TEST: 'providers:test',
   GATEWAY_STATUS: 'gateway:status',
   GATEWAY_START: 'gateway:start',
   GATEWAY_STOP: 'gateway:stop',
+  GATEWAY_GET_SETTINGS: 'gateway:getSettings',
+  GATEWAY_UPDATE_SETTINGS: 'gateway:updateSettings',
+  GATEWAY_TAKEOVER_GET: 'gateway:takeoverGet',
+  GATEWAY_TAKEOVER_SET: 'gateway:takeoverSet',
+  GATEWAY_LOG_VIEWER_STATUS: 'gateway:logViewerStatus',
+  GATEWAY_LOG_VIEWER_OPEN: 'gateway:logViewerOpen',
   GIT_STATUS: 'git:status',
   GIT_CHANGED_FILES: 'git:changedFiles',
   GIT_DIFF: 'git:diff',
@@ -230,11 +238,105 @@ export interface ProviderConfigPayload {
   config: Record<string, unknown>
 }
 
+export interface GatewayProviderPublicPayload {
+  id: string
+  name: string
+  type: string
+  config: {
+    adapter: 'openai-chat' | 'anthropic'
+    baseUrl: string
+    apiKey: string
+    models?: string[]
+    defaultModel?: string
+    modelMap?: Record<string, string>
+    hasApiKey: boolean
+    protocols: Partial<
+      Record<
+        'openai-chat' | 'anthropic',
+        {
+          baseUrl: string
+          apiKey: string
+          hasApiKey?: boolean
+        }
+      >
+    >
+  }
+}
+
+export interface ProviderTestDraftPayload {
+  models?: string[]
+  defaultModel?: string
+  protocols: Partial<Record<'openai-chat' | 'anthropic', { baseUrl: string; apiKey?: string }>>
+}
+
+export interface ProviderTestInputPayload {
+  providerId?: string
+  draft?: ProviderTestDraftPayload
+  protocol?: 'openai-chat' | 'anthropic'
+}
+
+export interface ProviderTestProtocolResultPayload {
+  protocol: 'openai-chat' | 'anthropic'
+  ok: boolean
+  status?: number
+  latencyMs: number
+  url?: string
+  error?: string
+  message?: string
+}
+
+export interface ProviderTestResultPayload {
+  ok: boolean
+  results: ProviderTestProtocolResultPayload[]
+}
+
 export interface GatewayStatus {
   running: boolean
   host: string
   port: number
   token: string
+  enabled?: boolean
+}
+
+export interface GatewaySettingsPayload {
+  enabled: boolean
+  host: string
+  port: number
+  token: string
+  defaultProviderId?: string
+  channelProtocols: {
+    claudeCli?: 'openai-chat' | 'anthropic'
+    claudeDesktop?: 'openai-chat' | 'anthropic'
+    codex?: 'openai-chat' | 'anthropic'
+  }
+  takeover: {
+    claudeCli: boolean
+    claudeDesktop: boolean
+    codex: boolean
+  }
+  logging: {
+    enabled: boolean
+    viewerPort: number
+    openBrowser: boolean
+  }
+}
+
+export interface GatewayLogViewerStatus {
+  running: boolean
+  url: string
+  port: number
+  logsDir: string
+}
+
+export type GatewayTakeoverApp = 'claudeCli' | 'claudeDesktop' | 'codex'
+
+export interface GatewayTakeoverStatus {
+  claudeCli: boolean
+  claudeDesktop: boolean
+  codex: boolean
+  backedUpAt: Partial<Record<'claude' | 'claude-desktop' | 'codex', string>>
+  proxyBaseUrl: string
+  claudeDesktopSupported: boolean
 }
 
 export type GitChangeType = 'modified' | 'added' | 'untracked' | 'deleted' | 'renamed' | 'conflict'
@@ -567,9 +669,11 @@ export interface AgentAPI {
     delete: (id: string) => Promise<void>
   }
   providers: {
-    list: () => Promise<ProviderConfigPayload[]>
-    save: (payload: ProviderConfigPayload) => Promise<void>
+    list: () => Promise<GatewayProviderPublicPayload[]>
+    save: (payload: ProviderConfigPayload) => Promise<GatewayProviderPublicPayload>
     delete: (id: string) => Promise<void>
+    presets: () => Promise<ProviderConfigPayload[]>
+    test: (payload: ProviderTestInputPayload) => Promise<ProviderTestResultPayload>
   }
   settings: {
     get: () => Promise<SettingsInfo>
@@ -579,6 +683,12 @@ export interface AgentAPI {
     status: () => Promise<GatewayStatus>
     start: () => Promise<GatewayStatus>
     stop: () => Promise<void>
+    getSettings: () => Promise<GatewaySettingsPayload>
+    updateSettings: (payload: Partial<GatewaySettingsPayload>) => Promise<GatewaySettingsPayload>
+    takeoverGet: () => Promise<GatewayTakeoverStatus>
+    takeoverSet: (app: GatewayTakeoverApp, enabled: boolean) => Promise<GatewayTakeoverStatus>
+    logViewerStatus: () => Promise<GatewayLogViewerStatus>
+    logViewerOpen: () => Promise<GatewayLogViewerStatus>
   }
   dialog: {
     selectFolder: () => Promise<string | null>

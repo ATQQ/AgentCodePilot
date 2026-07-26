@@ -179,6 +179,7 @@ export function updateConversation(
     archived?: boolean
     approvalLevel?: string
     modelId?: string
+    agentId?: string
   }
 ): void {
   const db = getDatabase()
@@ -205,6 +206,10 @@ export function updateConversation(
     sets.push('model_id = ?')
     values.push(fields.modelId)
   }
+  if (fields.agentId !== undefined) {
+    sets.push('agent_id = ?')
+    values.push(fields.agentId)
+  }
 
   if (sets.length === 0) return
 
@@ -213,7 +218,8 @@ export function updateConversation(
     fields.title === undefined &&
     fields.pinned === undefined &&
     fields.approvalLevel === undefined &&
-    fields.modelId === undefined
+    fields.modelId === undefined &&
+    fields.agentId === undefined
 
   if (!onlyArchiveChange) {
     sets.push('updated_at = ?')

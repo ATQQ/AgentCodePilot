@@ -1,14 +1,31 @@
 import { createServer, IncomingMessage, ServerResponse, Server } from 'http'
-import { randomBytes } from 'crypto'
 import type {
+  AnthropicRequest,
   GatewayConfig,
   OpenAIChatRequest,
-  UnifiedChatRequest,
-  AnthropicRequest
+  ResponsesRequest,
+  UnifiedTurn
 } from './types'
-import { handleOpenAICompletion } from './openai-handler'
-import { handleAnthropicMessages } from './anthropic-handler'
-import { agentRegistry } from '../runtime'
+import { handleChatCompletions } from './handlers/chat-completions'
+import { handleMessages } from './handlers/messages'
+import { handleResponses } from './handlers/responses'
+import { listGatewayModels } from './handlers/models'
+import {
+  ensureGatewayToken,
+  loadGatewaySettings,
+  saveGatewaySettings,
+  updateGatewaySettings,
+  generateGatewayToken
+} from './settings-store'
+import { PROXY_MANAGED } from './live/constants'
+import {
+  reapplyPreferredTakeovers,
+  registerGatewayStarter,
+  restoreAllTakeovers
+} from './live/takeover'
+import { ensureLiveBackupTable } from './live/backup-store'
+import { buildPromptPreview, createRequestLog, finishRequestLog } from './request-log'
+import { syncLogViewerWithSettings } from './log-viewer'
 
 let server: Server | null = null
 let config: GatewayConfig = {
@@ -18,8 +35,14 @@ let config: GatewayConfig = {
   token: ''
 }
 
-function generateToken(): string {
-  return `agp-${randomBytes(24).toString('hex')}`
+function syncConfigFromSettings(): void {
+  const settings = ensureGatewayToken(loadGatewaySettings())
+  config = {
+    enabled: settings.enabled,
+    host: settings.host,
+    port: settings.port,
+    token: settings.token
+  }
 }
 
 function parseBody(req: IncomingMessage): Promise<string> {
@@ -54,7 +77,8 @@ function handleCors(req: IncomingMessage, res: ServerResponse): boolean {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-api-key, anthropic-version',
+      'Access-Control-Allow-Headers':
+        'Content-Type, Authorization, x-api-key, anthropic-version, OpenAI-Beta',
       'Access-Control-Max-Age': '86400'
     })
     res.end()
@@ -67,13 +91,15 @@ function validateToken(req: IncomingMessage): boolean {
   if (!config.token) return true
   const auth = req.headers['authorization'] || ''
   const apiKey = (req.headers['x-api-key'] as string) || ''
-  if (auth.startsWith('Bearer ') && auth.slice(7) === config.token) return true
-  if (apiKey === config.token) return true
+  const bearer = auth.startsWith('Bearer ') ? auth.slice(7) : ''
+  if (bearer === config.token || apiKey === config.token) return true
+  // Live takeover writes PROXY_MANAGED into CLI configs
+  if (bearer === PROXY_MANAGED || apiKey === PROXY_MANAGED) return true
   return false
 }
 
-function openaiToUnified(body: OpenAIChatRequest): UnifiedChatRequest {
-  const messages: { role: 'user' | 'assistant'; content: string }[] = []
+function openaiToUnified(body: OpenAIChatRequest): UnifiedTurn {
+  const messages: { role: 'user' | 'assistant' | 'system'; content: string }[] = []
   let systemPrompt: string | undefined
   for (const msg of body.messages) {
     if (msg.role === 'system') {
@@ -92,7 +118,7 @@ function openaiToUnified(body: OpenAIChatRequest): UnifiedChatRequest {
   }
 }
 
-function anthropicToUnified(body: AnthropicRequest): UnifiedChatRequest {
+function anthropicToUnified(body: AnthropicRequest): UnifiedTurn {
   const messages: { role: 'user' | 'assistant'; content: string }[] = body.messages.map((m) => ({
     role: m.role,
     content: typeof m.content === 'string' ? m.content : m.content.map((c) => c.text).join('')
@@ -107,6 +133,19 @@ function anthropicToUnified(body: AnthropicRequest): UnifiedChatRequest {
   }
 }
 
+function normalizePath(url: string): string {
+  const path = url.split('?')[0] || ''
+  return path.replace(/\/+$/, '') || '/'
+}
+
+function createAbortFromRequest(req: IncomingMessage): AbortController {
+  const controller = new AbortController()
+  req.on('close', () => {
+    if (!req.complete) controller.abort()
+  })
+  return controller
+}
+
 async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (handleCors(req, res)) return
 
@@ -115,60 +154,134 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     return
   }
 
-  const url = req.url || ''
+  const path = normalizePath(req.url || '')
+  const abort = createAbortFromRequest(req)
 
-  if (req.method === 'GET' && (url === '/v1/models' || url === '/v1/models/')) {
-    const models = agentRegistry.list().map((a) => ({
-      id: a.id,
-      object: 'model',
-      created: Math.floor(Date.now() / 1000),
-      owned_by: 'agent-desktop'
-    }))
-    sendJson(res, 200, { object: 'list', data: models })
+  // Claude Desktop prefix → same handlers
+  const isClaudeDesktop = path.startsWith('/claude-desktop')
+  const effectivePath = isClaudeDesktop ? path.replace(/^\/claude-desktop/, '') || '/' : path
+
+  if (req.method === 'GET' && (effectivePath === '/v1/models' || effectivePath === '/models')) {
+    const log = createRequestLog({
+      method: 'GET',
+      path: effectivePath,
+      protocol: 'models',
+      headers: req.headers
+    })
+    try {
+      sendJson(res, 200, { object: 'list', data: listGatewayModels() })
+      finishRequestLog(log, 'ok')
+    } catch (e) {
+      finishRequestLog(log, 'error', {
+        error: e instanceof Error ? e.message : 'models failed'
+      })
+      throw e
+    }
     return
   }
 
-  if (req.method === 'POST' && url === '/v1/chat/completions') {
+  if (req.method === 'GET' && effectivePath === '/healthz') {
+    sendJson(res, 200, { ok: true })
+    return
+  }
+
+  if (req.method === 'POST' && effectivePath === '/v1/chat/completions') {
     try {
       const raw = await parseBody(req)
       const body = JSON.parse(raw) as OpenAIChatRequest
-      const unified = openaiToUnified(body)
-      await handleOpenAICompletion(unified, res)
+      const turn = openaiToUnified(body)
+      const log = createRequestLog({
+        method: 'POST',
+        path: effectivePath,
+        protocol: 'chat',
+        headers: req.headers,
+        model: turn.model,
+        stream: turn.stream,
+        promptPreview: buildPromptPreview(turn.messages)
+      })
+      await handleChatCompletions(turn, res, abort.signal, log)
     } catch (e) {
       sendError(res, 400, e instanceof Error ? e.message : 'Invalid request body')
     }
     return
   }
 
-  if (req.method === 'POST' && url === '/v1/messages') {
+  if (req.method === 'POST' && effectivePath === '/v1/messages') {
     try {
       const raw = await parseBody(req)
       const body = JSON.parse(raw) as AnthropicRequest
-      const unified = anthropicToUnified(body)
-      await handleAnthropicMessages(unified, res)
+      const turn = anthropicToUnified(body)
+      const log = createRequestLog({
+        method: 'POST',
+        path: effectivePath,
+        protocol: 'messages',
+        headers: req.headers,
+        model: turn.model,
+        stream: turn.stream,
+        promptPreview: buildPromptPreview(turn.messages)
+      })
+      await handleMessages(
+        turn,
+        res,
+        abort.signal,
+        log,
+        isClaudeDesktop ? 'claudeDesktop' : 'claudeCli'
+      )
     } catch (e) {
       sendError(res, 400, e instanceof Error ? e.message : 'Invalid request body')
     }
     return
   }
 
-  sendError(res, 404, `Not found: ${url}`)
+  if (req.method === 'POST' && effectivePath === '/v1/responses') {
+    try {
+      const raw = await parseBody(req)
+      const body = JSON.parse(raw) as ResponsesRequest
+      const log = createRequestLog({
+        method: 'POST',
+        path: effectivePath,
+        protocol: 'responses',
+        headers: req.headers,
+        model: body.model,
+        stream: body.stream,
+        promptPreview: typeof body.input === 'string' ? body.input.slice(0, 280) : undefined
+      })
+      await handleResponses(body, res, abort.signal, log, 'codex')
+    } catch (e) {
+      sendError(res, 400, e instanceof Error ? e.message : 'Invalid request body')
+    }
+    return
+  }
+
+  sendError(res, 404, `Not found: ${path}`)
 }
 
 export function getGatewayConfig(): GatewayConfig {
+  syncConfigFromSettings()
   return { ...config }
 }
 
 export function startGateway(overrides?: Partial<GatewayConfig>): { token: string; port: number } {
-  if (server) stopGateway()
+  ensureLiveBackupTable()
+  syncConfigFromSettings()
+
+  if (server) stopGateway({ restoreTakeovers: false })
 
   if (overrides) {
     config = { ...config, ...overrides }
   }
   if (!config.token) {
-    config.token = generateToken()
+    config.token = generateGatewayToken()
   }
   config.enabled = true
+
+  saveGatewaySettings({
+    ...loadGatewaySettings(),
+    enabled: true,
+    host: config.host,
+    port: config.port,
+    token: config.token
+  })
 
   server = createServer((req, res) => {
     handleRequest(req, res).catch((err) => {
@@ -183,18 +296,104 @@ export function startGateway(overrides?: Partial<GatewayConfig>): { token: strin
     console.log(`[Gateway] listening on http://${config.host}:${config.port}`)
   })
 
+  // Keep log viewer in sync if logging was previously enabled
+  try {
+    syncLogViewerWithSettings()
+  } catch (e) {
+    console.error('[Gateway] log viewer sync failed:', e)
+  }
+
   return { token: config.token, port: config.port }
 }
 
-export function stopGateway(): void {
+export function stopGateway(options?: {
+  restoreTakeovers?: boolean
+  /** Persist enabled=false to settings (user toggle). Quit should leave preference alone. */
+  persistDisabled?: boolean
+}): void {
+  const restore = options?.restoreTakeovers !== false
+  if (restore) {
+    try {
+      restoreAllTakeovers()
+    } catch (e) {
+      console.error('[Gateway] restore takeovers failed:', e)
+    }
+  }
+
   if (server) {
     server.close()
     server = null
-    config.enabled = false
-    console.log('[Gateway] stopped')
   }
+  config.enabled = false
+  if (options?.persistDisabled) {
+    try {
+      updateGatewaySettings({ enabled: false })
+    } catch {
+      // db may already be closed on quit
+    }
+  }
+  // Log viewer can keep running so users still browse historical logs;
+  // only stop it on full app quit via stopLogViewer().
+  console.log('[Gateway] stopped')
 }
 
 export function isGatewayRunning(): boolean {
-  return server !== null && config.enabled
+  return server !== null
 }
+
+export function maybeAutoStartGateway(): void {
+  ensureLiveBackupTable()
+  const settings = ensureGatewayToken(loadGatewaySettings())
+  if (settings.enabled) {
+    try {
+      startGateway()
+      // Preference flags survive quit; re-wire CLI/Desktop configs to this gateway.
+      reapplyPreferredTakeovers()
+    } catch (e) {
+      console.error('[Gateway] auto-start failed:', e)
+    }
+  }
+  try {
+    syncLogViewerWithSettings()
+  } catch (e) {
+    console.error('[Gateway] log viewer auto-start failed:', e)
+  }
+}
+
+registerGatewayStarter(() => {
+  if (isGatewayRunning()) {
+    const cfg = getGatewayConfig()
+    return { token: cfg.token, port: cfg.port }
+  }
+  return startGateway()
+})
+
+// Re-exports for main process consumers
+export { loadGatewaySettings, updateGatewaySettings, ensureGatewayToken } from './settings-store'
+export {
+  listPublicProviders,
+  saveProvider,
+  removeProvider,
+  listProviders,
+  PROVIDER_PRESETS
+} from './provider-store'
+export {
+  testProviderConnectivity,
+  type ProviderTestInput,
+  type ProviderTestResult
+} from './provider-test'
+export {
+  getTakeoverStatus,
+  setTakeover,
+  restoreAllTakeovers,
+  reapplyPreferredTakeovers,
+  type TakeoverUiApp
+} from './live/takeover'
+export {
+  startLogViewer,
+  stopLogViewer,
+  getLogViewerUrl,
+  isLogViewerRunning,
+  syncLogViewerWithSettings
+} from './log-viewer'
+export { getGatewayLogsDir } from './request-log'

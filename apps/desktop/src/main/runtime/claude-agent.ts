@@ -85,6 +85,10 @@ export class ClaudeAgentAdapter implements AgentAdapter {
   }
 
   private resolveSessionId(input: AgentRunInput): string | undefined {
+    if (input.agentSessionId === null) {
+      this.sessionIds.delete(input.conversationId)
+      return undefined
+    }
     const sessionId = input.agentSessionId ?? this.sessionIds.get(input.conversationId)
     if (sessionId) {
       this.sessionIds.set(input.conversationId, sessionId)

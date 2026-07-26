@@ -85,6 +85,13 @@ function serializeDebugPayload(payload: unknown): string | undefined {
   }
 }
 
+function isCodexResumeFailure(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error)
+  return /resume|thread|session|not found|no such|unknown thread|ResponseCompleted|total_tokens|failed to parse/i.test(
+    msg
+  )
+}
+
 export class CodexAgentAdapter implements AgentAdapter {
   readonly id = 'codex'
   readonly name = 'Codex'
@@ -97,11 +104,36 @@ export class CodexAgentAdapter implements AgentAdapter {
   private toolStartedAt = new Map<string, string>()
 
   async run(input: AgentRunInput, emit: (event: AgentEvent) => void): Promise<void> {
-    const sessionId = input.agentSessionId ?? this.threadIds.get(input.conversationId) ?? undefined
+    // Explicit null from main means "do not resume" (e.g. mid-conversation agent switch).
+    if (input.agentSessionId === null) {
+      this.threadIds.delete(input.conversationId)
+    }
+    const sessionId =
+      input.agentSessionId === null
+        ? undefined
+        : (input.agentSessionId ?? this.threadIds.get(input.conversationId) ?? undefined)
 
     try {
       await this.runOnce(input, emit, sessionId)
     } catch (error: unknown) {
+      if (sessionId && isCodexResumeFailure(error)) {
+        this.threadIds.delete(input.conversationId)
+        emit({ type: 'session.cleared', conversationId: input.conversationId })
+        try {
+          await this.runOnce(input, emit, undefined)
+          return
+        } catch (retryError: unknown) {
+          const errorMessage = retryError instanceof Error ? retryError.message : String(retryError)
+          emit({
+            type: 'message.error',
+            conversationId: input.conversationId,
+            messageId: input.messageId,
+            error: errorMessage
+          })
+          return
+        }
+      }
+
       const errorMessage = error instanceof Error ? error.message : String(error)
       emit({
         type: 'message.error',
@@ -185,14 +217,23 @@ export class CodexAgentAdapter implements AgentAdapter {
 
       const streamed = await thread.runStreamed(prompt, { signal: controller.signal })
       let usage: TokenUsage | undefined
+      let turnFailed = false
       const rawEvents: unknown[] = []
 
       for await (const event of streamed.events) {
         if (controller.signal.aborted) break
         rawEvents.push(event)
-        this.handleThreadEvent(event, input, emit, (nextUsage) => {
-          usage = nextUsage
-        })
+        this.handleThreadEvent(
+          event,
+          input,
+          emit,
+          (nextUsage) => {
+            usage = nextUsage
+          },
+          () => {
+            turnFailed = true
+          }
+        )
 
         const threadId = thread.id
         if (threadId && threadId !== sessionId) {
@@ -204,6 +245,8 @@ export class CodexAgentAdapter implements AgentAdapter {
           })
         }
       }
+
+      if (turnFailed) return
 
       emit({
         type: 'message.completed',
@@ -234,7 +277,8 @@ export class CodexAgentAdapter implements AgentAdapter {
     event: ThreadEvent,
     input: AgentRunInput,
     emit: (event: AgentEvent) => void,
-    setUsage: (usage: TokenUsage | undefined) => void
+    setUsage: (usage: TokenUsage | undefined) => void,
+    setFailed?: () => void
   ): void {
     switch (event.type) {
       case 'thread.started':
@@ -249,6 +293,7 @@ export class CodexAgentAdapter implements AgentAdapter {
         setUsage(mapUsage(event.usage))
         break
       case 'turn.failed':
+        setFailed?.()
         emit({
           type: 'message.error',
           conversationId: input.conversationId,
@@ -257,6 +302,7 @@ export class CodexAgentAdapter implements AgentAdapter {
         })
         break
       case 'error':
+        setFailed?.()
         emit({
           type: 'message.error',
           conversationId: input.conversationId,

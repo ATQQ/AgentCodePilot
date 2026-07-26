@@ -189,6 +189,14 @@ function runMigrations(database: Database.Database): void {
   if (!projectCols.find((c) => c.name === 'deleted_at')) {
     database.exec('ALTER TABLE projects ADD COLUMN deleted_at TEXT')
   }
+
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS gateway_live_backup (
+      app_type TEXT PRIMARY KEY,
+      original_config TEXT NOT NULL,
+      backed_up_at TEXT NOT NULL
+    );
+  `)
 }
 
 export function closeDatabase(): void {
