@@ -306,8 +306,11 @@ const VIEWER_HTML = `<!doctype html>
       border-radius: 10px;
       padding: 10px;
       font-size: 12px;
+      max-height: 48vh;
+      overflow: auto;
     }
     .empty { padding: 28px; color: var(--muted); text-align: center; }
+    .section-title { margin: 16px 0 8px; font-size: 14px; }
   </style>
 </head>
 <body>
@@ -366,6 +369,7 @@ const VIEWER_HTML = `<!doctype html>
   <script>
     let auto = true;
     let selectedId = null;
+    let selectedDetailKey = '';
     let timer = null;
 
     function val(id) { return document.getElementById(id).value.trim(); }
@@ -406,15 +410,44 @@ const VIEWER_HTML = `<!doctype html>
       return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 
-    async function loadList() {
+    function prettyJson(value) {
+      if (value == null) return '';
+      if (typeof value === 'string') return value;
+      try { return JSON.stringify(value, null, 2); } catch { return String(value); }
+    }
+
+    function jsonBlock(title, value) {
+      if (value == null || value === '') return '';
+      return '<h3 class="section-title">' + escapeHtml(title) + '</h3><pre>' + escapeHtml(prettyJson(value)) + '</pre>';
+    }
+
+    function detailFingerprint(d) {
+      return [
+        d.id,
+        d.status,
+        d.endedAt || '',
+        d.latencyMs ?? '',
+        d.error || '',
+        (d.events && d.events.length) || 0,
+        d.responseBody != null ? '1' : '0',
+        d.requestBody != null ? '1' : '0',
+        d.upstreamRequest != null ? '1' : '0',
+        d.requestHeaders ? Object.keys(d.requestHeaders).length : 0,
+        d.upstreamResponseHeaders ? Object.keys(d.upstreamResponseHeaders).length : 0
+      ].join('|');
+    }
+
+    async function loadList(opts) {
+      const preserveScroll = Boolean(opts && opts.preserveScroll);
+      const list = document.getElementById('list');
+      const scrollTop = preserveScroll ? list.scrollTop : 0;
       const res = await fetch('/api/logs?' + qs());
       const data = await res.json();
       document.getElementById('meta').textContent =
         '目录: ' + (data.logsDir || '') + ' · ' + (data.items?.length || 0) + ' 条';
-      const list = document.getElementById('list');
       if (!data.items?.length) {
         list.innerHTML = '<div class="empty">没有匹配的日志</div>';
-        return;
+        return data.items || [];
       }
       list.innerHTML = data.items.map(item => {
         const active = item.id === selectedId ? ' active' : '';
@@ -437,21 +470,32 @@ const VIEWER_HTML = `<!doctype html>
       list.querySelectorAll('.item').forEach(el => {
         el.addEventListener('click', () => {
           selectedId = el.getAttribute('data-id');
-          loadDetail(selectedId);
-          loadList();
+          selectedDetailKey = '';
+          loadDetail(selectedId, { force: true });
+          loadList({ preserveScroll: true });
         });
       });
+      if (preserveScroll) list.scrollTop = scrollTop;
+      return data.items;
     }
 
-    async function loadDetail(id) {
+    async function loadDetail(id, opts) {
+      const force = Boolean(opts && opts.force);
+      const soft = Boolean(opts && opts.soft);
+      const detail = document.getElementById('detail');
+      const scrollTop = soft ? detail.scrollTop : 0;
       const res = await fetch('/api/logs/' + encodeURIComponent(id));
       if (!res.ok) {
-        document.getElementById('detail').innerHTML = '<div class="empty">未找到详情</div>';
+        if (force) detail.innerHTML = '<div class="empty">未找到详情</div>';
         return;
       }
       const d = await res.json();
+      const key = detailFingerprint(d);
+      // Auto-refresh: don't rebuild DOM (and reset scroll) if nothing meaningful changed.
+      if (!force && soft && key === selectedDetailKey) return;
+      selectedDetailKey = key;
       const tags = d.tags || {};
-      document.getElementById('detail').innerHTML =
+      detail.innerHTML =
         '<div class="row"><strong class="mono">' + escapeHtml(d.id) + '</strong>' + badge(d.status) + '</div>' +
         '<div class="kv">' +
           '<div>时间</div><div class="mono">' + escapeHtml(d.startedAt) + (d.endedAt ? (' → ' + escapeHtml(d.endedAt)) : '') + '</div>' +
@@ -467,24 +511,40 @@ const VIEWER_HTML = `<!doctype html>
           '<div>CWD</div><div class="mono">' + escapeHtml(tags.cwd || '-') + '</div>' +
           '<div>错误</div><div class="mono">' + escapeHtml(d.error || '-') + '</div>' +
         '</div>' +
-        '<h3 style="margin:0 0 8px;font-size:14px">过程事件</h3>' +
+        '<h3 class="section-title">过程事件</h3>' +
         '<div class="events">' +
           (d.events || []).map(e =>
             '<div class="event"><div class="muted mono">' + escapeHtml(e.at) + ' · ' + escapeHtml(e.type) +
             '</div><div>' + escapeHtml(e.message) + '</div></div>'
           ).join('') +
         '</div>' +
-        (d.promptPreview ? ('<h3 style="margin:16px 0 8px;font-size:14px">Prompt 预览</h3><pre>' + escapeHtml(d.promptPreview) + '</pre>') : '') +
-        (d.responsePreview ? ('<h3 style="margin:16px 0 8px;font-size:14px">Response 预览</h3><pre>' + escapeHtml(d.responsePreview) + '</pre>') : '');
+        jsonBlock('入站请求头', d.requestHeaders) +
+        jsonBlock('请求 JSON', d.requestBody) +
+        jsonBlock('上游请求', d.upstreamRequest) +
+        jsonBlock('上游响应头', d.upstreamResponseHeaders) +
+        jsonBlock('响应全文', d.responseBody != null ? d.responseBody : d.responsePreview) +
+        (d.usage ? jsonBlock('Usage', d.usage) : '');
+      if (soft) detail.scrollTop = scrollTop;
+    }
+
+    async function autoRefresh() {
+      await loadList({ preserveScroll: true });
+      if (!selectedId) return;
+      // Soft update: unchanged content skips DOM rebuild; scroll is preserved when it does update.
+      await loadDetail(selectedId, { soft: true });
     }
 
     function schedule() {
       if (timer) clearInterval(timer);
-      if (auto) timer = setInterval(() => { loadList(); if (selectedId) loadDetail(selectedId); }, 3000);
+      if (auto) timer = setInterval(() => { autoRefresh(); }, 3000);
     }
 
     document.getElementById('searchBtn').onclick = () => loadList();
-    document.getElementById('refreshBtn').onclick = () => { loadFacets(); loadList(); if (selectedId) loadDetail(selectedId); };
+    document.getElementById('refreshBtn').onclick = () => {
+      loadFacets();
+      loadList({ preserveScroll: true });
+      if (selectedId) loadDetail(selectedId, { force: true });
+    };
     document.getElementById('autoBtn').onclick = () => {
       auto = !auto;
       document.getElementById('autoBtn').textContent = '自动刷新: ' + (auto ? '开' : '关');

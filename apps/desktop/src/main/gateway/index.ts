@@ -197,6 +197,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         headers: req.headers,
         model: turn.model,
         stream: turn.stream,
+        requestBody: body,
         promptPreview: buildPromptPreview(turn.messages)
       })
       await handleChatCompletions(turn, res, abort.signal, log)
@@ -218,6 +219,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         headers: req.headers,
         model: turn.model,
         stream: turn.stream,
+        requestBody: body,
         promptPreview: buildPromptPreview(turn.messages)
       })
       await handleMessages(
@@ -244,7 +246,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         headers: req.headers,
         model: body.model,
         stream: body.stream,
-        promptPreview: typeof body.input === 'string' ? body.input.slice(0, 280) : undefined
+        requestBody: body
       })
       await handleResponses(body, res, abort.signal, log, 'codex')
     } catch (e) {

@@ -67,7 +67,7 @@ export async function handleChatCompletions(
       }
       sendChunk('', 'stop')
       res.write('data: [DONE]\n\n')
-      finishRequestLog(log ?? null, 'ok', { usage, responsePreview: full })
+      finishRequestLog(log ?? null, 'ok', { usage, responseBody: full })
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : 'Upstream error'
       sendChunk(`\n[Error: ${errMsg}]`, 'stop')
@@ -103,7 +103,7 @@ export async function handleChatCompletions(
       }
     }
     writeJson(res, 200, response)
-    finishRequestLog(log ?? null, 'ok', { usage, responsePreview: fullContent })
+    finishRequestLog(log ?? null, 'ok', { usage, responseBody: fullContent })
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : 'Upstream error'
     writeJson(res, 500, { error: { message: errMsg, type: 'server_error', code: null } })

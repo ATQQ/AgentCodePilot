@@ -19,6 +19,13 @@ export interface GatewayLogEvent {
   message: string
 }
 
+export interface GatewayUpstreamRequestLog {
+  url: string
+  method: string
+  headers?: Record<string, string>
+  body?: unknown
+}
+
 export interface GatewayRequestLog {
   id: string
   startedAt: string
@@ -39,7 +46,19 @@ export interface GatewayRequestLog {
   client?: string
   tags: GatewayLogTags
   events: GatewayLogEvent[]
+  /** Inbound client → gateway headers (secrets redacted). */
+  requestHeaders?: Record<string, string>
+  /** Full inbound request JSON (no truncation). */
+  requestBody?: unknown
+  /** Full upstream request (headers redacted, body parsed when JSON). */
+  upstreamRequest?: GatewayUpstreamRequestLog
+  /** Upstream → gateway response headers. */
+  upstreamResponseHeaders?: Record<string, string>
+  /** Full assistant text / response payload (no truncation). */
+  responseBody?: unknown
+  /** Short one-line snippet for list UI only. */
   promptPreview?: string
+  /** @deprecated prefer responseBody; kept for older log files / list snippets */
   responsePreview?: string
 }
 
@@ -102,10 +121,97 @@ function truncate(text: string, max = 240): string {
   return `${cleaned.slice(0, max)}…`
 }
 
+function tryParseJson(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown
+  } catch {
+    return text
+  }
+}
+
+const SENSITIVE_HEADER =
+  /^(authorization|x-api-key|api-key|proxy-authorization|cookie|set-cookie)$/i
+
+export function flattenHeaders(
+  headers: Record<string, string | string[] | undefined> | Headers | undefined
+): Record<string, string> | undefined {
+  if (!headers) return undefined
+  const out: Record<string, string> = {}
+  if (typeof Headers !== 'undefined' && headers instanceof Headers) {
+    headers.forEach((value, key) => {
+      out[key] = value
+    })
+    return out
+  }
+  for (const [key, value] of Object.entries(
+    headers as Record<string, string | string[] | undefined>
+  )) {
+    if (value === undefined) continue
+    out[key] = Array.isArray(value) ? value.join(', ') : value
+  }
+  return out
+}
+
+export function redactHeaders(
+  headers: Record<string, string> | undefined
+): Record<string, string> | undefined {
+  if (!headers) return undefined
+  const out: Record<string, string> = {}
+  for (const [key, value] of Object.entries(headers)) {
+    out[key] = SENSITIVE_HEADER.test(key) ? '[redacted]' : value
+  }
+  return out
+}
+
+/** Flatten + redact for safe logging. */
+export function headersForLog(
+  headers:
+    | Record<string, string | string[] | undefined>
+    | Headers
+    | Record<string, string>
+    | undefined
+): Record<string, string> | undefined {
+  return redactHeaders(flattenHeaders(headers as Record<string, string | string[] | undefined>))
+}
+
+/** Full prompt text from messages (detail storage helper). */
+export function buildPromptText(messages: Array<{ role: string; content: string }>): string {
+  return messages.map((m) => `[${m.role}]\n${m.content}`).join('\n\n')
+}
+
+/** Short snippet for list index only. */
 export function buildPromptPreview(messages: Array<{ role: string; content: string }>): string {
   const lastUser = [...messages].reverse().find((m) => m.role === 'user')
   if (!lastUser) return ''
   return truncate(lastUser.content, 280)
+}
+
+export function promptPreviewFromBody(body: unknown): string | undefined {
+  if (typeof body === 'string') return truncate(body, 280)
+  if (!body || typeof body !== 'object') return undefined
+  const obj = body as Record<string, unknown>
+  if (typeof obj.input === 'string') return truncate(obj.input, 280)
+  if (Array.isArray(obj.messages)) {
+    return buildPromptPreview(
+      obj.messages
+        .filter((m): m is { role: string; content: string } => {
+          if (!m || typeof m !== 'object') return false
+          const row = m as Record<string, unknown>
+          return typeof row.role === 'string' && typeof row.content === 'string'
+        })
+        .map((m) => ({ role: m.role, content: m.content }))
+    )
+  }
+  if (Array.isArray(obj.input)) {
+    const texts: string[] = []
+    for (const item of obj.input) {
+      if (!item || typeof item !== 'object') continue
+      const row = item as Record<string, unknown>
+      if (typeof row.content === 'string') texts.push(row.content)
+    }
+    if (texts.length) return truncate(texts.join(' '), 280)
+  }
+  return undefined
 }
 
 export function extractLogTags(headers: IncomingHeaders): GatewayLogTags {
@@ -138,6 +244,7 @@ export function createRequestLog(input: {
   headers: IncomingHeaders
   model?: string
   stream?: boolean
+  requestBody?: unknown
   promptPreview?: string
 }): GatewayRequestLog | null {
   if (!isGatewayLoggingEnabled()) return null
@@ -146,6 +253,9 @@ export function createRequestLog(input: {
   const startedAt = new Date().toISOString()
   const ua = input.headers['user-agent']
   const client = Array.isArray(ua) ? ua[0] : ua
+  const promptPreview =
+    input.promptPreview ||
+    (input.requestBody !== undefined ? promptPreviewFromBody(input.requestBody) : undefined)
 
   const log: GatewayRequestLog = {
     id,
@@ -159,7 +269,9 @@ export function createRequestLog(input: {
     client: client ? truncate(client, 120) : undefined,
     tags: extractLogTags(input.headers),
     events: [{ at: startedAt, type: 'start', message: `${input.method} ${input.path}` }],
-    promptPreview: input.promptPreview
+    requestHeaders: headersForLog(input.headers),
+    requestBody: input.requestBody,
+    promptPreview
   }
 
   persistDetail(log)
@@ -183,7 +295,12 @@ export function patchRequestLog(
       | 'usage'
       | 'error'
       | 'httpStatus'
+      | 'responseBody'
       | 'responsePreview'
+      | 'upstreamRequest'
+      | 'upstreamResponseHeaders'
+      | 'requestHeaders'
+      | 'requestBody'
       | 'model'
       | 'stream'
     >
@@ -196,15 +313,35 @@ export function patchRequestLog(
 export function finishRequestLog(
   log: GatewayRequestLog | null,
   status: 'ok' | 'error',
-  extra?: { error?: string; usage?: AdapterEvent['usage']; responsePreview?: string }
+  extra?: {
+    error?: string
+    usage?: AdapterEvent['usage']
+    responseBody?: unknown
+    /** @deprecated use responseBody */
+    responsePreview?: string
+  }
 ): void {
   if (!log) return
   log.status = status
   log.endedAt = new Date().toISOString()
   log.latencyMs = Math.max(0, Date.parse(log.endedAt) - Date.parse(log.startedAt))
-  if (extra?.error) log.error = truncate(extra.error, 800)
+  if (extra?.error) log.error = extra.error
   if (extra?.usage) log.usage = extra.usage
-  if (extra?.responsePreview) log.responsePreview = truncate(extra.responsePreview, 280)
+
+  const responseBody =
+    extra?.responseBody !== undefined
+      ? extra.responseBody
+      : extra?.responsePreview !== undefined
+        ? extra.responsePreview
+        : undefined
+  if (responseBody !== undefined) {
+    log.responseBody = responseBody
+    log.responsePreview =
+      typeof responseBody === 'string'
+        ? truncate(responseBody, 280)
+        : truncate(JSON.stringify(responseBody), 280)
+  }
+
   log.events.push({
     at: log.endedAt,
     type: status === 'ok' ? 'done' : 'error',
@@ -215,6 +352,20 @@ export function finishRequestLog(
   })
   persistDetail(log)
   appendSummary(toSummary(log))
+}
+
+/** Build upstream request log entry from adapter output (redacts secrets). */
+export function buildUpstreamRequestLog(input: {
+  url: string
+  headers: Record<string, string>
+  body: string
+}): GatewayUpstreamRequestLog {
+  return {
+    url: input.url,
+    method: 'POST',
+    headers: redactHeaders(input.headers),
+    body: tryParseJson(input.body)
+  }
 }
 
 function toSummary(log: GatewayRequestLog): GatewayLogSummary {
@@ -230,7 +381,7 @@ function toSummary(log: GatewayRequestLog): GatewayLogSummary {
     providerId: log.providerId,
     upstreamModel: log.upstreamModel,
     latencyMs: log.latencyMs,
-    error: log.error,
+    error: log.error ? truncate(log.error, 400) : undefined,
     sessionId: log.tags.sessionId,
     conversationId: log.tags.conversationId,
     projectId: log.tags.projectId,
@@ -252,8 +403,6 @@ function persistDetail(log: GatewayRequestLog): void {
 function appendSummary(summary: GatewayLogSummary): void {
   try {
     const day = dayKey(summary.startedAt)
-    // Rewrite last line for same id if present (running → ok). Simple approach: append;
-    // list API de-dupes by id keeping latest.
     appendFileSync(indexPath(day), JSON.stringify(summary) + '\n', 'utf8')
   } catch (e) {
     console.error('[GatewayLog] append summary failed:', e)
@@ -352,7 +501,7 @@ export function listGatewayLogSummaries(query: ListGatewayLogsQuery = {}): Gatew
       if (!line.trim()) continue
       try {
         const row = JSON.parse(line) as GatewayLogSummary
-        byId.set(row.id, row) // later lines overwrite earlier (running → ok)
+        byId.set(row.id, row)
       } catch {
         // skip bad line
       }

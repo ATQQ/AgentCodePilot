@@ -69,7 +69,7 @@ export async function handleMessages(
       )
 
       res.write(`event: message_stop\ndata: ${JSON.stringify({ type: 'message_stop' })}\n\n`)
-      finishRequestLog(log ?? null, 'ok', { usage, responsePreview: full })
+      finishRequestLog(log ?? null, 'ok', { usage, responseBody: full })
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : 'Upstream error'
       res.write(
@@ -108,7 +108,7 @@ export async function handleMessages(
       }
     }
     writeJson(res, 200, response)
-    finishRequestLog(log ?? null, 'ok', { usage, responsePreview: fullContent })
+    finishRequestLog(log ?? null, 'ok', { usage, responseBody: fullContent })
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : 'Upstream error'
     writeJson(res, 500, {

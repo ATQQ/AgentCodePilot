@@ -166,7 +166,7 @@ export async function handleResponses(
           }
         })}\n\n`
       )
-      finishRequestLog(log ?? null, 'ok', { usage, responsePreview: full })
+      finishRequestLog(log ?? null, 'ok', { usage, responseBody: full })
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : 'Upstream error'
       res.write(
@@ -207,7 +207,7 @@ export async function handleResponses(
       ],
       usage: responsesUsage(usage)
     })
-    finishRequestLog(log ?? null, 'ok', { usage, responsePreview: fullContent })
+    finishRequestLog(log ?? null, 'ok', { usage, responseBody: fullContent })
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : 'Upstream error'
     writeJson(res, 500, {

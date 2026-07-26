@@ -1,6 +1,12 @@
 import { resolveAdapter } from './adapters'
 import { routeModel } from './router'
-import { appendLogEvent, patchRequestLog, type GatewayRequestLog } from './request-log'
+import {
+  appendLogEvent,
+  buildUpstreamRequestLog,
+  headersForLog,
+  patchRequestLog,
+  type GatewayRequestLog
+} from './request-log'
 import type { AdapterEvent, GatewayChannel, UnifiedTurn } from './types'
 
 export async function* runUnifiedTurn(
@@ -29,7 +35,10 @@ export async function* runUnifiedTurn(
   } catch {
     // keep raw
   }
-  patchRequestLog(log ?? null, { upstreamHost })
+  patchRequestLog(log ?? null, {
+    upstreamHost,
+    upstreamRequest: buildUpstreamRequestLog(request)
+  })
   appendLogEvent(log ?? null, 'upstream', `POST ${upstreamHost} via ${protocol}`)
 
   let response: Response
@@ -48,7 +57,10 @@ export async function* runUnifiedTurn(
   }
 
   appendLogEvent(log ?? null, 'upstream_status', `HTTP ${response.status}`)
-  patchRequestLog(log ?? null, { httpStatus: response.status })
+  patchRequestLog(log ?? null, {
+    httpStatus: response.status,
+    upstreamResponseHeaders: headersForLog(response.headers)
+  })
 
   if (turn.stream) {
     yield* adapter.parseStream(response)
