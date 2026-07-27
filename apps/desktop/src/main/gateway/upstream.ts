@@ -16,16 +16,6 @@ export async function* runUnifiedTurn(
   channel?: GatewayChannel
 ): AsyncGenerator<AdapterEvent> {
   const { provider, protocol, endpoint, upstreamModel } = routeModel(turn.model, channel)
-  patchRequestLog(log ?? null, {
-    providerId: provider.id,
-    upstreamModel
-  })
-  appendLogEvent(
-    log ?? null,
-    'route',
-    `provider=${provider.id} protocol=${protocol} model=${upstreamModel}`
-  )
-
   const adapter = resolveAdapter(protocol)
   const request = adapter.buildRequest(turn, endpoint, upstreamModel)
 
@@ -35,10 +25,26 @@ export async function* runUnifiedTurn(
   } catch {
     // keep raw
   }
+
   patchRequestLog(log ?? null, {
+    providerId: provider.id,
+    upstreamModel,
     upstreamHost,
+    proxyMode: 'unified',
+    intercept: {
+      mode: 'unified',
+      inboundBytes: 0,
+      upstreamBytes: Buffer.byteLength(request.body, 'utf8'),
+      rewritten: ['*'],
+      note: '跨协议/UnifiedTurn：请求经文本归一化重建，可能裁剪 tools / cache_control 等字段'
+    },
     upstreamRequest: buildUpstreamRequestLog(request)
   })
+  appendLogEvent(
+    log ?? null,
+    'route',
+    `provider=${provider.id} protocol=${protocol} model=${upstreamModel}（unified 重建）`
+  )
   appendLogEvent(log ?? null, 'upstream', `POST ${upstreamHost} via ${protocol}`)
 
   let response: Response

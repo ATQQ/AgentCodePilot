@@ -5,6 +5,7 @@ import type {
   UnifiedTurn
 } from '../types'
 import { joinUrl, parseSseLines, type ProviderAdapter } from './base'
+import { mapOpenAiUsage } from '../usage'
 
 function toOpenAiMessages(turn: UnifiedTurn): Array<{ role: string; content: string }> {
   const messages: Array<{ role: string; content: string }> = []
@@ -19,6 +20,12 @@ function toOpenAiMessages(turn: UnifiedTurn): Array<{ role: string; content: str
     }
   }
   return messages
+}
+
+type OpenAiWireUsage = {
+  prompt_tokens?: number
+  completion_tokens?: number
+  prompt_tokens_details?: { cached_tokens?: number } | null
 }
 
 export function createOpenAiChatAdapter(): ProviderAdapter {
@@ -69,15 +76,12 @@ export function createOpenAiChatAdapter(): ProviderAdapter {
         try {
           const json = JSON.parse(data) as {
             choices?: Array<{ delta?: { content?: string }; finish_reason?: string | null }>
-            usage?: { prompt_tokens?: number; completion_tokens?: number }
+            usage?: OpenAiWireUsage
           }
           const content = json.choices?.[0]?.delta?.content
           if (content) yield { type: 'text_delta', text: content }
           if (json.usage) {
-            usage = {
-              inputTokens: json.usage.prompt_tokens ?? 0,
-              outputTokens: json.usage.completion_tokens ?? 0
-            }
+            usage = mapOpenAiUsage(json.usage)
           }
         } catch {
           // skip malformed chunk
@@ -99,19 +103,14 @@ export function createOpenAiChatAdapter(): ProviderAdapter {
       try {
         const json = JSON.parse(text) as {
           choices?: Array<{ message?: { content?: string } }>
-          usage?: { prompt_tokens?: number; completion_tokens?: number }
+          usage?: OpenAiWireUsage
         }
         const content = json.choices?.[0]?.message?.content ?? ''
         const events: AdapterEvent[] = []
         if (content) events.push({ type: 'text_delta', text: content })
         events.push({
           type: 'done',
-          usage: json.usage
-            ? {
-                inputTokens: json.usage.prompt_tokens ?? 0,
-                outputTokens: json.usage.completion_tokens ?? 0
-              }
-            : undefined
+          usage: json.usage ? mapOpenAiUsage(json.usage) : undefined
         })
         return events
       } catch {

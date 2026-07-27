@@ -548,7 +548,11 @@ export interface TokenUsage {
   cacheReadTokens: number
   cacheCreationTokens: number
   costUSD: number
-  /** Sum of input + output + cache read + cache write when reported by runtime. */
+  /**
+   * Explicit total for hover「共 N」.
+   * Anthropic/Claude: input + output + cache (additive).
+   * OpenAI/Codex: input + output (cache is a subset of input).
+   */
   totalTokens?: number
   /** Subset of output tokens when reported separately by runtime. */
   reasoningTokens?: number

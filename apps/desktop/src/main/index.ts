@@ -754,11 +754,21 @@ function registerIpcHandlers(): void {
           }
         }
         if (r.input_tokens != null && r.output_tokens != null) {
+          const inputTokens = r.input_tokens
+          const outputTokens = r.output_tokens
+          const cacheReadTokens = r.cache_read_tokens ?? 0
+          const cacheCreationTokens = r.cache_creation_tokens ?? 0
+          // Claude/Anthropic: cache is additive. Codex/OpenAI: cache is subset of input.
+          const totalTokens =
+            r.agent_id === 'claude-code'
+              ? inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens
+              : inputTokens + outputTokens
           msg.usage = {
-            inputTokens: r.input_tokens,
-            outputTokens: r.output_tokens,
-            cacheReadTokens: r.cache_read_tokens ?? 0,
-            cacheCreationTokens: r.cache_creation_tokens ?? 0,
+            inputTokens,
+            outputTokens,
+            cacheReadTokens,
+            cacheCreationTokens,
+            totalTokens,
             costUSD: r.cost_usd ?? 0
           }
         }

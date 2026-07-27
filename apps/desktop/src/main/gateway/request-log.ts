@@ -26,6 +26,23 @@ export interface GatewayUpstreamRequestLog {
   body?: unknown
 }
 
+/** How the gateway handled the request. */
+export type GatewayProxyMode = 'passthrough' | 'unified'
+
+/** Middle-box snapshot for passthrough (proves body was not stripped). */
+export interface GatewayInterceptInfo {
+  mode: GatewayProxyMode
+  /** Client → gateway request JSON byte length. */
+  inboundBytes: number
+  /** Gateway → upstream request JSON byte length. */
+  upstreamBytes: number
+  /** Upstream → client response bytes captured while piping. */
+  responseBytes?: number
+  /** Fields the gateway rewrote (everything else forwarded as-is). */
+  rewritten: string[]
+  note?: string
+}
+
 export interface GatewayRequestLog {
   id: string
   startedAt: string
@@ -42,8 +59,16 @@ export interface GatewayRequestLog {
   latencyMs?: number
   httpStatus?: number
   error?: string
-  usage?: { inputTokens: number; outputTokens: number }
+  usage?: {
+    inputTokens: number
+    outputTokens: number
+    cacheReadTokens?: number
+    cacheCreationTokens?: number
+  }
   client?: string
+  /** passthrough = same-protocol pipe; unified = rebuild via UnifiedTurn */
+  proxyMode?: GatewayProxyMode
+  intercept?: GatewayInterceptInfo
   tags: GatewayLogTags
   events: GatewayLogEvent[]
   /** Inbound client → gateway headers (secrets redacted). */
@@ -81,6 +106,7 @@ export interface GatewayLogSummary {
   workspaceId?: string
   cwd?: string
   promptPreview?: string
+  proxyMode?: GatewayProxyMode
 }
 
 function dayKey(iso = new Date().toISOString()): string {
@@ -303,11 +329,17 @@ export function patchRequestLog(
       | 'requestBody'
       | 'model'
       | 'stream'
+      | 'proxyMode'
+      | 'intercept'
     >
   >
 ): void {
   if (!log) return
   Object.assign(log, patch)
+  // Keep detail file fresh while long streams run (list still updates on finish).
+  if (patch.proxyMode != null || patch.intercept != null || patch.upstreamRequest != null) {
+    persistDetail(log)
+  }
 }
 
 export function finishRequestLog(
@@ -387,7 +419,8 @@ function toSummary(log: GatewayRequestLog): GatewayLogSummary {
     projectId: log.tags.projectId,
     workspaceId: log.tags.workspaceId,
     cwd: log.tags.cwd,
-    promptPreview: log.promptPreview
+    promptPreview: log.promptPreview,
+    proxyMode: log.proxyMode
   }
 }
 
@@ -461,7 +494,10 @@ function matches(summary: GatewayLogSummary, query: ListGatewayLogsQuery): boole
       summary.projectId,
       summary.workspaceId,
       summary.cwd,
-      summary.promptPreview
+      summary.promptPreview,
+      summary.proxyMode,
+      summary.proxyMode === 'passthrough' ? '透传 pipe' : '',
+      summary.proxyMode === 'unified' ? '重建 unified' : ''
     ]
       .filter(Boolean)
       .join(' ')

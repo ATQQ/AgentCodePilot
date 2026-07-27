@@ -3,6 +3,7 @@ import type { GatewayChannel, OpenAIChatResponse, OpenAIStreamChunk, UnifiedTurn
 import { runUnifiedTurn } from '../upstream'
 import { consumeEvents, writeJson, writeSseHeaders } from '../bridge/common'
 import { finishRequestLog, type GatewayRequestLog } from '../request-log'
+import { toOpenAiChatUsage } from '../usage'
 
 export async function handleChatCompletions(
   turn: UnifiedTurn,
@@ -57,11 +58,7 @@ export async function handleChatCompletions(
           created,
           model,
           choices: [{ index: 0, delta: {}, finish_reason: null }],
-          usage: {
-            prompt_tokens: usage.inputTokens,
-            completion_tokens: usage.outputTokens,
-            total_tokens: usage.inputTokens + usage.outputTokens
-          }
+          usage: toOpenAiChatUsage(usage)
         }
         res.write(`data: ${JSON.stringify(usageChunk)}\n\n`)
       }
@@ -96,11 +93,7 @@ export async function handleChatCompletions(
           finish_reason: 'stop'
         }
       ],
-      usage: {
-        prompt_tokens: usage?.inputTokens ?? 0,
-        completion_tokens: usage?.outputTokens ?? 0,
-        total_tokens: (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0)
-      }
+      usage: toOpenAiChatUsage(usage)
     }
     writeJson(res, 200, response)
     finishRequestLog(log ?? null, 'ok', { usage, responseBody: fullContent })

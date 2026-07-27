@@ -5,6 +5,7 @@ import type {
   UnifiedTurn
 } from '../types'
 import { joinUrl, parseSseLines, type ProviderAdapter } from './base'
+import { mergeAnthropicUsage } from '../usage'
 
 function toAnthropicMessages(
   turn: UnifiedTurn
@@ -19,6 +20,13 @@ function toAnthropicMessages(
     messages.push({ role: 'user', content: 'Hello' })
   }
   return messages
+}
+
+type AnthropicWireUsage = {
+  input_tokens?: number | null
+  output_tokens?: number | null
+  cache_creation_input_tokens?: number | null
+  cache_read_input_tokens?: number | null
 }
 
 export function createAnthropicAdapter(): ProviderAdapter {
@@ -76,23 +84,18 @@ export function createAnthropicAdapter(): ProviderAdapter {
           const json = JSON.parse(data) as {
             type?: string
             delta?: { type?: string; text?: string }
-            usage?: { input_tokens?: number; output_tokens?: number }
-            message?: { usage?: { input_tokens?: number; output_tokens?: number } }
+            usage?: AnthropicWireUsage
+            message?: { usage?: AnthropicWireUsage }
           }
           if (json.type === 'content_block_delta' && json.delta?.text) {
             yield { type: 'text_delta', text: json.delta.text }
           }
           if (json.type === 'message_start' && json.message?.usage) {
-            usage = {
-              inputTokens: json.message.usage.input_tokens ?? 0,
-              outputTokens: json.message.usage.output_tokens ?? 0
-            }
+            usage = mergeAnthropicUsage(usage, json.message.usage)
           }
           if (json.type === 'message_delta' && json.usage) {
-            usage = {
-              inputTokens: usage?.inputTokens ?? 0,
-              outputTokens: json.usage.output_tokens ?? usage?.outputTokens ?? 0
-            }
+            // message_delta values are cumulative — overwrite, do not add
+            usage = mergeAnthropicUsage(usage, json.usage)
           }
         } catch {
           // skip
@@ -114,7 +117,7 @@ export function createAnthropicAdapter(): ProviderAdapter {
       try {
         const json = JSON.parse(text) as {
           content?: Array<{ type?: string; text?: string }>
-          usage?: { input_tokens?: number; output_tokens?: number }
+          usage?: AnthropicWireUsage
         }
         const content = (json.content ?? [])
           .filter((c) => c.type === 'text' && c.text)
@@ -124,12 +127,7 @@ export function createAnthropicAdapter(): ProviderAdapter {
         if (content) events.push({ type: 'text_delta', text: content })
         events.push({
           type: 'done',
-          usage: json.usage
-            ? {
-                inputTokens: json.usage.input_tokens ?? 0,
-                outputTokens: json.usage.output_tokens ?? 0
-              }
-            : undefined
+          usage: json.usage ? mergeAnthropicUsage(undefined, json.usage) : undefined
         })
         return events
       } catch {

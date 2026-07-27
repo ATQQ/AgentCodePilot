@@ -26,6 +26,8 @@ import {
 import { ensureLiveBackupTable } from './live/backup-store'
 import { buildPromptPreview, createRequestLog, finishRequestLog } from './request-log'
 import { syncLogViewerWithSettings } from './log-viewer'
+import { canPassthrough, clientProtocolForPath, handlePassthrough } from './passthrough'
+import { routeModel } from './router'
 
 let server: Server | null = null
 let config: GatewayConfig = {
@@ -188,21 +190,45 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   if (req.method === 'POST' && effectivePath === '/v1/chat/completions') {
     try {
       const raw = await parseBody(req)
-      const body = JSON.parse(raw) as OpenAIChatRequest
-      const turn = openaiToUnified(body)
+      const body = JSON.parse(raw) as OpenAIChatRequest & Record<string, unknown>
+      const clientProtocol = clientProtocolForPath(effectivePath)!
+      const route = routeModel(body.model, undefined)
       const log = createRequestLog({
         method: 'POST',
         path: effectivePath,
         protocol: 'chat',
         headers: req.headers,
-        model: turn.model,
-        stream: turn.stream,
+        model: body.model,
+        stream: body.stream,
         requestBody: body,
-        promptPreview: buildPromptPreview(turn.messages)
+        promptPreview: buildPromptPreview(
+          Array.isArray(body.messages)
+            ? body.messages.map((m) => ({
+                role: m.role,
+                content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content)
+              }))
+            : []
+        )
       })
+
+      if (canPassthrough(clientProtocol, route.protocol)) {
+        await handlePassthrough({
+          clientProtocol,
+          parsedBody: body,
+          clientHeaders: req.headers,
+          res,
+          signal: abort.signal,
+          log
+        })
+        return
+      }
+
+      const turn = openaiToUnified(body)
       await handleChatCompletions(turn, res, abort.signal, log)
     } catch (e) {
-      sendError(res, 400, e instanceof Error ? e.message : 'Invalid request body')
+      if (!res.headersSent) {
+        sendError(res, 400, e instanceof Error ? e.message : 'Invalid request body')
+      }
     }
     return
   }
@@ -210,27 +236,52 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   if (req.method === 'POST' && effectivePath === '/v1/messages') {
     try {
       const raw = await parseBody(req)
-      const body = JSON.parse(raw) as AnthropicRequest
-      const turn = anthropicToUnified(body)
+      const body = JSON.parse(raw) as AnthropicRequest & Record<string, unknown>
+      const channel = isClaudeDesktop ? 'claudeDesktop' : 'claudeCli'
+      const clientProtocol = clientProtocolForPath(effectivePath)!
+      const route = routeModel(body.model, channel)
       const log = createRequestLog({
         method: 'POST',
         path: effectivePath,
         protocol: 'messages',
         headers: req.headers,
-        model: turn.model,
-        stream: turn.stream,
+        model: body.model,
+        stream: body.stream,
         requestBody: body,
-        promptPreview: buildPromptPreview(turn.messages)
+        promptPreview: buildPromptPreview(
+          Array.isArray(body.messages)
+            ? body.messages.map((m) => ({
+                role: m.role,
+                content:
+                  typeof m.content === 'string'
+                    ? m.content
+                    : Array.isArray(m.content)
+                      ? m.content.map((c) => ('text' in c ? c.text : '')).join('')
+                      : ''
+              }))
+            : []
+        )
       })
-      await handleMessages(
-        turn,
-        res,
-        abort.signal,
-        log,
-        isClaudeDesktop ? 'claudeDesktop' : 'claudeCli'
-      )
+
+      if (canPassthrough(clientProtocol, route.protocol)) {
+        await handlePassthrough({
+          clientProtocol,
+          parsedBody: body,
+          clientHeaders: req.headers,
+          res,
+          signal: abort.signal,
+          log,
+          channel
+        })
+        return
+      }
+
+      const turn = anthropicToUnified(body)
+      await handleMessages(turn, res, abort.signal, log, channel)
     } catch (e) {
-      sendError(res, 400, e instanceof Error ? e.message : 'Invalid request body')
+      if (!res.headersSent) {
+        sendError(res, 400, e instanceof Error ? e.message : 'Invalid request body')
+      }
     }
     return
   }

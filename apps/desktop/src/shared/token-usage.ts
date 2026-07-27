@@ -24,7 +24,11 @@ function readOptionalNumber(raw: Record<string, unknown>, ...keys: string[]): nu
   return undefined
 }
 
-/** Map agent usage payloads into app TokenUsage. */
+/**
+ * Map agent usage payloads into app TokenUsage.
+ * Default total is input+output (OpenAI/Codex inclusive cache).
+ * Anthropic/Claude callers should pass explicit totalTokens including cache.
+ */
 export function mapRawTokenUsage(
   raw: Record<string, unknown> | undefined
 ): TokenUsageFields | undefined {
@@ -43,10 +47,8 @@ export function mapRawTokenUsage(
   const reasoningTokens = readOptionalNumber(raw, 'reasoningTokens', 'reasoning_tokens')
 
   const explicitTotal = readNumber(raw, 'totalTokens', 'total_tokens')
-  const totalTokens =
-    explicitTotal > 0
-      ? explicitTotal
-      : inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens
+  // Inclusive default: cache fields are a subset of input for OpenAI-compatible APIs.
+  const totalTokens = explicitTotal > 0 ? explicitTotal : inputTokens + outputTokens
 
   if (
     totalTokens === 0 &&
@@ -92,9 +94,14 @@ export function mapSdkTokenUsage(usage: {
   }
 }
 
+/**
+ * Display total for hover summary.
+ * Prefer explicit totalTokens; otherwise input+output only so inclusive cache
+ * (OpenAI/Codex) is not double-counted. Anthropic/Claude must set totalTokens.
+ */
 export function computeDisplayTotal(usage: TokenUsageFields): number {
   if (usage.totalTokens != null && usage.totalTokens > 0) return usage.totalTokens
-  return usage.inputTokens + usage.outputTokens + usage.cacheReadTokens + usage.cacheCreationTokens
+  return usage.inputTokens + usage.outputTokens
 }
 
 export function formatTokenUsageSummary(usage: TokenUsageFields): string {

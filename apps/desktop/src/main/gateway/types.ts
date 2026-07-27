@@ -113,11 +113,19 @@ export interface UnifiedTurn {
 /** @deprecated Prefer UnifiedTurn */
 export type UnifiedChatRequest = UnifiedTurn
 
+/** Normalized token usage across wire protocols (cache fields optional). */
+export interface AdapterUsage {
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens?: number
+  cacheCreationTokens?: number
+}
+
 export interface AdapterEvent {
   type: 'text_delta' | 'done' | 'error'
   text?: string
   error?: string
-  usage?: { inputTokens: number; outputTokens: number }
+  usage?: AdapterUsage
 }
 
 export interface BuiltUpstreamRequest {
@@ -163,13 +171,20 @@ export interface OpenAIChatChoice {
   finish_reason: 'stop' | 'length' | null
 }
 
+export interface OpenAIChatUsage {
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  prompt_tokens_details?: { cached_tokens: number }
+}
+
 export interface OpenAIChatResponse {
   id: string
   object: 'chat.completion'
   created: number
   model: string
   choices: OpenAIChatChoice[]
-  usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
+  usage: OpenAIChatUsage
 }
 
 export interface OpenAIStreamChunk {
@@ -198,6 +213,13 @@ export interface AnthropicRequest {
   stream?: boolean
 }
 
+export interface AnthropicUsage {
+  input_tokens: number
+  output_tokens: number
+  cache_creation_input_tokens?: number
+  cache_read_input_tokens?: number
+}
+
 export interface AnthropicResponse {
   id: string
   type: 'message'
@@ -205,13 +227,14 @@ export interface AnthropicResponse {
   content: { type: 'text'; text: string }[]
   model: string
   stop_reason: 'end_turn' | 'max_tokens' | null
-  usage: { input_tokens: number; output_tokens: number }
+  usage: AnthropicUsage
 }
 
 export interface ResponsesUsage {
   input_tokens: number
   output_tokens: number
   total_tokens: number
+  input_tokens_details?: { cached_tokens: number }
 }
 
 export interface ResponsesInputItem {

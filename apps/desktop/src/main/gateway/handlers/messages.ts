@@ -3,6 +3,7 @@ import type { AnthropicResponse, GatewayChannel, UnifiedTurn } from '../types'
 import { runUnifiedTurn } from '../upstream'
 import { consumeEvents, writeJson, writeSseHeaders } from '../bridge/common'
 import { finishRequestLog, type GatewayRequestLog } from '../request-log'
+import { toAnthropicUsage } from '../usage'
 
 export async function handleMessages(
   turn: UnifiedTurn,
@@ -60,11 +61,13 @@ export async function handleMessages(
         })}\n\n`
       )
 
+      // Full usage on message_delta (incl. input + cache) so clients that saw
+      // zeros on message_start still get accurate billing fields.
       res.write(
         `event: message_delta\ndata: ${JSON.stringify({
           type: 'message_delta',
           delta: { stop_reason: 'end_turn' },
-          usage: { output_tokens: usage?.outputTokens ?? 0 }
+          usage: toAnthropicUsage(usage)
         })}\n\n`
       )
 
@@ -102,10 +105,7 @@ export async function handleMessages(
       content: [{ type: 'text', text: fullContent }],
       model,
       stop_reason: 'end_turn',
-      usage: {
-        input_tokens: usage?.inputTokens ?? 0,
-        output_tokens: usage?.outputTokens ?? 0
-      }
+      usage: toAnthropicUsage(usage)
     }
     writeJson(res, 200, response)
     finishRequestLog(log ?? null, 'ok', { usage, responseBody: fullContent })

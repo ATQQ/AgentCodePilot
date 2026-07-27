@@ -35,12 +35,16 @@ function mapApprovalPolicy(level: ApprovalLevel): 'never' | 'on-request' | 'on-f
 
 function mapUsage(usage: Usage | null | undefined): TokenUsage | undefined {
   if (!usage) return undefined
+  // Codex cached_input_tokens is a subset of input_tokens (inclusive), not additive.
+  const reasoning = usage.reasoning_output_tokens > 0 ? usage.reasoning_output_tokens : undefined
   return {
     inputTokens: usage.input_tokens,
     outputTokens: usage.output_tokens,
     cacheReadTokens: usage.cached_input_tokens,
     cacheCreationTokens: 0,
-    costUSD: 0
+    totalTokens: usage.input_tokens + usage.output_tokens,
+    costUSD: 0,
+    ...(reasoning != null ? { reasoningTokens: reasoning } : {})
   }
 }
 

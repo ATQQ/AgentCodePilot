@@ -297,6 +297,8 @@ export class ClaudeAgentAdapter implements AgentAdapter {
               outputTokens: totalOutput,
               cacheReadTokens: totalCacheRead,
               cacheCreationTokens: totalCacheCreation,
+              // Anthropic cache fields are additive (not a subset of inputTokens).
+              totalTokens: totalInput + totalOutput + totalCacheRead + totalCacheCreation,
               costUSD: totalCost
             }
           }

@@ -8,6 +8,7 @@ const MOCK_USAGE: TokenUsage = {
   outputTokens: 1240,
   cacheReadTokens: 512,
   cacheCreationTokens: 0,
+  totalTokens: 186 + 1240,
   costUSD: 0.0038
 }
 

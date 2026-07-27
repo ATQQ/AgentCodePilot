@@ -287,6 +287,32 @@ const VIEWER_HTML = `<!doctype html>
     .badge.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); }
     .badge.error { color: var(--err); border-color: color-mix(in srgb, var(--err) 40%, var(--border)); }
     .badge.running { color: var(--run); border-color: color-mix(in srgb, var(--run) 40%, var(--border)); }
+    .badge.pass { color: #7dd3fc; border-color: color-mix(in srgb, #7dd3fc 40%, var(--border)); }
+    .badge.unified { color: #fbbf24; border-color: color-mix(in srgb, #fbbf24 40%, var(--border)); }
+    .chain {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto 1fr;
+      gap: 8px;
+      align-items: center;
+      margin: 12px 0 16px;
+      padding: 12px;
+      background: #121821;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-size: 12px;
+    }
+    .chain .node {
+      background: #0d1218;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      min-height: 64px;
+    }
+    .chain .arrow { color: var(--muted); text-align: center; font-size: 18px; }
+    .chain .label { color: var(--muted); margin-bottom: 4px; }
+    .event.intercept { border-left-color: #7dd3fc; }
+    .event.passthrough, .event.pipe, .event.pipe_done { border-left-color: #38bdf8; }
+    .event.upstream, .event.upstream_status { border-left-color: #a78bfa; }
     .preview { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.4; }
     .detail { padding: 14px; overflow: auto; max-height: calc(100vh - 120px); }
     .kv { display: grid; grid-template-columns: 120px 1fr; gap: 6px 10px; margin: 10px 0 16px; font-size: 13px; }
@@ -392,6 +418,42 @@ const VIEWER_HTML = `<!doctype html>
       return '<span class="badge ' + status + '">' + status + '</span>';
     }
 
+    function modeBadge(mode) {
+      if (mode === 'passthrough') return '<span class="badge pass">透传</span>';
+      if (mode === 'unified') return '<span class="badge unified">重建</span>';
+      return '';
+    }
+
+    function formatBytes(n) {
+      if (n == null || Number.isNaN(n)) return '-';
+      if (n < 1024) return n + ' B';
+      if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+      return (n / (1024 * 1024)).toFixed(2) + ' MB';
+    }
+
+    function interceptChain(d) {
+      const ix = d.intercept || {};
+      const mode = d.proxyMode || ix.mode;
+      if (!mode) return '';
+      return '<h3 class="section-title">拦截链路</h3>' +
+        '<div class="chain">' +
+          '<div class="node"><div class="label">① 客户端 → 网关</div><div class="mono">' +
+            escapeHtml(d.method + ' ' + d.path) + '<br/>入站 ' + formatBytes(ix.inboundBytes) +
+          '</div></div>' +
+          '<div class="arrow">→</div>' +
+          '<div class="node"><div class="label">② 网关拦截</div><div class="mono">' +
+            escapeHtml(mode === 'passthrough' ? '原样透传' : 'UnifiedTurn 重建') +
+            '<br/>改写: ' + escapeHtml((ix.rewritten || []).join(', ') || '-') +
+          '</div></div>' +
+          '<div class="arrow">→</div>' +
+          '<div class="node"><div class="label">③ 网关 → 上游</div><div class="mono">' +
+            escapeHtml(d.upstreamHost || '-') + '<br/>上游 ' + formatBytes(ix.upstreamBytes) +
+            (ix.responseBytes != null ? (' · 回传 ' + formatBytes(ix.responseBytes)) : '') +
+          '</div></div>' +
+        '</div>' +
+        (ix.note ? ('<div class="preview" style="margin-top:-8px;margin-bottom:12px">' + escapeHtml(ix.note) + '</div>') : '');
+    }
+
     async function loadFacets() {
       const res = await fetch('/api/facets');
       const data = await res.json();
@@ -428,6 +490,8 @@ const VIEWER_HTML = `<!doctype html>
         d.endedAt || '',
         d.latencyMs ?? '',
         d.error || '',
+        d.proxyMode || '',
+        (d.intercept && d.intercept.responseBytes) || '',
         (d.events && d.events.length) || 0,
         d.responseBody != null ? '1' : '0',
         d.requestBody != null ? '1' : '0',
@@ -454,7 +518,7 @@ const VIEWER_HTML = `<!doctype html>
         return '<div class="item' + active + '" data-id="' + escapeHtml(item.id) + '">' +
           '<div class="row">' +
             '<div class="mono">' + escapeHtml(item.protocol) + ' · ' + escapeHtml(item.model || '-') + '</div>' +
-            badge(item.status) +
+            '<div style="display:flex;gap:6px;align-items:center">' + modeBadge(item.proxyMode) + badge(item.status) + '</div>' +
           '</div>' +
           '<div class="row" style="margin-top:6px">' +
             '<div class="muted mono">' + escapeHtml(item.startedAt) +
@@ -496,10 +560,12 @@ const VIEWER_HTML = `<!doctype html>
       selectedDetailKey = key;
       const tags = d.tags || {};
       detail.innerHTML =
-        '<div class="row"><strong class="mono">' + escapeHtml(d.id) + '</strong>' + badge(d.status) + '</div>' +
+        '<div class="row"><strong class="mono">' + escapeHtml(d.id) + '</strong>' +
+          '<div style="display:flex;gap:6px">' + modeBadge(d.proxyMode || (d.intercept && d.intercept.mode)) + badge(d.status) + '</div></div>' +
         '<div class="kv">' +
           '<div>时间</div><div class="mono">' + escapeHtml(d.startedAt) + (d.endedAt ? (' → ' + escapeHtml(d.endedAt)) : '') + '</div>' +
           '<div>接口</div><div class="mono">' + escapeHtml(d.method + ' ' + d.path) + '</div>' +
+          '<div>模式</div><div class="mono">' + escapeHtml((d.proxyMode || (d.intercept && d.intercept.mode) || '-')) + '</div>' +
           '<div>模型</div><div class="mono">' + escapeHtml((d.model || '-') + ' → ' + (d.upstreamModel || '-')) + '</div>' +
           '<div>Provider</div><div class="mono">' + escapeHtml(d.providerId || '-') + '</div>' +
           '<div>上游</div><div class="mono">' + escapeHtml(d.upstreamHost || '-') + '</div>' +
@@ -511,19 +577,20 @@ const VIEWER_HTML = `<!doctype html>
           '<div>CWD</div><div class="mono">' + escapeHtml(tags.cwd || '-') + '</div>' +
           '<div>错误</div><div class="mono">' + escapeHtml(d.error || '-') + '</div>' +
         '</div>' +
+        interceptChain(d) +
         '<h3 class="section-title">过程事件</h3>' +
         '<div class="events">' +
           (d.events || []).map(e =>
-            '<div class="event"><div class="muted mono">' + escapeHtml(e.at) + ' · ' + escapeHtml(e.type) +
+            '<div class="event ' + escapeHtml(e.type || '') + '"><div class="muted mono">' + escapeHtml(e.at) + ' · ' + escapeHtml(e.type) +
             '</div><div>' + escapeHtml(e.message) + '</div></div>'
           ).join('') +
         '</div>' +
-        jsonBlock('入站请求头', d.requestHeaders) +
-        jsonBlock('请求 JSON', d.requestBody) +
-        jsonBlock('上游请求', d.upstreamRequest) +
-        jsonBlock('上游响应头', d.upstreamResponseHeaders) +
-        jsonBlock('响应全文', d.responseBody != null ? d.responseBody : d.responsePreview) +
-        (d.usage ? jsonBlock('Usage', d.usage) : '');
+        jsonBlock('① 入站请求头', d.requestHeaders) +
+        jsonBlock('① 请求 JSON（客户端 → 网关）', d.requestBody) +
+        jsonBlock('③ 上游请求（网关 → 上游）', d.upstreamRequest) +
+        jsonBlock('③ 上游响应头', d.upstreamResponseHeaders) +
+        jsonBlock('③→① 响应全文（pipe 回传）', d.responseBody != null ? d.responseBody : d.responsePreview) +
+        (d.usage ? jsonBlock('Usage（旁路解析，未改写响应）', d.usage) : '');
       if (soft) detail.scrollTop = scrollTop;
     }
 

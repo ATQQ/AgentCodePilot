@@ -1,6 +1,5 @@
 import type { ServerResponse } from 'http'
 import type {
-  AdapterEvent,
   GatewayChannel,
   ResponsesInputItem,
   ResponsesRequest,
@@ -10,21 +9,7 @@ import type {
 import { runUnifiedTurn } from '../upstream'
 import { consumeEvents, writeJson, writeSseHeaders } from '../bridge/common'
 import { finishRequestLog, type GatewayRequestLog } from '../request-log'
-
-/** Codex requires total_tokens on ResponseCompleted.usage (serde required field). */
-function responsesUsage(usage: AdapterEvent['usage'] | undefined): {
-  input_tokens: number
-  output_tokens: number
-  total_tokens: number
-} {
-  const input_tokens = usage?.inputTokens ?? 0
-  const output_tokens = usage?.outputTokens ?? 0
-  return {
-    input_tokens,
-    output_tokens,
-    total_tokens: input_tokens + output_tokens
-  }
-}
+import { toResponsesUsage } from '../usage'
 
 function extractText(content: ResponsesInputItem['content']): string {
   if (typeof content === 'string') return content
@@ -162,7 +147,7 @@ export async function handleResponses(
                 content: [{ type: 'output_text', text: full }]
               }
             ],
-            usage: responsesUsage(usage)
+            usage: toResponsesUsage(usage)
           }
         })}\n\n`
       )
@@ -205,7 +190,7 @@ export async function handleResponses(
           content: [{ type: 'output_text', text: fullContent }]
         }
       ],
-      usage: responsesUsage(usage)
+      usage: toResponsesUsage(usage)
     })
     finishRequestLog(log ?? null, 'ok', { usage, responseBody: fullContent })
   } catch (e) {
