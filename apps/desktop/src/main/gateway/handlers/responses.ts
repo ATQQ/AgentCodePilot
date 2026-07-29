@@ -8,8 +8,8 @@ import type {
 } from '../types'
 import { runUnifiedTurn } from '../upstream'
 import { consumeEvents, writeJson, writeSseHeaders } from '../bridge/common'
-import { finishRequestLog, type GatewayRequestLog } from '../request-log'
-import { toResponsesUsage } from '../usage'
+import { appendLogEvent, finishRequestLog, type GatewayRequestLog } from '../request-log'
+import { resolveResponsesUsage } from '../usage'
 
 function extractText(content: ResponsesInputItem['content']): string {
   if (typeof content === 'string') return content
@@ -91,17 +91,29 @@ export async function handleResponses(
 
     let full = ''
     try {
-      const { usage } = await consumeEvents(runUnifiedTurn(turn, signal, log, channel), (delta) => {
-        full += delta
-        res.write(
-          `event: response.output_text.delta\ndata: ${JSON.stringify({
-            type: 'response.output_text.delta',
-            output_index: 0,
-            content_index: 0,
-            delta
-          })}\n\n`
+      const { usage, rawUsage } = await consumeEvents(
+        runUnifiedTurn(turn, signal, log, channel),
+        (delta) => {
+          full += delta
+          res.write(
+            `event: response.output_text.delta\ndata: ${JSON.stringify({
+              type: 'response.output_text.delta',
+              output_index: 0,
+              content_index: 0,
+              delta
+            })}\n\n`
+          )
+        }
+      )
+
+      const responsesUsage = resolveResponsesUsage(usage, rawUsage)
+      if (!responsesUsage) {
+        appendLogEvent(
+          log ?? null,
+          'usage_missing',
+          'usage 未解析到，未写入全 0（避免污染 Codex rollout）'
         )
-      })
+      }
 
       res.write(
         `event: response.output_text.done\ndata: ${JSON.stringify({
@@ -131,24 +143,26 @@ export async function handleResponses(
           }
         })}\n\n`
       )
+      const completedResponse: Record<string, unknown> = {
+        id,
+        object: 'response',
+        model,
+        status: 'completed',
+        output: [
+          {
+            type: 'message',
+            id: `${id}_msg`,
+            role: 'assistant',
+            content: [{ type: 'output_text', text: full }]
+          }
+        ]
+      }
+      // Only attach usage when real — fabricated zeros pollute Codex token_count.
+      if (responsesUsage) completedResponse.usage = responsesUsage
       res.write(
         `event: response.completed\ndata: ${JSON.stringify({
           type: 'response.completed',
-          response: {
-            id,
-            object: 'response',
-            model,
-            status: 'completed',
-            output: [
-              {
-                type: 'message',
-                id: `${id}_msg`,
-                role: 'assistant',
-                content: [{ type: 'output_text', text: full }]
-              }
-            ],
-            usage: toResponsesUsage(usage)
-          }
+          response: completedResponse
         })}\n\n`
       )
       finishRequestLog(log ?? null, 'ok', { usage, responseBody: full })
@@ -174,10 +188,21 @@ export async function handleResponses(
 
   try {
     let fullContent = ''
-    const { usage } = await consumeEvents(runUnifiedTurn(turn, signal, log, channel), (delta) => {
-      fullContent += delta
-    })
-    writeJson(res, 200, {
+    const { usage, rawUsage } = await consumeEvents(
+      runUnifiedTurn(turn, signal, log, channel),
+      (delta) => {
+        fullContent += delta
+      }
+    )
+    const responsesUsage = resolveResponsesUsage(usage, rawUsage)
+    if (!responsesUsage) {
+      appendLogEvent(
+        log ?? null,
+        'usage_missing',
+        'usage 未解析到，未写入全 0（避免污染 Codex rollout）'
+      )
+    }
+    const bodyJson: Record<string, unknown> = {
       id,
       object: 'response',
       model,
@@ -189,9 +214,10 @@ export async function handleResponses(
           role: 'assistant',
           content: [{ type: 'output_text', text: fullContent }]
         }
-      ],
-      usage: toResponsesUsage(usage)
-    })
+      ]
+    }
+    if (responsesUsage) bodyJson.usage = responsesUsage
+    writeJson(res, 200, bodyJson)
     finishRequestLog(log ?? null, 'ok', { usage, responseBody: fullContent })
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : 'Upstream error'

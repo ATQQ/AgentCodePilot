@@ -126,6 +126,8 @@ export interface AdapterEvent {
   text?: string
   error?: string
   usage?: AdapterUsage
+  /** Upstream wire usage object as received (avoid truncating nested details). */
+  rawUsage?: Record<string, unknown>
 }
 
 export interface BuiltUpstreamRequest {
@@ -234,7 +236,10 @@ export interface ResponsesUsage {
   input_tokens: number
   output_tokens: number
   total_tokens: number
-  input_tokens_details?: { cached_tokens: number }
+  input_tokens_details?: Record<string, unknown>
+  output_tokens_details?: Record<string, unknown>
+  cache_read_input_tokens?: number
+  cache_creation_input_tokens?: number
 }
 
 export interface ResponsesInputItem {

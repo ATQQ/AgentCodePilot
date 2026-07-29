@@ -25,7 +25,9 @@ function toOpenAiMessages(turn: UnifiedTurn): Array<{ role: string; content: str
 type OpenAiWireUsage = {
   prompt_tokens?: number
   completion_tokens?: number
-  prompt_tokens_details?: { cached_tokens?: number } | null
+  total_tokens?: number
+  prompt_tokens_details?: Record<string, unknown> | null
+  completion_tokens_details?: Record<string, unknown> | null
 }
 
 export function createOpenAiChatAdapter(): ProviderAdapter {
@@ -41,6 +43,10 @@ export function createOpenAiChatAdapter(): ProviderAdapter {
         model: upstreamModel,
         messages: toOpenAiMessages(turn),
         stream: turn.stream
+      }
+      if (turn.stream) {
+        // OpenAI-compatible upstreams omit usage on SSE unless asked (cc-switch same inject).
+        body.stream_options = { include_usage: true }
       }
       if (turn.temperature !== undefined) body.temperature = turn.temperature
       if (turn.maxTokens !== undefined) body.max_tokens = turn.maxTokens
@@ -71,6 +77,7 @@ export function createOpenAiChatAdapter(): ProviderAdapter {
       }
 
       let usage: AdapterEvent['usage']
+      let rawUsage: Record<string, unknown> | undefined
       for await (const data of parseSseLines(response)) {
         if (!data || data === '[DONE]') continue
         try {
@@ -81,13 +88,14 @@ export function createOpenAiChatAdapter(): ProviderAdapter {
           const content = json.choices?.[0]?.delta?.content
           if (content) yield { type: 'text_delta', text: content }
           if (json.usage) {
+            rawUsage = json.usage as Record<string, unknown>
             usage = mapOpenAiUsage(json.usage)
           }
         } catch {
           // skip malformed chunk
         }
       }
-      yield { type: 'done', usage }
+      yield { type: 'done', usage, rawUsage }
     },
 
     async parseJson(response: Response): Promise<AdapterEvent[]> {
@@ -108,9 +116,11 @@ export function createOpenAiChatAdapter(): ProviderAdapter {
         const content = json.choices?.[0]?.message?.content ?? ''
         const events: AdapterEvent[] = []
         if (content) events.push({ type: 'text_delta', text: content })
+        const rawUsage = json.usage ? (json.usage as Record<string, unknown>) : undefined
         events.push({
           type: 'done',
-          usage: json.usage ? mapOpenAiUsage(json.usage) : undefined
+          usage: json.usage ? mapOpenAiUsage(json.usage) : undefined,
+          rawUsage
         })
         return events
       } catch {

@@ -5,7 +5,7 @@ import type {
   UnifiedTurn
 } from '../types'
 import { joinUrl, parseSseLines, type ProviderAdapter } from './base'
-import { mergeAnthropicUsage } from '../usage'
+import { mergeAnthropicUsage, mergeAnthropicWireUsage } from '../usage'
 
 function toAnthropicMessages(
   turn: UnifiedTurn
@@ -27,6 +27,7 @@ type AnthropicWireUsage = {
   output_tokens?: number | null
   cache_creation_input_tokens?: number | null
   cache_read_input_tokens?: number | null
+  [key: string]: unknown
 }
 
 export function createAnthropicAdapter(): ProviderAdapter {
@@ -78,6 +79,7 @@ export function createAnthropicAdapter(): ProviderAdapter {
       }
 
       let usage: AdapterEvent['usage']
+      let rawUsage: Record<string, unknown> | undefined
       for await (const data of parseSseLines(response)) {
         if (!data) continue
         try {
@@ -92,16 +94,21 @@ export function createAnthropicAdapter(): ProviderAdapter {
           }
           if (json.type === 'message_start' && json.message?.usage) {
             usage = mergeAnthropicUsage(usage, json.message.usage)
+            rawUsage = mergeAnthropicWireUsage(
+              rawUsage,
+              json.message.usage as Record<string, unknown>
+            )
           }
           if (json.type === 'message_delta' && json.usage) {
             // message_delta values are cumulative — overwrite, do not add
             usage = mergeAnthropicUsage(usage, json.usage)
+            rawUsage = mergeAnthropicWireUsage(rawUsage, json.usage as Record<string, unknown>)
           }
         } catch {
           // skip
         }
       }
-      yield { type: 'done', usage }
+      yield { type: 'done', usage, rawUsage }
     },
 
     async parseJson(response: Response): Promise<AdapterEvent[]> {
@@ -125,9 +132,11 @@ export function createAnthropicAdapter(): ProviderAdapter {
           .join('')
         const events: AdapterEvent[] = []
         if (content) events.push({ type: 'text_delta', text: content })
+        const rawUsage = json.usage ? (json.usage as Record<string, unknown>) : undefined
         events.push({
           type: 'done',
-          usage: json.usage ? mergeAnthropicUsage(undefined, json.usage) : undefined
+          usage: json.usage ? mergeAnthropicUsage(undefined, json.usage) : undefined,
+          rawUsage
         })
         return events
       } catch {

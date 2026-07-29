@@ -21,12 +21,16 @@ export function writeJson(res: ServerResponse, status: number, data: unknown): v
 export async function consumeEvents(
   events: AsyncIterable<AdapterEvent>,
   onDelta: (text: string) => void
-): Promise<{ usage?: AdapterEvent['usage'] }> {
+): Promise<{ usage?: AdapterEvent['usage']; rawUsage?: Record<string, unknown> }> {
   let usage: AdapterEvent['usage']
+  let rawUsage: Record<string, unknown> | undefined
   for await (const event of events) {
     if (event.type === 'text_delta' && event.text) onDelta(event.text)
     if (event.type === 'error') throw new Error(event.error || 'Upstream error')
-    if (event.type === 'done') usage = event.usage
+    if (event.type === 'done') {
+      usage = event.usage
+      rawUsage = event.rawUsage
+    }
   }
-  return { usage }
+  return { usage, rawUsage }
 }
