@@ -42,6 +42,7 @@ const messageListRef = ref<InstanceType<typeof ChatMessageList> | null>(null)
 const {
   onScroll,
   forceScrollToBottom,
+  releasePin,
   beginLayoutTransition,
   isNearTop,
   scrollToTop,
@@ -50,6 +51,8 @@ const {
 
 const BOTTOM_SCROLL_THRESHOLD = 48
 const TOP_SCROLL_THRESHOLD = 200
+/** Align with MarkstreamVirtualTimeline restoreMaxLoadingMs / bottom settle window. */
+const THREAD_RESTORE_SETTLE_MS = 2000
 const showBackToTop = ref(false)
 /** Ignore content-driven scroll-to-bottom while a thread restore may still be settling. */
 let suppressContentScrollUntil = 0
@@ -57,6 +60,21 @@ let suppressContentScrollUntil = 0
 function handleScroll(): void {
   onScroll()
   showBackToTop.value = !isNearTop(TOP_SCROLL_THRESHOLD)
+}
+
+/** ChatMessageList signals whether the restored thread should stay pinned to bottom. */
+function onThreadRestore(pinBottom: boolean): void {
+  suppressContentScrollUntil = Date.now() + THREAD_RESTORE_SETTLE_MS
+  if (pinBottom) {
+    beginLayoutTransition(THREAD_RESTORE_SETTLE_MS)
+    window.setTimeout(() => {
+      onScroll()
+      showBackToTop.value = !isNearTop(TOP_SCROLL_THRESHOLD)
+    }, THREAD_RESTORE_SETTLE_MS)
+  } else {
+    releasePin()
+    showBackToTop.value = !isNearTop(TOP_SCROLL_THRESHOLD)
+  }
 }
 
 function scrollToLatestOnSend(): void {
@@ -121,12 +139,7 @@ onUnmounted(() => {
 watch(
   () => chatStore.activeConversationId,
   () => {
-    // 滚底/恢复由 ChatMessageList 按保存锚点处理；稍后按真实 scrollTop 同步 pin
-    suppressContentScrollUntil = Date.now() + 600
-    window.setTimeout(() => {
-      onScroll()
-      showBackToTop.value = !isNearTop(TOP_SCROLL_THRESHOLD)
-    }, 550)
+    // Pin/restore settle is driven by ChatMessageList @thread-restore.
     void loadAssistantPlanMap()
   }
 )
@@ -256,7 +269,7 @@ watch(
       chatStore.pendingApprovalConversationIds.size
     ] as const,
   () => {
-    // 流式输出时由 MarkstreamVirtualTimeline 的 stick-to-bottom="auto" 处理自动滚动
+    // 流式输出时由 MarkstreamVirtualTimeline 的 stick-to-bottom=true（pin 时）处理自动滚动
     if (chatStore.isStreaming || !isPinnedToBottom.value) return
     if (Date.now() < suppressContentScrollUntil) return
     nextTick(() => messageListRef.value?.scrollToBottom())
@@ -530,8 +543,9 @@ function toggleUserMessageExpanded(messageId: string): void {
               :is-message-streaming="chatStore.isMessageStreaming"
               :has-pending-approval="hasPendingApprovalForMessage"
               :is-user-message-expanded="isUserMessageExpanded"
-              :stick-to-bottom="isPinnedToBottom ? 'auto' : false"
+              :stick-to-bottom="isPinnedToBottom"
               @scroll="handleScroll"
+              @thread-restore="onThreadRestore"
             >
               <template #message="{ msg, measureRef, markdownProps }">
                 <div

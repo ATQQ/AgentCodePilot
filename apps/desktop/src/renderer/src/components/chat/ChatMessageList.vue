@@ -15,8 +15,8 @@ import {
 
 /** Cap restore overlay so rapid switches / Monaco settle never stick forever. */
 const RESTORE_MAX_LOADING_MS = 2000
-/** Retries after virtual/DOM heights finish settling (Monaco, markdown, resize). */
-const BOTTOM_SETTLE_DELAYS_MS = [0, 32, 100, 250, 500] as const
+/** Retries after virtual/DOM heights finish settling (Monaco, markdown, restore). */
+const BOTTOM_SETTLE_DELAYS_MS = [0, 32, 100, 250, 500, 1000, 2000] as const
 
 interface TimelineExpose {
   $el: HTMLElement
@@ -38,6 +38,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   scroll: []
+  threadRestore: [pinBottom: boolean]
 }>()
 
 const timelineRef = ref<TimelineExpose | null>(null)
@@ -71,6 +72,10 @@ function clearBottomSettleTimers(): void {
   bottomSettleTimers.length = 0
 }
 
+function hostWantsStickToBottom(): boolean {
+  return props.stickToBottom !== false
+}
+
 /**
  * Library scrollToBottom uses max(virtualTotal, scrollHeight), but right after switch/resize
  * both can still be settling. Sync DOM scrollHeight on retries so we actually reach the end
@@ -91,6 +96,11 @@ function scrollToBottomSettled(): void {
   for (const ms of BOTTOM_SETTLE_DELAYS_MS) {
     const id = window.setTimeout(() => {
       if (gen !== bottomSettleGeneration) return
+      // User scrolled away — stop pulling them back.
+      if (!hostWantsStickToBottom()) {
+        clearBottomSettleTimers()
+        return
+      }
       syncScrollContainer()
       scrollToBottomNow()
     }, ms)
@@ -130,13 +140,20 @@ watch(
         savedThreadStates.set(oldId, state)
       }
     }
+    // Write initialThreadState before the library's threadKey sync restore can miss it;
+    // flush:'sync' keeps this ahead of child prop application in the same tick.
     const restored = newId ? (savedThreadStates.get(newId) ?? null) : null
     initialThreadState.value = restored
     const pinBottom = wasPinnedToBottom(restored)
+    emit('threadRestore', pinBottom)
     const gen = ++restoreGeneration
     void nextTick(() => {
       if (gen !== restoreGeneration) return
-      timelineRef.value?.restoreThreadState(restored)
+      // Complement library threadKey restore only after initialThreadState is committed.
+      // Skip null restore — it would wipe a correct library-side anchor with an empty one.
+      if (restored) {
+        timelineRef.value?.restoreThreadState(restored)
+      }
       syncScrollContainer()
       if (pinBottom) {
         scrollToBottomSettled()
@@ -145,20 +162,31 @@ watch(
         emit('scroll')
       }
     })
-  }
+  },
+  { flush: 'sync' }
 )
 
 // Width/theme remount: if host still wants stick, re-settle to real bottom after heights rebuild.
 watch(measurementKey, () => {
-  if (props.stickToBottom === false) return
+  if (!hostWantsStickToBottom()) return
   void nextTick(() => {
     requestAnimationFrame(() => {
       syncScrollContainer()
-      if (props.stickToBottom === false) return
+      if (!hostWantsStickToBottom()) return
       scrollToBottomSettled()
     })
   })
 })
+
+// Abort in-flight bottom settle as soon as the host unpins (user scrolled away).
+watch(
+  () => props.stickToBottom,
+  (value) => {
+    if (value !== false) return
+    clearBottomSettleTimers()
+    bottomSettleGeneration++
+  }
+)
 
 watch(timelineRef, () => syncScrollContainer(), { flush: 'post' })
 
@@ -187,7 +215,7 @@ defineExpose({
     markdown-mode="chat"
     markdown-code-renderer="monaco"
     :markdown-fade="false"
-    :stick-to-bottom="stickToBottom ?? 'auto'"
+    :stick-to-bottom="stickToBottom ?? true"
     :restore-max-loading-ms="RESTORE_MAX_LOADING_MS"
     :overscan-px="1200"
     :initial-thread-state="initialThreadState"

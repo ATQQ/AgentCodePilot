@@ -9,6 +9,8 @@ interface AutoScrollResult {
   onScroll: () => void
   /** Marks pinned; actual scroll must go through Markstream scrollToBottom. */
   forceScrollToBottom: () => void
+  /** Clear pin so stick-to-bottom does not fight a mid-thread restore. */
+  releasePin: () => void
   beginLayoutTransition: (ms?: number) => void
   isNearTop: (threshold?: number) => boolean
   scrollToTop: () => void
@@ -34,13 +36,22 @@ export function useAutoScroll(containerRef: AutoScrollContainerRef): AutoScrollR
     isPinnedToBottom.value = isNearBottom()
   }
 
-  function beginLayoutTransition(ms = 250): void {
+  /**
+   * Keep pinned while layout/restore heights settle. Default matches
+   * MarkstreamVirtualTimeline restoreMaxLoadingMs (2000).
+   */
+  function beginLayoutTransition(ms = 2000): void {
     suppressPinUpdatesUntil = Date.now() + ms
     isPinnedToBottom.value = true
   }
 
   function forceScrollToBottom(): void {
     isPinnedToBottom.value = true
+  }
+
+  function releasePin(): void {
+    suppressPinUpdatesUntil = 0
+    isPinnedToBottom.value = false
   }
 
   function isNearTop(threshold = 200): boolean {
@@ -59,6 +70,7 @@ export function useAutoScroll(containerRef: AutoScrollContainerRef): AutoScrollR
   return {
     onScroll,
     forceScrollToBottom,
+    releasePin,
     beginLayoutTransition,
     isNearTop,
     scrollToTop,
