@@ -56,6 +56,15 @@ async function ensureRunning(): Promise<{ host: string; port: number; token: str
   return { host: settings.host, port: settings.port, token: settings.token }
 }
 
+/** Start gateway if needed (for in-app Claude/Codex when settings.enabled). */
+export async function ensureGatewayRunning(): Promise<{
+  host: string
+  port: number
+  token: string
+}> {
+  return ensureRunning()
+}
+
 export function getTakeoverStatus(): TakeoverStatus {
   const settings = loadGatewaySettings()
   const backups = listLiveBackups()

@@ -1,4 +1,5 @@
 import { resolveAdapter } from './adapters'
+import { fetchWithHeadersTimeout } from './fetch-timeout'
 import { routeModel } from './router'
 import {
   appendLogEvent,
@@ -49,7 +50,7 @@ export async function* runUnifiedTurn(
 
   let response: Response
   try {
-    response = await fetch(request.url, {
+    response = await fetchWithHeadersTimeout(request.url, {
       method: 'POST',
       headers: request.headers,
       body: request.body,
@@ -58,11 +59,13 @@ export async function* runUnifiedTurn(
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Upstream fetch failed'
     appendLogEvent(log ?? null, 'error', msg)
+    console.warn(`[Gateway] upstream error host=${upstreamHost} mode=unified: ${msg}`)
     yield { type: 'error', error: msg }
     return
   }
 
   appendLogEvent(log ?? null, 'upstream_status', `HTTP ${response.status}`)
+  console.log(`[Gateway] upstream HTTP ${response.status} host=${upstreamHost} mode=unified`)
   patchRequestLog(log ?? null, {
     httpStatus: response.status,
     upstreamResponseHeaders: headersForLog(response.headers)

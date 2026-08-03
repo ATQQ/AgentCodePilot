@@ -137,6 +137,37 @@ function createAbortFromRequest(req: IncomingMessage): AbortController {
   return controller
 }
 
+function bodyHasTools(body: Record<string, unknown>): boolean {
+  const tools = body.tools
+  return Array.isArray(tools) && tools.length > 0
+}
+
+function crossProtocolToolsError(clientProtocol: string, upstreamProtocol: string): string {
+  return (
+    `跨协议请求无法透传 tools（客户端 ${clientProtocol} → 上游 ${upstreamProtocol}）。` +
+    `请为该 Provider 配置与通道一致的协议 endpoint，或改用同协议 Provider。`
+  )
+}
+
+function logGatewayRoute(input: {
+  path: string
+  model?: string
+  providerId?: string
+  protocol?: string
+  proxyMode: 'passthrough' | 'unified' | 'rejected'
+  detail?: string
+}): void {
+  const parts = [
+    input.path,
+    input.proxyMode,
+    input.providerId ? `provider=${input.providerId}` : null,
+    input.protocol ? `protocol=${input.protocol}` : null,
+    input.model ? `model=${input.model}` : null,
+    input.detail || null
+  ].filter(Boolean)
+  console.log(`[Gateway] ${parts.join(' ')}`)
+}
+
 async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (handleCors(req, res)) return
 
@@ -196,6 +227,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       })
 
       if (canPassthrough(clientProtocol, route.protocol)) {
+        logGatewayRoute({
+          path: effectivePath,
+          model: body.model,
+          providerId: route.provider.id,
+          protocol: route.protocol,
+          proxyMode: 'passthrough'
+        })
         await handlePassthrough({
           clientProtocol,
           parsedBody: body,
@@ -207,11 +245,35 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         return
       }
 
+      if (bodyHasTools(body)) {
+        const errMsg = crossProtocolToolsError(clientProtocol, route.protocol)
+        logGatewayRoute({
+          path: effectivePath,
+          model: body.model,
+          providerId: route.provider.id,
+          protocol: route.protocol,
+          proxyMode: 'rejected',
+          detail: errMsg
+        })
+        finishRequestLog(log, 'error', { error: errMsg })
+        sendError(res, 400, errMsg)
+        return
+      }
+
+      logGatewayRoute({
+        path: effectivePath,
+        model: body.model,
+        providerId: route.provider.id,
+        protocol: route.protocol,
+        proxyMode: 'unified'
+      })
       const turn = openaiToUnified(body)
       await handleChatCompletions(turn, res, abort.signal, log)
     } catch (e) {
       if (!res.headersSent) {
-        sendError(res, 400, e instanceof Error ? e.message : 'Invalid request body')
+        const msg = e instanceof Error ? e.message : 'Invalid request body'
+        console.warn(`[Gateway] ${effectivePath} error: ${msg}`)
+        sendError(res, 400, msg)
       }
     }
     return
@@ -248,6 +310,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       })
 
       if (canPassthrough(clientProtocol, route.protocol)) {
+        logGatewayRoute({
+          path: effectivePath,
+          model: body.model,
+          providerId: route.provider.id,
+          protocol: route.protocol,
+          proxyMode: 'passthrough'
+        })
         await handlePassthrough({
           clientProtocol,
           parsedBody: body,
@@ -260,11 +329,35 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         return
       }
 
+      if (bodyHasTools(body)) {
+        const errMsg = crossProtocolToolsError(clientProtocol, route.protocol)
+        logGatewayRoute({
+          path: effectivePath,
+          model: body.model,
+          providerId: route.provider.id,
+          protocol: route.protocol,
+          proxyMode: 'rejected',
+          detail: errMsg
+        })
+        finishRequestLog(log, 'error', { error: errMsg })
+        sendError(res, 400, errMsg)
+        return
+      }
+
+      logGatewayRoute({
+        path: effectivePath,
+        model: body.model,
+        providerId: route.provider.id,
+        protocol: route.protocol,
+        proxyMode: 'unified'
+      })
       const turn = anthropicToUnified(body)
       await handleMessages(turn, res, abort.signal, log, channel)
     } catch (e) {
       if (!res.headersSent) {
-        sendError(res, 400, e instanceof Error ? e.message : 'Invalid request body')
+        const msg = e instanceof Error ? e.message : 'Invalid request body'
+        console.warn(`[Gateway] ${effectivePath} error: ${msg}`)
+        sendError(res, 400, msg)
       }
     }
     return
@@ -273,7 +366,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   if (req.method === 'POST' && effectivePath === '/v1/responses') {
     try {
       const raw = await parseBody(req)
-      const body = JSON.parse(raw) as ResponsesRequest
+      const body = JSON.parse(raw) as ResponsesRequest & Record<string, unknown>
+      const route = routeModel(body.model, 'codex')
       const log = createRequestLog({
         method: 'POST',
         path: effectivePath,
@@ -283,9 +377,35 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         stream: body.stream,
         requestBody: body
       })
+
+      if (bodyHasTools(body)) {
+        const errMsg =
+          'Responses 路径经 unified 重建会丢弃 tools。请使用支持同协议透传的 Provider，或去掉 tools 后重试。'
+        logGatewayRoute({
+          path: effectivePath,
+          model: body.model,
+          providerId: route.provider.id,
+          protocol: route.protocol,
+          proxyMode: 'rejected',
+          detail: errMsg
+        })
+        finishRequestLog(log, 'error', { error: errMsg })
+        sendError(res, 400, errMsg)
+        return
+      }
+
+      logGatewayRoute({
+        path: effectivePath,
+        model: body.model,
+        providerId: route.provider.id,
+        protocol: route.protocol,
+        proxyMode: 'unified'
+      })
       await handleResponses(body, res, abort.signal, log, 'codex')
     } catch (e) {
-      sendError(res, 400, e instanceof Error ? e.message : 'Invalid request body')
+      const msg = e instanceof Error ? e.message : 'Invalid request body'
+      console.warn(`[Gateway] ${effectivePath} error: ${msg}`)
+      sendError(res, 400, msg)
     }
     return
   }

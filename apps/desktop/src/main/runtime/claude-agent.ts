@@ -7,6 +7,7 @@ import { buildPermissionOptions, buildToolAccessOptions } from './permissions'
 import { DEFAULT_MAX_AGENT_TURNS } from '../../shared/agent-run-settings'
 import { getShellEnvironment } from '../shell/shell-env'
 import { loadGatewaySettings } from '../gateway/settings-store'
+import { ensureGatewayRunning } from '../gateway/live/takeover'
 import { CLAUDE_AUTH_ENV_KEYS, PROXY_MANAGED, buildProxyBaseUrl } from '../gateway/live/constants'
 import { probeClaudeCodeExecutable } from './claude-executable'
 
@@ -157,16 +158,44 @@ export class ClaudeAgentAdapter implements AgentAdapter {
     const claudeExecutable = this.executablePath
     const gatewaySettings = loadGatewaySettings()
     const queryEnv = { ...getShellEnvironment() }
+    let gatewaySettingsOverlay: { env: Record<string, string> } | undefined
+    // When routing via gateway, skip user settings so ~/.claude/settings.json env
+    // (Volces / other proxies) cannot override our BASE_URL. Keep project/local for
+    // CLAUDE.md without rewriting the user's global Claude config.
+    let settingSources: Array<'user' | 'project' | 'local'> | undefined
     if (gatewaySettings.enabled) {
-      queryEnv.ANTHROPIC_BASE_URL = buildProxyBaseUrl(gatewaySettings.host, gatewaySettings.port)
-      for (const key of CLAUDE_AUTH_ENV_KEYS) {
-        queryEnv[key] = PROXY_MANAGED
+      try {
+        const running = await ensureGatewayRunning()
+        const proxyBaseUrl = buildProxyBaseUrl(running.host, running.port)
+        const gatewayEnv: Record<string, string> = {
+          ANTHROPIC_BASE_URL: proxyBaseUrl
+        }
+        for (const key of CLAUDE_AUTH_ENV_KEYS) {
+          gatewayEnv[key] = PROXY_MANAGED
+        }
+        Object.assign(queryEnv, gatewayEnv)
+        // Flag-layer settings (--settings) outrank user/project/local for scalar keys.
+        gatewaySettingsOverlay = { env: gatewayEnv }
+        settingSources = ['project', 'local']
+        console.log(`[ClaudeAgent] routing via gateway ${proxyBaseUrl} (no settings.json write)`)
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error)
+        this.abortControllers.delete(input.conversationId)
+        emit({
+          type: 'message.error',
+          conversationId: input.conversationId,
+          messageId: input.messageId,
+          error: `内置网关未运行：${msg}`
+        })
+        return
       }
     }
     const queryOptions: Options = {
       abortController: controller,
       cwd: input.cwd || app.getPath('home'),
       env: queryEnv,
+      ...(gatewaySettingsOverlay ? { settings: gatewaySettingsOverlay } : {}),
+      ...(settingSources ? { settingSources } : {}),
       ...(claudeExecutable ? { pathToClaudeCodeExecutable: claudeExecutable } : {}),
       ...(input.attachmentDirectories?.length
         ? { additionalDirectories: input.attachmentDirectories }

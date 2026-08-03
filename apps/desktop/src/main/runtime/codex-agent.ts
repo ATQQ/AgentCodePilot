@@ -19,6 +19,7 @@ import { hasLocalCodexCliConfig, probeCodexExecutable } from './codex-executable
 import { loadCodexSdk } from './codex-sdk-loader'
 import { getShellEnvironment } from '../shell/shell-env'
 import { loadGatewaySettings } from '../gateway/settings-store'
+import { ensureGatewayRunning } from '../gateway/live/takeover'
 import { PROXY_MANAGED, buildProxyV1Url } from '../gateway/live/constants'
 
 type ApprovalLevel = NonNullable<AgentRunInput['approvalLevel']>
@@ -185,6 +186,29 @@ export class CodexAgentAdapter implements AgentAdapter {
       return
     }
 
+    let gatewayHost = gatewaySettings.host
+    let gatewayPort = gatewaySettings.port
+    if (useGateway) {
+      try {
+        const running = await ensureGatewayRunning()
+        gatewayHost = running.host
+        gatewayPort = running.port
+        // Prefer SDK baseUrl/apiKey override — do not rewrite ~/.codex/config.toml.
+        console.log(
+          `[CodexAgent] routing via gateway ${buildProxyV1Url(gatewayHost, gatewayPort)} (no config.toml write)`
+        )
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error)
+        emit({
+          type: 'message.error',
+          conversationId: input.conversationId,
+          messageId: input.messageId,
+          error: `内置网关未运行：${msg}`
+        })
+        return
+      }
+    }
+
     const controller = new AbortController()
     this.abortControllers.set(input.conversationId, controller)
     this.messageTextByItemId.clear()
@@ -208,7 +232,7 @@ export class CodexAgentAdapter implements AgentAdapter {
         env: getShellEnvironment(),
         ...(useGateway
           ? {
-              baseUrl: buildProxyV1Url(gatewaySettings.host, gatewaySettings.port),
+              baseUrl: buildProxyV1Url(gatewayHost, gatewayPort),
               apiKey: PROXY_MANAGED
             }
           : {})

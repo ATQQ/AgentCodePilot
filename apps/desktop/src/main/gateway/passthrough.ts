@@ -1,6 +1,7 @@
 import type { IncomingHttpHeaders, ServerResponse } from 'http'
 import { Readable } from 'stream'
 import { joinUrl } from './adapters/base'
+import { fetchWithHeadersTimeout } from './fetch-timeout'
 import { routeModel } from './router'
 import {
   appendLogEvent,
@@ -219,7 +220,7 @@ export async function handlePassthrough(input: {
 
   let upstream: Response
   try {
-    upstream = await fetch(url, {
+    upstream = await fetchWithHeadersTimeout(url, {
       method: 'POST',
       headers,
       body,
@@ -228,6 +229,7 @@ export async function handlePassthrough(input: {
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Upstream fetch failed'
     appendLogEvent(input.log ?? null, 'error', msg)
+    console.warn(`[Gateway] upstream error host=${upstreamHost} mode=passthrough: ${msg}`)
     finishRequestLog(input.log ?? null, 'error', { error: msg })
     throw e
   }
@@ -238,6 +240,7 @@ export async function handlePassthrough(input: {
     'pipe',
     stream ? '开始 pipe 上游 SSE → 客户端' : '开始 pipe 上游响应体 → 客户端'
   )
+  console.log(`[Gateway] upstream HTTP ${upstream.status} host=${upstreamHost} mode=passthrough`)
   patchRequestLog(input.log ?? null, {
     httpStatus: upstream.status,
     upstreamResponseHeaders: headersForLog(upstream.headers)
