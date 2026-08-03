@@ -67,6 +67,8 @@ export interface ToolCall {
   startedAt?: string
 }
 
+export type MessagePart = import('../../../preload/types').MessagePart
+
 export interface Message {
   id: string
   role: 'user' | 'assistant'
@@ -87,6 +89,8 @@ export interface Message {
   }
   attachments?: Attachment[]
   toolCalls?: ToolCall[]
+  /** Chronological content parts for interleaved thinking / text / tools. */
+  parts?: MessagePart[]
   debugInput?: string
   debugOutput?: string
   stopped?: boolean

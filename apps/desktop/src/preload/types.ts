@@ -261,6 +261,8 @@ export interface GatewayProviderPublicPayload {
           baseUrl: string
           apiKey: string
           hasApiKey?: boolean
+          headers?: Record<string, string>
+          bodyDefaults?: Record<string, unknown>
         }
       >
     >
@@ -270,7 +272,17 @@ export interface GatewayProviderPublicPayload {
 export interface ProviderTestDraftPayload {
   models?: string[]
   defaultModel?: string
-  protocols: Partial<Record<'openai-chat' | 'anthropic', { baseUrl: string; apiKey?: string }>>
+  protocols: Partial<
+    Record<
+      'openai-chat' | 'anthropic',
+      {
+        baseUrl: string
+        apiKey?: string
+        headers?: Record<string, string>
+        bodyDefaults?: Record<string, unknown>
+      }
+    >
+  >
 }
 
 export interface ProviderTestInputPayload {
@@ -510,6 +522,11 @@ export interface ConversationListItem {
   updatedAt: string
 }
 
+export type MessagePart =
+  | { type: 'thinking'; content: string; completed?: boolean }
+  | { type: 'text'; content: string }
+  | { type: 'tool'; toolUseId: string }
+
 export interface MessageInfo {
   id: string
   role: 'user' | 'assistant'
@@ -521,6 +538,8 @@ export interface MessageInfo {
   skillRefs?: SkillReference[]
   attachments?: AttachmentPayload[]
   toolCalls?: ToolUseInfo[]
+  /** Chronological content parts for interleaved thinking / text / tools. */
+  parts?: MessagePart[]
   usage?: TokenUsage
   debugInput?: string
   debugOutput?: string
@@ -615,6 +634,12 @@ export type AgentEvent =
   | { type: 'message.started'; conversationId: string; messageId: string }
   | { type: 'message.delta'; conversationId: string; messageId: string; delta: string }
   | {
+      type: 'message.thinking.delta'
+      conversationId: string
+      messageId: string
+      delta: string
+    }
+  | {
       type: 'message.completed'
       conversationId: string
       messageId: string
@@ -661,7 +686,7 @@ export type AgentEvent =
 
 export interface AgentAPI {
   agents: {
-    list: () => Promise<AgentInfo[]>
+    list: (forceRefresh?: boolean) => Promise<AgentInfo[]>
     listModels: (agentId: string, forceRefresh?: boolean) => Promise<ModelCatalogResult>
     getConfig: (agentId: string) => Promise<AgentConfigSettings>
     updateConfig: (agentId: string, config: AgentConfigUpdatePayload) => Promise<ModelCatalogResult>

@@ -1,5 +1,6 @@
 import { joinUrl } from './adapters/base'
 import { resolveProviderConfigForDraft, type ProviderTestInput } from './provider-test'
+import { applyHeaderOverrides } from './request-overrides'
 import type { ProtocolEndpointConfig, WireAdapter } from './types'
 
 const FETCH_TIMEOUT_MS = 15_000
@@ -66,15 +67,17 @@ async function fetchProtocolModels(
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (protocol === 'anthropic') {
     headers['x-api-key'] = endpoint.apiKey
+    headers.Authorization = `Bearer ${endpoint.apiKey}`
     headers['anthropic-version'] = '2023-06-01'
   } else {
     headers.Authorization = `Bearer ${endpoint.apiKey}`
   }
+  const finalHeaders = applyHeaderOverrides(headers, endpoint.headers)
 
   try {
     const res = await fetch(url, {
       method: 'GET',
-      headers,
+      headers: finalHeaders,
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
     })
     const text = await res.text().catch(() => '')

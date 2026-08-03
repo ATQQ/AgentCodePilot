@@ -128,6 +128,19 @@ export const usePanelContextStore = defineStore('panelContext', () => {
     { immediate: true }
   )
 
+  // When workspace folders change (add/remove), reset if selection points at a removed path
+  watch(
+    () => availableFolders.value.map((f) => f.path).join('\0'),
+    () => {
+      if (
+        selectedFolderPath.value &&
+        !availableFolders.value.some((f) => f.path === selectedFolderPath.value)
+      ) {
+        resetFolderSelection()
+      }
+    }
+  )
+
   return {
     selectedFolderPath,
     effectivePanelCwd,

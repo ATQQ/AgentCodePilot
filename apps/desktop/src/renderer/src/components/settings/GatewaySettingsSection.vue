@@ -14,13 +14,15 @@ import type {
   ProviderTestResultPayload
 } from '../../../../preload/types'
 
-type GatewayTab = 'service' | 'providers' | 'claudeCli' | 'claudeDesktop' | 'codex'
+type GatewayTab = 'service' | 'providers' | 'localAccess'
+type ChannelKey = 'claudeCli' | 'claudeDesktop' | 'codex'
 
 const { t } = useI18n()
 
 const loading = ref(true)
 const saving = ref(false)
 const activeTab = ref<GatewayTab>('service')
+const activeChannel = ref<ChannelKey>('claudeCli')
 const settings = ref<GatewaySettingsPayload | null>(null)
 const status = reactive({ running: false, host: '127.0.0.1', port: 3456, token: '' })
 const takeover = ref<GatewayTakeoverStatus | null>(null)
@@ -29,11 +31,21 @@ const presets = ref<ProviderConfigPayload[]>([])
 const logViewer = ref<GatewayLogViewerStatus | null>(null)
 
 const editing = ref(false)
+const formMode = ref<'create' | 'edit'>('create')
+const detailProvider = ref<GatewayProviderPublicPayload | null>(null)
 const testingIds = ref<Record<string, boolean>>({})
 const testingDraft = ref(false)
 const fetchingModels = ref(false)
 const fetchedModels = ref<ProviderRemoteModelPayload[]>([])
 const modelFilter = ref('')
+
+type WireProtocol = 'openai-chat' | 'anthropic'
+type KvRow = { key: string; value: string }
+type ProtocolOverrides = {
+  headers?: Record<string, string>
+  bodyDefaults?: Record<string, unknown>
+}
+
 const form = reactive({
   id: '',
   name: '',
@@ -42,14 +54,161 @@ const form = reactive({
   openaiEnabled: true,
   openaiBaseUrl: '',
   openaiApiKey: '',
+  openaiHeaders: [] as KvRow[],
+  openaiBodyDefaults: [] as KvRow[],
   anthropicEnabled: false,
   anthropicBaseUrl: '',
-  anthropicApiKey: ''
+  anthropicApiKey: '',
+  anthropicHeaders: [] as KvRow[],
+  anthropicBodyDefaults: [] as KvRow[]
 })
 
-type WireProtocol = 'openai-chat' | 'anthropic'
-
 const ALL_CHANNEL_PROTOCOLS: WireProtocol[] = ['openai-chat', 'anthropic']
+
+const drawerTitle = computed(() =>
+  formMode.value === 'edit' ? t('settings.gateway.editProvider') : t('settings.gateway.addProvider')
+)
+
+const detailVisible = computed({
+  get: () => detailProvider.value !== null,
+  set: (visible: boolean) => {
+    if (!visible) detailProvider.value = null
+  }
+})
+
+function emptyKvRows(): KvRow[] {
+  return []
+}
+
+function objectToKvRows(obj?: Record<string, unknown> | null): KvRow[] {
+  if (!obj) return emptyKvRows()
+  return Object.entries(obj).map(([key, value]) => ({
+    key,
+    value: typeof value === 'string' ? value : JSON.stringify(value)
+  }))
+}
+
+function headersFromKv(rows: KvRow[]): Record<string, string> | undefined {
+  const out: Record<string, string> = {}
+  for (const row of rows) {
+    const name = row.key.trim()
+    if (!name) continue
+    out[name] = row.value
+  }
+  return Object.keys(out).length ? out : undefined
+}
+
+function bodyDefaultsFromKv(rows: KvRow[]): Record<string, unknown> | undefined {
+  const out: Record<string, unknown> = {}
+  for (const row of rows) {
+    const name = row.key.trim()
+    if (!name) continue
+    const raw = row.value.trim()
+    if (!raw) {
+      out[name] = ''
+      continue
+    }
+    try {
+      out[name] = JSON.parse(raw) as unknown
+    } catch {
+      out[name] = row.value
+    }
+  }
+  return Object.keys(out).length ? out : undefined
+}
+
+function overridesFromKv(headers: KvRow[], bodyDefaults: KvRow[]): ProtocolOverrides {
+  const headerMap = headersFromKv(headers)
+  const bodyMap = bodyDefaultsFromKv(bodyDefaults)
+  return {
+    ...(headerMap ? { headers: headerMap } : {}),
+    ...(bodyMap ? { bodyDefaults: bodyMap } : {})
+  }
+}
+
+function attachProtocolOverrides(
+  endpoint: Record<string, unknown>,
+  overrides: ProtocolOverrides
+): Record<string, unknown> {
+  if (overrides.headers) endpoint.headers = overrides.headers
+  if (overrides.bodyDefaults) endpoint.bodyDefaults = overrides.bodyDefaults
+  return endpoint
+}
+
+function addKvRow(rows: KvRow[]): void {
+  rows.push({ key: '', value: '' })
+}
+
+function removeKvRow(rows: KvRow[], index: number): void {
+  rows.splice(index, 1)
+}
+
+function loadEndpointOverrides(
+  endpoint?: {
+    headers?: Record<string, string>
+    bodyDefaults?: Record<string, unknown>
+  } | null
+): { headers: KvRow[]; bodyDefaults: KvRow[] } {
+  return {
+    headers: objectToKvRows(endpoint?.headers),
+    bodyDefaults: objectToKvRows(endpoint?.bodyDefaults)
+  }
+}
+
+function formatOverridesPreview(
+  endpoint?: {
+    headers?: Record<string, string>
+    bodyDefaults?: Record<string, unknown>
+  } | null
+): string {
+  if (!endpoint) return '—'
+  const parts: string[] = []
+  if (endpoint.headers && Object.keys(endpoint.headers).length) {
+    parts.push(`headers: ${JSON.stringify(endpoint.headers)}`)
+  }
+  if (endpoint.bodyDefaults && Object.keys(endpoint.bodyDefaults).length) {
+    parts.push(`bodyDefaults: ${JSON.stringify(endpoint.bodyDefaults)}`)
+  }
+  return parts.length ? parts.join('\n') : '—'
+}
+
+function primaryBaseUrl(provider: GatewayProviderPublicPayload): string {
+  const protocols = availableProtocols(provider)
+  if (protocols.length === 1) {
+    return provider.config.protocols[protocols[0]]?.baseUrl || provider.config.baseUrl || '—'
+  }
+  if (protocols.length > 1) {
+    return protocols
+      .map((p) => provider.config.protocols[p]?.baseUrl || '')
+      .filter(Boolean)
+      .join(' · ')
+  }
+  return provider.config.baseUrl || '—'
+}
+
+function openDetail(provider: GatewayProviderPublicPayload): void {
+  detailProvider.value = provider
+}
+
+function editFromDetail(): void {
+  const provider = detailProvider.value
+  detailProvider.value = null
+  if (provider) openEdit(provider)
+}
+
+function protocolHasApiKey(
+  provider: GatewayProviderPublicPayload,
+  protocol: WireProtocol
+): boolean {
+  const endpoint = provider.config.protocols[protocol]
+  if (endpoint?.hasApiKey) return true
+  const key =
+    endpoint?.apiKey || (protocol === provider.config.adapter ? provider.config.apiKey : '') || ''
+  return (
+    Boolean(key.trim()) ||
+    Boolean(provider.config.hasApiKey && protocol === provider.config.adapter)
+  )
+}
 
 function parseModels(text: string): string[] {
   return text
@@ -249,6 +408,7 @@ async function setTakeover(app: GatewayTakeoverApp, enabled: boolean): Promise<v
 }
 
 function openCreate(preset?: ProviderConfigPayload): void {
+  formMode.value = 'create'
   editing.value = true
   clearFetchState()
   form.id = preset?.id || `provider-${Date.now().toString(36)}`
@@ -272,13 +432,20 @@ function openCreate(preset?: ProviderConfigPayload): void {
   form.openaiEnabled = Boolean(openai?.baseUrl) || legacyAdapter === 'openai-chat'
   form.openaiBaseUrl = openai?.baseUrl || (legacyAdapter === 'openai-chat' ? legacyBase : '')
   form.openaiApiKey = ''
+  const openaiOverrides = loadEndpointOverrides(openai)
+  form.openaiHeaders = openaiOverrides.headers
+  form.openaiBodyDefaults = openaiOverrides.bodyDefaults
 
   form.anthropicEnabled = Boolean(anthropic?.baseUrl) || legacyAdapter === 'anthropic'
   form.anthropicBaseUrl = anthropic?.baseUrl || (legacyAdapter === 'anthropic' ? legacyBase : '')
   form.anthropicApiKey = ''
+  const anthropicOverrides = loadEndpointOverrides(anthropic)
+  form.anthropicHeaders = anthropicOverrides.headers
+  form.anthropicBodyDefaults = anthropicOverrides.bodyDefaults
 }
 
 function openEdit(provider: GatewayProviderPublicPayload): void {
+  formMode.value = 'edit'
   editing.value = true
   clearFetchState()
   form.id = provider.id
@@ -295,12 +462,18 @@ function openEdit(provider: GatewayProviderPublicPayload): void {
   form.openaiEnabled = Boolean(openai?.baseUrl) || legacyIsOpenAi
   form.openaiBaseUrl = openai?.baseUrl || (legacyIsOpenAi ? provider.config.baseUrl : '') || ''
   form.openaiApiKey = openai?.apiKey || (legacyIsOpenAi ? provider.config.apiKey : '') || ''
+  const openaiOverrides = loadEndpointOverrides(openai)
+  form.openaiHeaders = openaiOverrides.headers
+  form.openaiBodyDefaults = openaiOverrides.bodyDefaults
 
   form.anthropicEnabled = Boolean(anthropic?.baseUrl) || legacyIsAnthropic
   form.anthropicBaseUrl =
     anthropic?.baseUrl || (legacyIsAnthropic ? provider.config.baseUrl : '') || ''
   form.anthropicApiKey =
     anthropic?.apiKey || (legacyIsAnthropic ? provider.config.apiKey : '') || ''
+  const anthropicOverrides = loadEndpointOverrides(anthropic)
+  form.anthropicHeaders = anthropicOverrides.headers
+  form.anthropicBodyDefaults = anthropicOverrides.bodyDefaults
 }
 
 function cancelEdit(): void {
@@ -313,7 +486,10 @@ function onModelsTextInput(): void {
 }
 
 async function saveProvider(): Promise<void> {
-  if (!form.id.trim() || !form.name.trim()) {
+  if (!form.id.trim()) {
+    form.id = `provider-${Date.now().toString(36)}`
+  }
+  if (!form.name.trim()) {
     ElMessage.warning(t('settings.gateway.providerRequired'))
     return
   }
@@ -334,16 +510,22 @@ async function saveProvider(): Promise<void> {
   try {
     const protocols: Record<string, Record<string, unknown>> = {}
     if (form.openaiEnabled) {
-      protocols['openai-chat'] = {
-        baseUrl: form.openaiBaseUrl.trim(),
-        apiKey: form.openaiApiKey.trim()
-      }
+      protocols['openai-chat'] = attachProtocolOverrides(
+        {
+          baseUrl: form.openaiBaseUrl.trim(),
+          apiKey: form.openaiApiKey.trim()
+        },
+        overridesFromKv(form.openaiHeaders, form.openaiBodyDefaults)
+      )
     }
     if (form.anthropicEnabled) {
-      protocols.anthropic = {
-        baseUrl: form.anthropicBaseUrl.trim(),
-        apiKey: form.anthropicApiKey.trim()
-      }
+      protocols.anthropic = attachProtocolOverrides(
+        {
+          baseUrl: form.anthropicBaseUrl.trim(),
+          apiKey: form.anthropicApiKey.trim()
+        },
+        overridesFromKv(form.anthropicHeaders, form.anthropicBodyDefaults)
+      )
     }
     const adapter: WireProtocol = form.openaiEnabled ? 'openai-chat' : 'anthropic'
     const models = parseModels(form.modelsText)
@@ -528,20 +710,36 @@ function onAddProvider(): void {
 
 function buildDraftFromForm() {
   const protocols: {
-    'openai-chat'?: { baseUrl: string; apiKey?: string }
-    anthropic?: { baseUrl: string; apiKey?: string }
+    'openai-chat'?: {
+      baseUrl: string
+      apiKey?: string
+      headers?: Record<string, string>
+      bodyDefaults?: Record<string, unknown>
+    }
+    anthropic?: {
+      baseUrl: string
+      apiKey?: string
+      headers?: Record<string, string>
+      bodyDefaults?: Record<string, unknown>
+    }
   } = {}
   if (form.openaiEnabled && form.openaiBaseUrl.trim()) {
-    protocols['openai-chat'] = {
-      baseUrl: form.openaiBaseUrl.trim(),
-      apiKey: form.openaiApiKey.trim() || undefined
-    }
+    protocols['openai-chat'] = attachProtocolOverrides(
+      {
+        baseUrl: form.openaiBaseUrl.trim(),
+        apiKey: form.openaiApiKey.trim() || undefined
+      },
+      overridesFromKv(form.openaiHeaders, form.openaiBodyDefaults)
+    ) as (typeof protocols)['openai-chat']
   }
   if (form.anthropicEnabled && form.anthropicBaseUrl.trim()) {
-    protocols.anthropic = {
-      baseUrl: form.anthropicBaseUrl.trim(),
-      apiKey: form.anthropicApiKey.trim() || undefined
-    }
+    protocols.anthropic = attachProtocolOverrides(
+      {
+        baseUrl: form.anthropicBaseUrl.trim(),
+        apiKey: form.anthropicApiKey.trim() || undefined
+      },
+      overridesFromKv(form.anthropicHeaders, form.anthropicBodyDefaults)
+    ) as (typeof protocols)['anthropic']
   }
   return {
     models: parseModels(form.modelsText),
@@ -784,305 +982,456 @@ async function fetchDraftModels(): Promise<void> {
           </el-dropdown>
         </div>
 
-        <div v-if="editing" class="setting-card edit-card">
-          <div class="form-grid">
-            <el-input v-model="form.id" :placeholder="t('settings.gateway.providerId')" />
-            <el-input v-model="form.name" :placeholder="t('settings.gateway.providerName')" />
-            <div class="field-label">{{ t('settings.gateway.modelsLabel') }}</div>
-            <el-input
-              v-model="form.modelsText"
-              type="textarea"
-              :rows="2"
-              :placeholder="t('settings.gateway.modelsPlaceholder')"
-              @input="onModelsTextInput"
-            />
-            <div class="models-fetch-row">
-              <el-button
-                :loading="fetchingModels"
-                :disabled="saving || testingDraft"
-                @click="fetchDraftModels"
-              >
-                {{ t('settings.gateway.fetchModels') }}
-              </el-button>
-              <span v-if="fetchedModels.length" class="setting-desc">
-                {{ t('settings.gateway.fetchModelsHint', { count: fetchedModels.length }) }}
-              </span>
-            </div>
-            <div v-if="fetchedModels.length" class="fetched-models">
-              <el-input
-                v-model="modelFilter"
-                clearable
-                size="small"
-                :placeholder="t('settings.gateway.fetchModelsFilter')"
-              />
-              <el-checkbox-group
-                class="fetched-models-list"
-                :model-value="fetchedCheckedIds"
-                @change="onFetchedSelectionChange"
-              >
-                <el-checkbox
-                  v-for="m in filteredFetchedModels"
-                  :key="m.id"
-                  :label="m.id"
-                  :value="m.id"
-                >
-                  <span class="mono">{{ m.id }}</span>
-                  <span v-if="m.name && m.name !== m.id" class="model-name">{{ m.name }}</span>
-                </el-checkbox>
-              </el-checkbox-group>
-            </div>
-            <div class="field-label">{{ t('settings.gateway.defaultModel') }}</div>
-            <el-select
-              v-model="form.defaultModel"
-              clearable
-              filterable
-              :disabled="enteredModels.length === 0"
-              :placeholder="
-                enteredModels.length
-                  ? t('settings.gateway.defaultModel')
-                  : t('settings.gateway.defaultModelNeedList')
-              "
-            >
-              <el-option v-for="m in enteredModels" :key="m" :label="m" :value="m" />
-            </el-select>
-          </div>
-
-          <div class="protocol-block">
-            <label class="protocol-toggle">
-              <input v-model="form.openaiEnabled" type="checkbox" />
-              <span>OpenAI Chat</span>
-            </label>
-            <div v-if="form.openaiEnabled" class="form-grid">
-              <el-input
-                v-model="form.openaiBaseUrl"
-                placeholder="https://api.example.com 或 .../v3"
-              />
-              <el-input
-                v-model="form.openaiApiKey"
-                :placeholder="t('settings.gateway.apiKeyPlaceholder')"
-              />
-            </div>
-          </div>
-
-          <div class="protocol-block">
-            <label class="protocol-toggle">
-              <input v-model="form.anthropicEnabled" type="checkbox" />
-              <span>Anthropic Messages</span>
-            </label>
-            <div v-if="form.anthropicEnabled" class="form-grid">
-              <el-input
-                v-model="form.anthropicBaseUrl"
-                placeholder="https://api.anthropic.com 或 .../api/coding"
-              />
-              <el-input
-                v-model="form.anthropicApiKey"
-                :placeholder="t('settings.gateway.apiKeyPlaceholder')"
-              />
-            </div>
-          </div>
-
-          <div class="form-actions">
-            <el-button @click="cancelEdit">{{ t('common.cancel') }}</el-button>
-            <el-button
-              :loading="testingDraft"
-              :disabled="saving || fetchingModels"
-              @click="testDraftProvider"
-            >
-              {{ t('settings.gateway.testConnection') }}
-            </el-button>
-            <el-button type="primary" :loading="saving" @click="saveProvider">
-              {{ t('common.save') }}
-            </el-button>
-          </div>
-        </div>
-
         <div v-if="providers.length === 0" class="empty">
           {{ t('settings.gateway.noProviders') }}
         </div>
-        <div v-for="provider in providers" :key="provider.id" class="setting-card provider-card">
-          <div class="provider-head">
-            <div>
+        <div v-for="provider in providers" :key="provider.id" class="provider-card">
+          <div class="provider-main">
+            <div class="provider-title-row">
               <div class="setting-label">{{ provider.name }}</div>
-              <div class="setting-desc mono">{{ provider.id }}</div>
-              <div class="setting-desc mono">
-                {{ t('settings.gateway.defaultModel') }}:
-                {{ provider.config.defaultModel || '—' }}
-              </div>
-              <div class="setting-desc mono">
-                {{ t('settings.gateway.modelsLabel') }}:
-                {{ (provider.config.models || []).join(', ') || '—' }}
-              </div>
-              <div
-                v-for="proto in availableProtocols(provider)"
-                :key="proto"
-                class="setting-desc mono"
-              >
-                <div>
-                  {{ protocolLabel(proto) }} ·
-                  {{ provider.config.protocols[proto]?.baseUrl || provider.config.baseUrl }}
+              <span v-if="settings?.defaultProviderId === provider.id" class="default-badge">
+                {{ t('settings.gateway.isDefault') }}
+              </span>
+            </div>
+            <div class="setting-desc mono">{{ primaryBaseUrl(provider) }}</div>
+            <div class="protocol-tags">
+              <span v-for="proto in availableProtocols(provider)" :key="proto" class="proto-tag">
+                {{ protocolLabel(proto) }}
+              </span>
+            </div>
+          </div>
+          <div class="provider-actions">
+            <el-button size="small" @click="() => openDetail(provider)">
+              {{ t('settings.gateway.viewMore') }}
+            </el-button>
+            <el-button size="small" @click="() => openEdit(provider)">
+              {{ t('common.edit') }}
+            </el-button>
+            <el-button
+              size="small"
+              type="danger"
+              :icon="Delete"
+              @click="() => deleteProvider(provider.id)"
+            />
+          </div>
+        </div>
+
+        <el-drawer
+          v-model="editing"
+          :title="drawerTitle"
+          size="560px"
+          destroy-on-close
+          class="provider-drawer"
+          @close="cancelEdit"
+        >
+          <div class="drawer-body">
+            <div class="form-grid">
+              <div class="field-label">{{ t('settings.gateway.providerName') }}</div>
+              <el-input v-model="form.name" :placeholder="t('settings.gateway.providerName')" />
+            </div>
+
+            <div class="protocol-block">
+              <label class="protocol-toggle">
+                <input v-model="form.openaiEnabled" type="checkbox" />
+                <span>OpenAI Chat</span>
+              </label>
+              <div v-if="form.openaiEnabled" class="form-grid">
+                <el-input
+                  v-model="form.openaiBaseUrl"
+                  placeholder="https://api.example.com 或 .../v3"
+                />
+                <el-input
+                  v-model="form.openaiApiKey"
+                  :placeholder="t('settings.gateway.apiKeyPlaceholder')"
+                />
+                <div class="field-label">{{ t('settings.gateway.headersLabel') }}</div>
+                <div class="setting-desc">{{ t('settings.gateway.headersDesc') }}</div>
+                <div v-for="(row, idx) in form.openaiHeaders" :key="`oh-${idx}`" class="kv-row">
+                  <el-input v-model="row.key" :placeholder="t('settings.gateway.kvKey')" />
+                  <el-input v-model="row.value" :placeholder="t('settings.gateway.kvValue')" />
+                  <el-button
+                    :icon="Delete"
+                    text
+                    type="danger"
+                    @click="() => removeKvRow(form.openaiHeaders, idx)"
+                  />
                 </div>
-                <div>
-                  Key:
-                  {{
-                    (
-                      provider.config.protocols[proto]?.apiKey ||
-                      (proto === provider.config.adapter ? provider.config.apiKey : '') ||
-                      ''
-                    ).trim() || t('settings.gateway.noApiKey')
-                  }}
+                <el-button size="small" @click="addKvRow(form.openaiHeaders)">
+                  {{ t('settings.gateway.addKvRow') }}
+                </el-button>
+                <div class="field-label">{{ t('settings.gateway.bodyDefaultsLabel') }}</div>
+                <div class="setting-desc">{{ t('settings.gateway.bodyDefaultsDesc') }}</div>
+                <div
+                  v-for="(row, idx) in form.openaiBodyDefaults"
+                  :key="`ob-${idx}`"
+                  class="kv-row"
+                >
+                  <el-input v-model="row.key" :placeholder="t('settings.gateway.kvKey')" />
+                  <el-input
+                    v-model="row.value"
+                    :placeholder="t('settings.gateway.bodyValuePlaceholder')"
+                  />
+                  <el-button
+                    :icon="Delete"
+                    text
+                    type="danger"
+                    @click="() => removeKvRow(form.openaiBodyDefaults, idx)"
+                  />
                 </div>
+                <el-button size="small" @click="addKvRow(form.openaiBodyDefaults)">
+                  {{ t('settings.gateway.addKvRow') }}
+                </el-button>
               </div>
             </div>
-            <div class="provider-actions">
-              <el-button
-                size="small"
-                :type="settings?.defaultProviderId === provider.id ? 'primary' : 'default'"
-                @click="() => setDefaultProvider(provider.id)"
+
+            <div class="protocol-block">
+              <label class="protocol-toggle">
+                <input v-model="form.anthropicEnabled" type="checkbox" />
+                <span>Anthropic Messages</span>
+              </label>
+              <div v-if="form.anthropicEnabled" class="form-grid">
+                <el-input
+                  v-model="form.anthropicBaseUrl"
+                  placeholder="https://api.anthropic.com 或 .../api/coding"
+                />
+                <el-input
+                  v-model="form.anthropicApiKey"
+                  :placeholder="t('settings.gateway.apiKeyPlaceholder')"
+                />
+                <div class="field-label">{{ t('settings.gateway.headersLabel') }}</div>
+                <div class="setting-desc">{{ t('settings.gateway.headersDesc') }}</div>
+                <div v-for="(row, idx) in form.anthropicHeaders" :key="`ah-${idx}`" class="kv-row">
+                  <el-input v-model="row.key" :placeholder="t('settings.gateway.kvKey')" />
+                  <el-input v-model="row.value" :placeholder="t('settings.gateway.kvValue')" />
+                  <el-button
+                    :icon="Delete"
+                    text
+                    type="danger"
+                    @click="() => removeKvRow(form.anthropicHeaders, idx)"
+                  />
+                </div>
+                <el-button size="small" @click="addKvRow(form.anthropicHeaders)">
+                  {{ t('settings.gateway.addKvRow') }}
+                </el-button>
+                <div class="field-label">{{ t('settings.gateway.bodyDefaultsLabel') }}</div>
+                <div class="setting-desc">{{ t('settings.gateway.bodyDefaultsDesc') }}</div>
+                <div
+                  v-for="(row, idx) in form.anthropicBodyDefaults"
+                  :key="`ab-${idx}`"
+                  class="kv-row"
+                >
+                  <el-input v-model="row.key" :placeholder="t('settings.gateway.kvKey')" />
+                  <el-input
+                    v-model="row.value"
+                    :placeholder="t('settings.gateway.bodyValuePlaceholder')"
+                  />
+                  <el-button
+                    :icon="Delete"
+                    text
+                    type="danger"
+                    @click="() => removeKvRow(form.anthropicBodyDefaults, idx)"
+                  />
+                </div>
+                <el-button size="small" @click="addKvRow(form.anthropicBodyDefaults)">
+                  {{ t('settings.gateway.addKvRow') }}
+                </el-button>
+              </div>
+            </div>
+
+            <div class="form-grid">
+              <div class="field-label">{{ t('settings.gateway.modelsLabel') }}</div>
+              <el-input
+                v-model="form.modelsText"
+                type="textarea"
+                :rows="2"
+                :placeholder="t('settings.gateway.modelsPlaceholder')"
+                @input="onModelsTextInput"
+              />
+              <div class="models-fetch-row">
+                <el-button
+                  :loading="fetchingModels"
+                  :disabled="saving || testingDraft"
+                  @click="fetchDraftModels"
+                >
+                  {{ t('settings.gateway.fetchModels') }}
+                </el-button>
+                <span v-if="fetchedModels.length" class="setting-desc">
+                  {{ t('settings.gateway.fetchModelsHint', { count: fetchedModels.length }) }}
+                </span>
+              </div>
+              <div v-if="fetchedModels.length" class="fetched-models">
+                <el-input
+                  v-model="modelFilter"
+                  clearable
+                  size="small"
+                  :placeholder="t('settings.gateway.fetchModelsFilter')"
+                />
+                <el-checkbox-group
+                  class="fetched-models-list"
+                  :model-value="fetchedCheckedIds"
+                  @change="onFetchedSelectionChange"
+                >
+                  <el-checkbox
+                    v-for="m in filteredFetchedModels"
+                    :key="m.id"
+                    :label="m.id"
+                    :value="m.id"
+                  >
+                    <span class="mono">{{ m.id }}</span>
+                    <span v-if="m.name && m.name !== m.id" class="model-name">{{ m.name }}</span>
+                  </el-checkbox>
+                </el-checkbox-group>
+              </div>
+              <div class="field-label">{{ t('settings.gateway.defaultModel') }}</div>
+              <el-select
+                v-model="form.defaultModel"
+                clearable
+                filterable
+                :disabled="enteredModels.length === 0"
+                :placeholder="
+                  enteredModels.length
+                    ? t('settings.gateway.defaultModel')
+                    : t('settings.gateway.defaultModelNeedList')
+                "
               >
-                {{
-                  settings?.defaultProviderId === provider.id
-                    ? t('settings.gateway.isDefault')
-                    : t('settings.gateway.setDefault')
-                }}
-              </el-button>
+                <el-option v-for="m in enteredModels" :key="m" :label="m" :value="m" />
+              </el-select>
+            </div>
+          </div>
+
+          <template #footer>
+            <div class="drawer-footer">
+              <el-button @click="cancelEdit">{{ t('common.cancel') }}</el-button>
               <el-button
-                size="small"
-                :loading="Boolean(testingIds[provider.id])"
-                @click="() => testSavedProvider(provider.id)"
+                :loading="testingDraft"
+                :disabled="saving || fetchingModels"
+                @click="testDraftProvider"
               >
                 {{ t('settings.gateway.testConnection') }}
               </el-button>
-              <el-button size="small" @click="() => openEdit(provider)">
-                {{ t('common.edit') }}
+              <el-button type="primary" :loading="saving" @click="saveProvider">
+                {{ t('common.save') }}
               </el-button>
-              <el-button
-                size="small"
-                type="danger"
-                :icon="Delete"
-                @click="() => deleteProvider(provider.id)"
-              />
             </div>
-          </div>
-        </div>
+          </template>
+        </el-drawer>
+
+        <el-dialog
+          v-model="detailVisible"
+          :title="detailProvider?.name || t('settings.gateway.viewMore')"
+          width="560px"
+          destroy-on-close
+        >
+          <template v-if="detailProvider">
+            <div class="detail-section">
+              <div class="field-label">{{ t('settings.gateway.supportedProtocols') }}</div>
+              <div class="protocol-tags">
+                <span
+                  v-for="proto in availableProtocols(detailProvider)"
+                  :key="proto"
+                  class="proto-tag"
+                >
+                  {{ protocolLabel(proto) }}
+                </span>
+              </div>
+            </div>
+
+            <div
+              v-for="proto in availableProtocols(detailProvider)"
+              :key="proto"
+              class="detail-section"
+            >
+              <div class="setting-label">{{ protocolLabel(proto) }}</div>
+              <div class="setting-desc mono">
+                Base URL:
+                {{
+                  detailProvider.config.protocols[proto]?.baseUrl || detailProvider.config.baseUrl
+                }}
+              </div>
+              <div class="setting-desc">
+                API Key:
+                {{
+                  protocolHasApiKey(detailProvider, proto)
+                    ? t('settings.gateway.hasApiKey')
+                    : t('settings.gateway.noApiKey')
+                }}
+              </div>
+              <pre class="detail-pre">{{
+                formatOverridesPreview(detailProvider.config.protocols[proto])
+              }}</pre>
+            </div>
+
+            <div class="detail-section">
+              <div class="field-label">{{ t('settings.gateway.defaultModel') }}</div>
+              <div class="setting-desc mono">{{ detailProvider.config.defaultModel || '—' }}</div>
+            </div>
+            <div class="detail-section">
+              <div class="field-label">{{ t('settings.gateway.modelsLabel') }}</div>
+              <div class="setting-desc mono">
+                {{ (detailProvider.config.models || []).join(', ') || '—' }}
+              </div>
+            </div>
+          </template>
+          <template #footer>
+            <el-button
+              v-if="detailProvider"
+              :type="settings?.defaultProviderId === detailProvider.id ? 'primary' : 'default'"
+              :disabled="saving"
+              @click="setDefaultProvider(detailProvider.id)"
+            >
+              {{
+                settings?.defaultProviderId === detailProvider.id
+                  ? t('settings.gateway.isDefault')
+                  : t('settings.gateway.setDefault')
+              }}
+            </el-button>
+            <el-button
+              v-if="detailProvider"
+              :loading="Boolean(testingIds[detailProvider.id])"
+              @click="testSavedProvider(detailProvider.id)"
+            >
+              {{ t('settings.gateway.testConnection') }}
+            </el-button>
+            <el-button v-if="detailProvider" type="primary" @click="editFromDetail">
+              {{ t('common.edit') }}
+            </el-button>
+            <el-button @click="detailVisible = false">{{ t('common.close') }}</el-button>
+          </template>
+        </el-dialog>
       </el-tab-pane>
 
-      <el-tab-pane
-        v-for="channel in channelTabs"
-        :key="channel.key"
-        :name="channel.key"
-        :disabled="channel.disabled && channel.key === 'claudeDesktop'"
-      >
-        <template #label>
-          <span class="tab-label">
-            {{ channel.label }}
+      <el-tab-pane :label="t('settings.gateway.tabLocalAccess')" name="localAccess">
+        <p class="page-desc">{{ t('settings.gateway.localAccessDesc') }}</p>
+
+        <div class="channel-switch">
+          <button
+            v-for="channel in channelTabs"
+            :key="channel.key"
+            type="button"
+            class="channel-chip"
+            :class="{
+              active: activeChannel === channel.key,
+              enabled: channel.enabled,
+              disabled: channel.disabled && channel.key === 'claudeDesktop'
+            }"
+            :disabled="channel.disabled && channel.key === 'claudeDesktop'"
+            @click="() => (activeChannel = channel.key)"
+          >
+            <span>{{ channel.label }}</span>
             <span
               v-if="channel.enabled"
               class="tab-dot"
               :title="t('settings.gateway.takeoverOn')"
             />
-          </span>
-        </template>
+          </button>
+        </div>
 
-        <p class="page-desc">{{ t('settings.gateway.channelDesc') }}</p>
+        <template v-for="channel in channelTabs" :key="channel.key">
+          <div v-show="activeChannel === channel.key">
+            <p class="page-desc">{{ t('settings.gateway.channelDesc') }}</p>
 
-        <div class="setting-card">
-          <div class="setting-row">
-            <div>
-              <div class="setting-label">{{ t('settings.gateway.channelEnable') }}</div>
-              <div class="setting-desc">
-                <template v-if="channel.key === 'claudeCli'"> ~/.claude/settings.json </template>
-                <template v-else-if="channel.key === 'claudeDesktop'">
+            <div class="setting-card">
+              <div class="setting-row">
+                <div>
+                  <div class="setting-label">{{ t('settings.gateway.channelEnable') }}</div>
+                  <div class="setting-desc">
+                    <template v-if="channel.key === 'claudeCli'">
+                      ~/.claude/settings.json
+                    </template>
+                    <template v-else-if="channel.key === 'claudeDesktop'">
+                      {{
+                        takeover?.claudeDesktopSupported
+                          ? t('settings.gateway.takeoverClaudeDesktopDesc')
+                          : t('settings.gateway.takeoverUnsupported')
+                      }}
+                    </template>
+                    <template v-else>~/.codex/config.toml</template>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="toggle-switch"
+                  :class="{ active: channelEnabled(channel.key) }"
+                  role="switch"
+                  :disabled="
+                    saving || (channel.key === 'claudeDesktop' && !takeover?.claudeDesktopSupported)
+                  "
+                  @click="() => onToggleChannel(channel.key)"
+                />
+              </div>
+
+              <div class="setting-row">
+                <div>
+                  <div class="setting-label">{{ t('settings.gateway.channelProtocol') }}</div>
+                  <div class="setting-desc">{{ t('settings.gateway.channelProtocolDesc') }}</div>
+                </div>
+                <el-select
+                  :model-value="channelProtocol(channel.key)"
+                  style="width: 200px"
+                  :disabled="saving"
+                  @change="(v: WireProtocol) => setChannelProtocol(channel.key, v)"
+                >
+                  <el-option
+                    v-for="proto in ALL_CHANNEL_PROTOCOLS"
+                    :key="proto"
+                    :label="protocolLabel(proto)"
+                    :value="proto"
+                  />
+                </el-select>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-label">{{ t('settings.gateway.channelStatus') }}</div>
+                <div class="setting-desc">
+                  <span class="status-pill" :class="{ on: channelEnabled(channel.key) }">
+                    {{
+                      channelEnabled(channel.key)
+                        ? t('settings.gateway.takeoverOn')
+                        : t('settings.gateway.takeoverOff')
+                    }}
+                  </span>
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-label">{{ t('settings.gateway.proxyTarget') }}</div>
+                <div class="setting-desc mono">
+                  {{ takeover?.proxyBaseUrl || baseUrlDisplay || '—' }}
+                </div>
+              </div>
+
+              <div class="setting-row">
+                <div class="setting-label">{{ t('settings.gateway.backupAt') }}</div>
+                <div class="setting-desc mono">
                   {{
-                    takeover?.claudeDesktopSupported
-                      ? t('settings.gateway.takeoverClaudeDesktopDesc')
-                      : t('settings.gateway.takeoverUnsupported')
+                    backedUpAt(
+                      channel.key === 'claudeCli'
+                        ? 'claude'
+                        : channel.key === 'claudeDesktop'
+                          ? 'claude-desktop'
+                          : 'codex'
+                    ) || t('settings.gateway.noBackup')
                   }}
-                </template>
-                <template v-else>~/.codex/config.toml</template>
+                </div>
               </div>
             </div>
-            <button
-              type="button"
-              class="toggle-switch"
-              :class="{ active: channelEnabled(channel.key) }"
-              role="switch"
-              :disabled="
-                saving || (channel.key === 'claudeDesktop' && !takeover?.claudeDesktopSupported)
-              "
-              @click="() => onToggleChannel(channel.key)"
-            />
-          </div>
 
-          <div class="setting-row">
-            <div>
-              <div class="setting-label">{{ t('settings.gateway.channelProtocol') }}</div>
-              <div class="setting-desc">{{ t('settings.gateway.channelProtocolDesc') }}</div>
-            </div>
-            <el-select
-              :model-value="channelProtocol(channel.key)"
-              style="width: 200px"
-              :disabled="saving"
-              @change="(v: WireProtocol) => setChannelProtocol(channel.key, v)"
-            >
-              <el-option
-                v-for="proto in ALL_CHANNEL_PROTOCOLS"
-                :key="proto"
-                :label="protocolLabel(proto)"
-                :value="proto"
-              />
-            </el-select>
-          </div>
-
-          <div class="setting-row">
-            <div class="setting-label">{{ t('settings.gateway.channelStatus') }}</div>
-            <div class="setting-desc">
-              <span class="status-pill" :class="{ on: channelEnabled(channel.key) }">
-                {{
-                  channelEnabled(channel.key)
-                    ? t('settings.gateway.takeoverOn')
-                    : t('settings.gateway.takeoverOff')
-                }}
-              </span>
+            <div class="hint-card">
+              <div class="setting-label">{{ t('settings.gateway.channelHintTitle') }}</div>
+              <div class="setting-desc">
+                <template v-if="channel.key === 'claudeCli'">
+                  {{ t('settings.gateway.channelHintClaudeCli') }}
+                </template>
+                <template v-else-if="channel.key === 'claudeDesktop'">
+                  {{ t('settings.gateway.channelHintClaudeDesktop') }}
+                </template>
+                <template v-else>
+                  {{ t('settings.gateway.channelHintCodex') }}
+                </template>
+              </div>
             </div>
           </div>
-
-          <div class="setting-row">
-            <div class="setting-label">{{ t('settings.gateway.proxyTarget') }}</div>
-            <div class="setting-desc mono">
-              {{ takeover?.proxyBaseUrl || baseUrlDisplay || '—' }}
-            </div>
-          </div>
-
-          <div class="setting-row">
-            <div class="setting-label">{{ t('settings.gateway.backupAt') }}</div>
-            <div class="setting-desc mono">
-              {{
-                backedUpAt(
-                  channel.key === 'claudeCli'
-                    ? 'claude'
-                    : channel.key === 'claudeDesktop'
-                      ? 'claude-desktop'
-                      : 'codex'
-                ) || t('settings.gateway.noBackup')
-              }}
-            </div>
-          </div>
-        </div>
-
-        <div class="hint-card">
-          <div class="setting-label">{{ t('settings.gateway.channelHintTitle') }}</div>
-          <div class="setting-desc">
-            <template v-if="channel.key === 'claudeCli'">
-              {{ t('settings.gateway.channelHintClaudeCli') }}
-            </template>
-            <template v-else-if="channel.key === 'claudeDesktop'">
-              {{ t('settings.gateway.channelHintClaudeDesktop') }}
-            </template>
-            <template v-else>
-              {{ t('settings.gateway.channelHintCodex') }}
-            </template>
-          </div>
-        </div>
+        </template>
       </el-tab-pane>
     </el-tabs>
   </div>
@@ -1110,6 +1459,41 @@ async function fetchDraftModels(): Promise<void> {
 }
 .gateway-tabs :deep(.el-tabs__item.is-disabled) {
   opacity: 0.55;
+}
+.channel-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.channel-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 8px;
+  background: var(--el-fill-color-blank);
+  color: var(--el-text-color-regular);
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    color 0.15s;
+}
+.channel-chip:hover:not(:disabled) {
+  border-color: var(--el-color-primary-light-5);
+}
+.channel-chip.active {
+  border-color: var(--el-color-primary);
+  color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+}
+.channel-chip:disabled,
+.channel-chip.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 .tab-label {
   display: inline-flex;
@@ -1270,17 +1654,81 @@ async function fetchDraftModels(): Promise<void> {
   color: var(--el-text-color-secondary);
   margin-top: 2px;
 }
-.form-actions {
+.kv-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+.drawer-body {
+  padding-right: 4px;
+}
+.drawer-footer {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding-bottom: 12px;
+  flex-wrap: wrap;
 }
-.provider-head {
+.provider-card {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 0;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 10px;
+  background: var(--el-fill-color-blank);
+}
+.provider-main {
+  min-width: 0;
+  flex: 1;
+}
+.provider-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.default-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+  border: 1px solid var(--el-color-primary-light-5);
+}
+.protocol-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.proto-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--el-text-color-regular);
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--el-border-color-extra-light);
+}
+.detail-section {
+  margin-bottom: 14px;
+}
+.detail-pre {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--el-fill-color-light);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--el-text-color-regular);
 }
 .provider-actions {
   display: flex;
@@ -1289,7 +1737,6 @@ async function fetchDraftModels(): Promise<void> {
   align-items: flex-start;
   flex-wrap: wrap;
   justify-content: flex-end;
-  max-width: 320px;
 }
 .empty {
   color: var(--el-text-color-secondary);

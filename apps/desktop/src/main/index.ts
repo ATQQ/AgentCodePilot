@@ -17,6 +17,7 @@ import type {
   ConversationUpdatePayload,
   GatewayStatus,
   MessageInfo,
+  MessagePart,
   ProjectPayload,
   ProviderConfigPayload,
   ProviderTestInputPayload,
@@ -29,7 +30,13 @@ import type {
   OpenPathResult,
   ToolUseInfo
 } from '../preload/types'
-import { agentRegistry, ensureAgentRegistry } from './runtime'
+import {
+  appendTextDelta,
+  appendThinkingDelta,
+  appendToolPart,
+  finalizeMessageParts
+} from '../shared/message-parts'
+import { agentRegistry, ensureAgentRegistry, refreshCliAgentRegistry } from './runtime'
 import { supervisedRun, supervisedStop, supervisedStopAll } from './runtime/supervisor'
 import { cloneForIpc } from '../shared/ipc-clone'
 import { parseMaxAgentTurnsSetting, clampMaxAgentTurns } from '../shared/agent-run-settings'
@@ -124,31 +131,26 @@ registerLocalFileScheme()
 
 let mainWindow: BrowserWindow | null = null
 
-const streamingMessages = new Map<
-  string,
-  {
-    conversationId: string
-    content: string
-    rawInput: string
-    agentId?: string
-    toolCalls: Map<string, ToolUseInfo>
-  }
->()
+type StreamingMessageEntry = {
+  conversationId: string
+  content: string
+  parts: MessagePart[]
+  rawInput: string
+  agentId?: string
+  toolCalls: Map<string, ToolUseInfo>
+}
+
+const streamingMessages = new Map<string, StreamingMessageEntry>()
 
 function createStreamingEntry(
   conversationId: string,
   rawInput: string,
   agentId?: string
-): {
-  conversationId: string
-  content: string
-  rawInput: string
-  agentId?: string
-  toolCalls: Map<string, ToolUseInfo>
-} {
+): StreamingMessageEntry {
   return {
     conversationId,
     content: '',
+    parts: [],
     rawInput,
     agentId,
     toolCalls: new Map()
@@ -244,11 +246,16 @@ function finalizeToolCallsForSave(toolCalls: Map<string, ToolUseInfo>): ToolUseI
 interface DeltaBatchEntry {
   conversationId: string
   messageId: string
+  kind: 'text' | 'thinking'
   deltas: string[]
 }
 
 const deltaBatch = new Map<string, DeltaBatchEntry>()
 let deltaFlushTimer: ReturnType<typeof setTimeout> | null = null
+
+function deltaBatchKey(messageId: string, kind: 'text' | 'thinking'): string {
+  return `${messageId}:${kind}`
+}
 
 function flushDeltaBatch(): void {
   if (deltaFlushTimer) {
@@ -258,7 +265,7 @@ function flushDeltaBatch(): void {
   for (const batch of deltaBatch.values()) {
     if (batch.deltas.length === 0) continue
     mainWindow?.webContents.send(IPC_CHANNELS.AGENT_EVENT, {
-      type: 'message.delta',
+      type: batch.kind === 'thinking' ? 'message.thinking.delta' : 'message.delta',
       conversationId: batch.conversationId,
       messageId: batch.messageId,
       delta: batch.deltas.join('')
@@ -270,6 +277,27 @@ function flushDeltaBatch(): void {
 function scheduleDeltaFlush(): void {
   if (deltaFlushTimer) return
   deltaFlushTimer = setTimeout(flushDeltaBatch, DELTA_BATCH_MS)
+}
+
+function enqueueDeltaBatch(
+  kind: 'text' | 'thinking',
+  conversationId: string,
+  messageId: string,
+  delta: string
+): void {
+  const key = deltaBatchKey(messageId, kind)
+  let batch = deltaBatch.get(key)
+  if (!batch) {
+    batch = {
+      conversationId,
+      messageId,
+      kind,
+      deltas: []
+    }
+    deltaBatch.set(key, batch)
+  }
+  batch.deltas.push(delta)
+  scheduleDeltaFlush()
 }
 
 function getConversationRunContext(
@@ -317,6 +345,11 @@ function mapPlanRow(r: repo.PlanRow): PlanInfo {
   }
 }
 
+function serializeContentParts(parts: MessagePart[]): string | null {
+  if (!parts.length) return null
+  return JSON.stringify(finalizeMessageParts(parts))
+}
+
 function emitAgentEvent(event: AgentEvent): void {
   if (event.type === 'message.started') {
     if (!streamingMessages.has(event.messageId)) {
@@ -324,10 +357,19 @@ function emitAgentEvent(event: AgentEvent): void {
     }
   } else if (event.type === 'message.delta') {
     const entry = streamingMessages.get(event.messageId)
-    if (entry) entry.content += event.delta
+    if (entry) {
+      appendTextDelta(entry.parts, event.delta)
+      entry.content += event.delta
+    }
+  } else if (event.type === 'message.thinking.delta') {
+    const entry = streamingMessages.get(event.messageId)
+    if (entry) {
+      appendThinkingDelta(entry.parts, event.delta)
+    }
   } else if (event.type === 'tool.started') {
     const entry = streamingMessages.get(event.messageId)
     if (entry) {
+      appendToolPart(entry.parts, event.tool.toolUseId)
       entry.toolCalls.set(event.tool.toolUseId, {
         ...event.tool,
         startedAt: event.tool.startedAt ?? new Date().toISOString()
@@ -357,8 +399,10 @@ function emitAgentEvent(event: AgentEvent): void {
         let content = entry.content
         if (stopped && !content.trim()) {
           content = STOPPED_ASSISTANT_TEXT
+          appendTextDelta(entry.parts, STOPPED_ASSISTANT_TEXT)
         }
         const finalizedTools = finalizeToolCallsForSave(entry.toolCalls)
+        const contentParts = serializeContentParts(entry.parts)
         repo.addMessage({
           id: event.messageId,
           conversationId: entry.conversationId,
@@ -375,7 +419,8 @@ function emitAgentEvent(event: AgentEvent): void {
           debugInput: event.debugInput || null,
           debugOutput: event.debugOutput || null,
           stopped,
-          toolCalls: finalizedTools.length > 0 ? JSON.stringify(finalizedTools) : null
+          toolCalls: finalizedTools.length > 0 ? JSON.stringify(finalizedTools) : null,
+          contentParts
         })
         savePlanFromAssistantMessage(entry.conversationId, event.messageId, content)
       } catch (e) {
@@ -400,6 +445,10 @@ function emitAgentEvent(event: AgentEvent): void {
       const errorText = `[Error] ${formatAgentErrorMessage(event.error)}`
       const content = entry?.content.trim() ? `${entry.content.trim()}\n\n${errorText}` : errorText
       const finalizedTools = entry ? finalizeToolCallsForSave(entry.toolCalls) : []
+      if (entry) {
+        appendTextDelta(entry.parts, entry.content.trim() ? `\n\n${errorText}` : errorText)
+      }
+      const contentParts = entry ? serializeContentParts(entry.parts) : null
       repo.addMessage({
         id: messageId,
         conversationId: event.conversationId,
@@ -409,7 +458,8 @@ function emitAgentEvent(event: AgentEvent): void {
         agentId: entry?.agentId ?? null,
         rawInput: entry?.rawInput || null,
         error: true,
-        toolCalls: finalizedTools.length > 0 ? JSON.stringify(finalizedTools) : null
+        toolCalls: finalizedTools.length > 0 ? JSON.stringify(finalizedTools) : null,
+        contentParts
       })
     } catch (e) {
       const code = (e as { code?: string } | null)?.code
@@ -438,17 +488,12 @@ function emitAgentEvent(event: AgentEvent): void {
   }
 
   if (event.type === 'message.delta') {
-    let batch = deltaBatch.get(event.messageId)
-    if (!batch) {
-      batch = {
-        conversationId: event.conversationId,
-        messageId: event.messageId,
-        deltas: []
-      }
-      deltaBatch.set(event.messageId, batch)
-    }
-    batch.deltas.push(event.delta)
-    scheduleDeltaFlush()
+    enqueueDeltaBatch('text', event.conversationId, event.messageId, event.delta)
+    return
+  }
+
+  if (event.type === 'message.thinking.delta') {
+    enqueueDeltaBatch('thinking', event.conversationId, event.messageId, event.delta)
     return
   }
 
@@ -510,16 +555,22 @@ function mapConversationRow(r: repo.ConversationRow): ConversationListItem {
 }
 
 function registerIpcHandlers(): void {
-  ipcMain.handle(IPC_CHANNELS.AGENTS_LIST, async (): Promise<AgentInfo[]> => {
-    await ensureAgentRegistry()
-    return agentRegistry.list().map((a) => ({
-      id: a.id,
-      name: a.name,
-      enabled: a.enabled,
-      disabledReason: a.disabledReason,
-      installSource: a.installSource
-    }))
-  })
+  ipcMain.handle(
+    IPC_CHANNELS.AGENTS_LIST,
+    async (_e, forceRefresh?: boolean): Promise<AgentInfo[]> => {
+      await ensureAgentRegistry()
+      if (forceRefresh) {
+        await refreshCliAgentRegistry()
+      }
+      return agentRegistry.list().map((a) => ({
+        id: a.id,
+        name: a.name,
+        enabled: a.enabled,
+        disabledReason: a.disabledReason,
+        installSource: a.installSource
+      }))
+    }
+  )
 
   ipcMain.handle(IPC_CHANNELS.AGENTS_MODELS_LIST, (_e, agentId: string, forceRefresh?: boolean) =>
     getModelCatalog(agentId, forceRefresh ?? false)
@@ -796,6 +847,13 @@ function registerIpcHandlers(): void {
         if (r.tool_calls) {
           try {
             msg.toolCalls = JSON.parse(r.tool_calls) as MessageInfo['toolCalls']
+          } catch {
+            /* ignore */
+          }
+        }
+        if (r.content_parts) {
+          try {
+            msg.parts = JSON.parse(r.content_parts) as MessageInfo['parts']
           } catch {
             /* ignore */
           }

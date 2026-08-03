@@ -188,6 +188,9 @@ function runMigrations(database: Database.Database): void {
   if (!msgCols3.find((c) => c.name === 'skill_refs')) {
     database.exec('ALTER TABLE messages ADD COLUMN skill_refs TEXT')
   }
+  if (!msgCols3.find((c) => c.name === 'content_parts')) {
+    database.exec('ALTER TABLE messages ADD COLUMN content_parts TEXT')
+  }
 
   const projectCols = database.pragma('table_info(projects)') as { name: string }[]
   if (!projectCols.find((c) => c.name === 'deleted_at')) {

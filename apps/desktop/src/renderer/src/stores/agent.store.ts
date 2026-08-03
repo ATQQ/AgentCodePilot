@@ -9,8 +9,8 @@ export const useAgentStore = defineStore('agent', () => {
 
   const currentAgent = computed(() => agents.value.find((a) => a.id === selectedAgentId.value))
 
-  async function fetchAgents(): Promise<void> {
-    const list = await window.agentAPI.agents.list()
+  async function fetchAgents(forceRefresh = false): Promise<void> {
+    const list = await window.agentAPI.agents.list(forceRefresh)
     agents.value = list
     if (!selectedAgentId.value || !list.some((a) => a.id === selectedAgentId.value && a.enabled)) {
       selectedAgentId.value = list.find((agent) => agent.enabled)?.id ?? ''

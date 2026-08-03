@@ -14,20 +14,20 @@ import { MockAgentAdapter } from './mock-agent'
 
 let registryPromise: Promise<void> | null = null
 
+async function registerCliAgents(): Promise<void> {
+  const { ClaudeAgentAdapter } = await import('./claude-agent')
+  agentRegistry.register(new ClaudeAgentAdapter())
+
+  const { CodexAgentAdapter } = await import('./codex-agent')
+  agentRegistry.register(new CodexAgentAdapter())
+}
+
 export function ensureAgentRegistry(): Promise<void> {
   if (!registryPromise) {
     registryPromise = (async () => {
       if (agentRegistry.get('mock')) return
 
-      const { ClaudeAgentAdapter } = await import('./claude-agent')
-      if (!agentRegistry.get('claude-code')) {
-        agentRegistry.register(new ClaudeAgentAdapter())
-      }
-
-      const { CodexAgentAdapter } = await import('./codex-agent')
-      if (!agentRegistry.get('codex')) {
-        agentRegistry.register(new CodexAgentAdapter())
-      }
+      await registerCliAgents()
 
       // --- Cursor Agent (disabled) ---
       // const { isCursorRuntimeSupported } = await import('./cursor-runtime')
@@ -44,6 +44,12 @@ export function ensureAgentRegistry(): Promise<void> {
     })()
   }
   return registryPromise
+}
+
+/** Re-probe Claude / Codex CLIs after the user installs them without restarting. */
+export async function refreshCliAgentRegistry(): Promise<void> {
+  await ensureAgentRegistry()
+  await registerCliAgents()
 }
 
 export function initializeAgentRegistry(): void {

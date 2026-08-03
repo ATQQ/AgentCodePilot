@@ -27,7 +27,17 @@ export interface ProviderTestResult {
 export interface ProviderTestDraft {
   models?: string[]
   defaultModel?: string
-  protocols: Partial<Record<WireAdapter, { baseUrl: string; apiKey?: string }>>
+  protocols: Partial<
+    Record<
+      WireAdapter,
+      {
+        baseUrl: string
+        apiKey?: string
+        headers?: Record<string, string>
+        bodyDefaults?: Record<string, unknown>
+      }
+    >
+  >
 }
 
 export interface ProviderTestInput {
@@ -149,7 +159,9 @@ export function resolveProviderConfigForDraft(input: ProviderTestInput): Gateway
           key,
           {
             baseUrl: value?.baseUrl ?? '',
-            apiKey
+            apiKey,
+            ...(value?.headers ? { headers: value.headers } : {}),
+            ...(value?.bodyDefaults ? { bodyDefaults: value.bodyDefaults } : {})
           }
         ]
       })

@@ -11,7 +11,9 @@ import {
 const require = createRequire(fileURLToPath(import.meta.url))
 
 /**
- * Prefer a user-installed Claude CLI, then fall back to the SDK platform binary.
+ * Prefer a user-installed Claude CLI.
+ * Bundled SDK platform binaries are excluded from the installer to keep package size small;
+ * they may still resolve during local `electron-vite` development.
  */
 export function probeClaudeCodeExecutable(): ExecutableProbe {
   const globalPath = resolveGlobalExecutable('claude')

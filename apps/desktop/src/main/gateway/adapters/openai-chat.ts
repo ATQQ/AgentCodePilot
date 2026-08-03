@@ -4,6 +4,7 @@ import type {
   ProtocolEndpointConfig,
   UnifiedTurn
 } from '../types'
+import { applyBodyDefaults, applyHeaderOverrides } from '../request-overrides'
 import { joinUrl, parseSseLines, type ProviderAdapter } from './base'
 import { mapOpenAiUsage } from '../usage'
 
@@ -61,8 +62,8 @@ export function createOpenAiChatAdapter(): ProviderAdapter {
 
       return {
         url: joinUrl(endpoint.baseUrl, '/v1/chat/completions'),
-        headers,
-        body: JSON.stringify(body)
+        headers: applyHeaderOverrides(headers, endpoint.headers),
+        body: JSON.stringify(applyBodyDefaults(body, endpoint.bodyDefaults))
       }
     },
 

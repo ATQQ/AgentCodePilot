@@ -132,7 +132,7 @@ export class CodexAgentAdapter implements AgentAdapter {
     this.installSource = probe.source
     this.executablePath = probe.path
     if (!probe.path) {
-      this.disabledReason = '未找到 Codex CLI（全局安装或应用随包版本）'
+      this.disabledReason = '未找到 Codex CLI。请安装后重试：npm i -g @openai/codex'
     }
   }
 
@@ -433,13 +433,23 @@ export class CodexAgentAdapter implements AgentAdapter {
     }
 
     if (item.type === 'reasoning') {
-      if (phase !== 'completed' && item.text) {
+      const previous = this.messageTextByItemId.get(item.id) ?? ''
+      if (item.text.length > previous.length) {
         emit({
-          type: 'message.delta',
+          type: 'message.thinking.delta',
+          conversationId: input.conversationId,
+          messageId: input.messageId,
+          delta: item.text.slice(previous.length)
+        })
+        this.messageTextByItemId.set(item.id, item.text)
+      } else if (phase === 'started' && item.text) {
+        emit({
+          type: 'message.thinking.delta',
           conversationId: input.conversationId,
           messageId: input.messageId,
           delta: item.text
         })
+        this.messageTextByItemId.set(item.id, item.text)
       }
       return
     }

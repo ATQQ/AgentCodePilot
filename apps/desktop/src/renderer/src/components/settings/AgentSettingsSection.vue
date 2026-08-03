@@ -41,7 +41,9 @@ const useCustomModels = ref(false)
 const discoveredModels = ref<AgentModelOption[]>([])
 const discoveredSource = ref<ModelCatalogSource>('fallback')
 
-const configurableAgents = computed(() => agentStore.agents.filter((agent) => agent.enabled))
+const configurableAgents = computed(() =>
+  agentStore.agents.filter((agent) => agent.enabled || ['claude-code', 'codex'].includes(agent.id))
+)
 
 const supportsModelConfig = computed(() => ['claude-code', 'codex'].includes(activeAgentId.value))
 const supportsMockConfig = computed(() => activeAgentId.value === 'mock')
@@ -55,6 +57,22 @@ const showAgentConfigActions = computed(
 const draftCodexApiKey = ref('')
 const draftCodexHasApiKey = ref(false)
 const draftCodexSandbox = ref<'read_only' | 'workspace_write' | 'full_access'>('workspace_write')
+
+const activeAgent = computed(() =>
+  agentStore.agents.find((agent) => agent.id === activeAgentId.value)
+)
+const showCliInstallGuide = computed(
+  () =>
+    ['claude-code', 'codex'].includes(activeAgentId.value) &&
+    activeAgent.value?.installSource === 'none'
+)
+
+const cliSourceLabel = computed(() => {
+  const source = activeAgent.value?.installSource
+  if (source === 'global') return t('settings.agentConfig.cliSourceGlobal')
+  if (source === 'bundled') return t('settings.agentConfig.cliSourceBundled')
+  return t('settings.agentConfig.cliSourceNone')
+})
 
 const sourceLabel = computed(() => {
   const map: Record<ModelCatalogSource, string> = {
@@ -153,6 +171,10 @@ function removeModelRow(index: number): void {
 
 async function refreshDiscovered(): Promise<void> {
   await loadAgent(activeAgentId.value)
+}
+
+async function refreshAgents(): Promise<void> {
+  await agentStore.fetchAgents(true)
 }
 
 async function saveConfig(): Promise<void> {
@@ -286,6 +308,37 @@ async function resetConfig(): Promise<void> {
     <div v-if="loading" class="loading-hint">{{ t('common.loading') }}</div>
 
     <template v-else-if="supportsModelConfig">
+      <div class="setting-card">
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">{{ t('settings.agentConfig.cliStatus') }}</div>
+            <div class="setting-desc">{{ cliSourceLabel }}</div>
+            <div v-if="activeAgent?.disabledReason" class="setting-desc cli-disabled-reason">
+              {{ activeAgent.disabledReason }}
+            </div>
+          </div>
+          <button class="ghost-btn" :disabled="loading" @click="refreshAgents">
+            {{ t('settings.agentConfig.cliRefresh') }}
+          </button>
+        </div>
+
+        <div
+          v-if="showCliInstallGuide && activeAgentId === 'claude-code'"
+          class="cli-install-guide"
+        >
+          <div class="setting-label">{{ t('settings.agentConfig.cliInstallClaudeTitle') }}</div>
+          <p class="setting-desc">{{ t('settings.agentConfig.cliInstallClaudeDesc') }}</p>
+          <code class="cli-cmd">{{ t('settings.agentConfig.cliInstallClaudeCmd') }}</code>
+          <p class="setting-desc">{{ t('settings.agentConfig.cliInstallClaudeAlt') }}</p>
+        </div>
+
+        <div v-else-if="showCliInstallGuide && activeAgentId === 'codex'" class="cli-install-guide">
+          <div class="setting-label">{{ t('settings.agentConfig.cliInstallCodexTitle') }}</div>
+          <p class="setting-desc">{{ t('settings.agentConfig.cliInstallCodexDesc') }}</p>
+          <code class="cli-cmd">{{ t('settings.agentConfig.cliInstallCodexCmd') }}</code>
+        </div>
+      </div>
+
       <div v-if="supportsCodexConfig && showAgentModelSettings" class="setting-card">
         <div class="setting-row">
           <div>
@@ -520,6 +573,32 @@ async function resetConfig(): Promise<void> {
   margin-top: 4px;
   font-size: var(--font-size-xs);
   color: var(--content-text-secondary);
+}
+
+.cli-disabled-reason {
+  color: var(--color-warning, #b45309);
+}
+
+.cli-install-guide {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--btn-secondary-bg);
+}
+
+.cli-cmd {
+  display: block;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: var(--content-bg);
+  border: 1px solid var(--sidebar-border);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  color: var(--content-text);
+  word-break: break-all;
+  user-select: all;
 }
 
 .discovered-list {

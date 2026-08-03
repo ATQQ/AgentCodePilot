@@ -75,7 +75,8 @@ export class ClaudeAgentAdapter implements AgentAdapter {
     this.installSource = probe.source
     this.executablePath = probe.path
     if (!probe.path) {
-      this.disabledReason = '未找到 Claude CLI（全局安装或应用随包版本）'
+      this.disabledReason =
+        '未找到 Claude CLI。请安装后重试：curl -fsSL https://claude.ai/install.sh | bash'
     }
   }
 

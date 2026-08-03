@@ -37,15 +37,36 @@ function parseModelMap(raw: unknown): Record<string, string> | undefined {
   return Object.keys(map).length ? map : undefined
 }
 
-/** Protocol endpoint: address + key only. Models are provider-shared. */
+function parseStringMap(raw: unknown): Record<string, string> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const map: Record<string, string> = {}
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const name = key.trim()
+    if (!name || typeof value !== 'string') continue
+    map[name] = value
+  }
+  return Object.keys(map).length ? map : undefined
+}
+
+function parseBodyDefaults(raw: unknown): Record<string, unknown> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const map = { ...(raw as Record<string, unknown>) }
+  return Object.keys(map).length ? map : undefined
+}
+
+/** Protocol endpoint: address + key (+ optional request overrides). Models are provider-shared. */
 function parseEndpoint(raw: unknown, adapter?: WireAdapter): ProtocolEndpointConfig | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
   const obj = raw as Record<string, unknown>
   const rawBase = typeof obj.baseUrl === 'string' ? obj.baseUrl.trim().replace(/\/+$/, '') : ''
   if (!rawBase) return undefined
+  const headers = parseStringMap(obj.headers)
+  const bodyDefaults = parseBodyDefaults(obj.bodyDefaults)
   return {
     baseUrl: adapter ? normalizeProtocolBaseUrl(adapter, rawBase) : rawBase,
-    apiKey: typeof obj.apiKey === 'string' ? obj.apiKey : ''
+    apiKey: typeof obj.apiKey === 'string' ? obj.apiKey : '',
+    ...(headers ? { headers } : {}),
+    ...(bodyDefaults ? { bodyDefaults } : {})
   }
 }
 
@@ -174,7 +195,9 @@ export function getProvider(id: string): GatewayProviderRecord | undefined {
 function toPublicEndpoint(endpoint: ProtocolEndpointConfig): ProtocolEndpointPublic {
   return {
     baseUrl: endpoint.baseUrl,
-    apiKey: endpoint.apiKey
+    apiKey: endpoint.apiKey,
+    ...(endpoint.headers ? { headers: endpoint.headers } : {}),
+    ...(endpoint.bodyDefaults ? { bodyDefaults: endpoint.bodyDefaults } : {})
   }
 }
 

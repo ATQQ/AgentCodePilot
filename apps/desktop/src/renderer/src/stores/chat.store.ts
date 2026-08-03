@@ -13,6 +13,12 @@ import { useModelStore } from './model.store'
 import { useAgentStore } from './agent.store'
 import { getToolCallFingerprint } from '@renderer/utils/toolCall'
 import { attachmentFromPayload, enrichAttachment } from '@renderer/utils/localFile'
+import {
+  appendTextDelta,
+  appendThinkingDelta,
+  appendToolPart,
+  completeOpenThinking
+} from '../../../shared/message-parts'
 
 function formatAgentErrorMessage(error: string): string {
   if (/maximum number of turns|max_turns|回合上限/i.test(error)) {
@@ -205,6 +211,7 @@ export const useChatStore = defineStore('chat', () => {
       msg?.role === 'assistant' &&
       !msg.content.trim() &&
       !msg.toolCalls?.length &&
+      !msg.parts?.length &&
       !msg.stopped &&
       !msg.error
     )
@@ -484,6 +491,7 @@ export const useChatStore = defineStore('chat', () => {
       skillRefs: m.skillRefs,
       attachments: m.attachments?.map((att) => enrichAttachment(att as Attachment)),
       toolCalls: m.toolCalls,
+      parts: m.parts,
       usage: m.usage,
       debugInput: m.debugInput,
       debugOutput: m.debugOutput,
@@ -805,7 +813,22 @@ export const useChatStore = defineStore('chat', () => {
           touchStreamActivity(event.conversationId)
           const msg = ensureAssistantPlaceholder(event.conversationId, event.messageId)
           if (!msg) return
+          if (!msg.parts) msg.parts = []
+          appendTextDelta(msg.parts, event.delta)
           msg.content += event.delta
+          break
+        }
+        case 'message.thinking.delta': {
+          if (!isActiveAssistantMessage(event.conversationId, event.messageId)) return
+          markMessageStreamed(event.messageId)
+          const conv = conversations.value.find((c) => c.id === event.conversationId)
+          if (!conv) return
+          removeWaitingConversation(event.conversationId)
+          touchStreamActivity(event.conversationId)
+          const msg = ensureAssistantPlaceholder(event.conversationId, event.messageId)
+          if (!msg) return
+          if (!msg.parts) msg.parts = []
+          appendThinkingDelta(msg.parts, event.delta)
           break
         }
         case 'message.completed': {
@@ -829,12 +852,17 @@ export const useChatStore = defineStore('chat', () => {
               } else {
                 if (!msg.content.trim()) {
                   msg.content = stoppedText
+                  if (!msg.parts) msg.parts = []
+                  appendTextDelta(msg.parts, stoppedText)
                 }
                 msg.stopped = true
               }
             }
             if (msg) {
               assignAgentToAssistantMessage(event.conversationId, msg)
+              if (msg.parts?.length) {
+                completeOpenThinking(msg.parts)
+              }
               if (event.usage) msg.usage = event.usage
               if (event.debugInput) msg.debugInput = event.debugInput
               if (event.debugOutput) msg.debugOutput = event.debugOutput
@@ -881,6 +909,8 @@ export const useChatStore = defineStore('chat', () => {
               assignAgentToAssistantMessage(event.conversationId, msg)
               conv.messages.push(msg)
             } else {
+              if (!msg.parts) msg.parts = []
+              appendTextDelta(msg.parts, msg.content.trim() ? `\n\n${errorText}` : errorText)
               msg.content = msg.content.trim() ? `${msg.content.trim()}\n\n${errorText}` : errorText
               msg.error = true
               assignAgentToAssistantMessage(event.conversationId, msg)
@@ -909,6 +939,8 @@ export const useChatStore = defineStore('chat', () => {
             assignAgentToAssistantMessage(event.conversationId, msg)
             conv.messages.push(msg)
           }
+          if (!msg.parts) msg.parts = []
+          appendToolPart(msg.parts, event.tool.toolUseId)
           if (!msg.toolCalls) msg.toolCalls = []
           const existing = msg.toolCalls.find((t) => t.toolUseId === event.tool.toolUseId)
           if (!existing) {

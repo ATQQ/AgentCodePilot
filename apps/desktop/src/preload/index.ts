@@ -24,7 +24,7 @@ import { cloneForIpc } from '../shared/ipc-clone'
 
 const agentAPI = {
   agents: {
-    list: () => ipcRenderer.invoke(IPC_CHANNELS.AGENTS_LIST),
+    list: (forceRefresh?: boolean) => ipcRenderer.invoke(IPC_CHANNELS.AGENTS_LIST, forceRefresh),
     listModels: (agentId: string, forceRefresh?: boolean) =>
       ipcRenderer.invoke(IPC_CHANNELS.AGENTS_MODELS_LIST, agentId, forceRefresh),
     getConfig: (agentId: string) => ipcRenderer.invoke(IPC_CHANNELS.AGENTS_CONFIG_GET, agentId),

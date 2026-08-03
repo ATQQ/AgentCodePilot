@@ -4,6 +4,7 @@ import type {
   ProtocolEndpointConfig,
   UnifiedTurn
 } from '../types'
+import { applyBodyDefaults, applyHeaderOverrides } from '../request-overrides'
 import { joinUrl, parseSseLines, type ProviderAdapter } from './base'
 import { mergeAnthropicUsage, mergeAnthropicWireUsage } from '../usage'
 
@@ -42,11 +43,14 @@ export function createAnthropicAdapter(): ProviderAdapter {
       const body: Record<string, unknown> = {
         model: upstreamModel,
         messages: toAnthropicMessages(turn),
-        max_tokens: turn.maxTokens ?? 4096,
         stream: turn.stream
       }
+      if (turn.maxTokens !== undefined) body.max_tokens = turn.maxTokens
       if (turn.systemPrompt) body.system = turn.systemPrompt
       if (turn.temperature !== undefined) body.temperature = turn.temperature
+
+      const mergedBody = applyBodyDefaults(body, endpoint.bodyDefaults)
+      if (mergedBody.max_tokens === undefined) mergedBody.max_tokens = 4096
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -63,8 +67,8 @@ export function createAnthropicAdapter(): ProviderAdapter {
 
       return {
         url: joinUrl(endpoint.baseUrl, '/v1/messages'),
-        headers,
-        body: JSON.stringify(body)
+        headers: applyHeaderOverrides(headers, endpoint.headers),
+        body: JSON.stringify(mergedBody)
       }
     },
 

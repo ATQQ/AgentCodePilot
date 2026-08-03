@@ -11,6 +11,7 @@ import {
   patchRequestLog,
   type GatewayRequestLog
 } from './request-log'
+import { applyBodyDefaults, applyHeaderOverrides } from './request-overrides'
 import type { AdapterUsage, GatewayChannel, ProtocolEndpointConfig, WireAdapter } from './types'
 import { mapOpenAiUsage, mergeAnthropicUsage } from './usage'
 
@@ -69,7 +70,7 @@ function buildUpstreamHeaders(
     headers.Authorization = `Bearer ${apiKey}`
   }
 
-  return headers
+  return applyHeaderOverrides(headers, endpoint.headers)
 }
 
 function headerValue(headers: IncomingHttpHeaders, name: string): string | undefined {
@@ -78,12 +79,17 @@ function headerValue(headers: IncomingHttpHeaders, name: string): string | undef
   return typeof raw === 'string' ? raw : undefined
 }
 
-/** Shallow-clone body JSON; only replace model. All other fields pass through. */
+/**
+ * Shallow-clone body JSON; replace model, then fill missing keys from bodyDefaults.
+ * Client-provided fields always win over defaults.
+ */
 export function buildPassthroughBody(
   parsed: Record<string, unknown>,
-  upstreamModel: string
+  upstreamModel: string,
+  bodyDefaults?: Record<string, unknown>
 ): string {
-  return JSON.stringify({ ...parsed, model: upstreamModel })
+  const body = applyBodyDefaults({ ...parsed, model: upstreamModel }, bodyDefaults)
+  return JSON.stringify(body)
 }
 
 function copyResponseHeaders(upstream: Response): Record<string, string | string[]> {
@@ -176,7 +182,11 @@ export async function handlePassthrough(input: {
 
   const url = joinUrl(route.endpoint.baseUrl, upstreamPath(route.protocol))
   const headers = buildUpstreamHeaders(route.protocol, route.endpoint, input.clientHeaders, stream)
-  const body = buildPassthroughBody(input.parsedBody, route.upstreamModel)
+  const body = buildPassthroughBody(
+    input.parsedBody,
+    route.upstreamModel,
+    route.endpoint.bodyDefaults
+  )
   const inboundBytes = Buffer.byteLength(JSON.stringify(input.parsedBody), 'utf8')
   const upstreamBytes = Buffer.byteLength(body, 'utf8')
 

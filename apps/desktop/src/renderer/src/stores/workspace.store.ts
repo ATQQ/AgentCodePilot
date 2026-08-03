@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Project, Workspace } from '@renderer/types'
 
+export const MIN_WORKSPACE_FOLDERS = 2
+
 export const useWorkspaceStore = defineStore('workspace', () => {
   const projects = ref<Project[]>([])
   const workspaces = ref<Workspace[]>([])
@@ -96,6 +98,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   }
 
   async function createWorkspace(name: string, folders: string[]): Promise<string> {
+    if (folders.length < MIN_WORKSPACE_FOLDERS) {
+      throw new Error(`Workspace requires at least ${MIN_WORKSPACE_FOLDERS} folders`)
+    }
     const ws = { id: `ws-${Date.now()}`, name, folders }
     workspaces.value.push(ws)
     await window.agentAPI.workspaces.save(ws)
@@ -108,6 +113,35 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       selectedProjectId.value = null
     }
     await window.agentAPI.workspaces.delete(id)
+  }
+
+  async function updateWorkspaceFolders(id: string, folders: string[]): Promise<boolean> {
+    if (folders.length < MIN_WORKSPACE_FOLDERS) return false
+    const ws = workspaces.value.find((w) => w.id === id)
+    if (!ws) return false
+    ws.folders = folders
+    await window.agentAPI.workspaces.save({ id: ws.id, name: ws.name, folders: ws.folders })
+    return true
+  }
+
+  async function addFolderToExistingWorkspace(id: string, path?: string): Promise<boolean> {
+    const ws = workspaces.value.find((w) => w.id === id)
+    if (!ws) return false
+    const folderPath = path ?? (await window.agentAPI.dialog.selectFolder())
+    if (!folderPath || ws.folders.includes(folderPath)) return false
+    await ensureProjectForPath(folderPath)
+    return updateWorkspaceFolders(id, [...ws.folders, folderPath])
+  }
+
+  async function removeFolderFromExistingWorkspace(id: string, path: string): Promise<boolean> {
+    const ws = workspaces.value.find((w) => w.id === id)
+    if (!ws) return false
+    if (ws.folders.length <= MIN_WORKSPACE_FOLDERS) return false
+    if (!ws.folders.includes(path)) return false
+    return updateWorkspaceFolders(
+      id,
+      ws.folders.filter((f) => f !== path)
+    )
   }
 
   async function renameProject(id: string, newName: string): Promise<void> {
@@ -141,6 +175,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     removeProject,
     createWorkspace,
     removeWorkspace,
+    updateWorkspaceFolders,
+    addFolderToExistingWorkspace,
+    removeFolderFromExistingWorkspace,
     renameProject,
     renameWorkspace,
     getProjectsForWorkspace

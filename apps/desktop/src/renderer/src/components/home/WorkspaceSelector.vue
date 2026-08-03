@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { ElMessage } from 'element-plus'
 import { FolderOpened, Search, Plus, Close, Folder } from '@element-plus/icons-vue'
-import { useWorkspaceStore } from '@renderer/stores/workspace.store'
+import { useWorkspaceStore, MIN_WORKSPACE_FOLDERS } from '@renderer/stores/workspace.store'
 
 const { t } = useI18n()
 const workspaceStore = useWorkspaceStore()
@@ -35,6 +36,15 @@ const filteredWorkspaces = computed(() => {
   const q = searchQuery.value.toLowerCase()
   return workspaceStore.workspaces.filter((ws) => ws.name.toLowerCase().includes(q))
 })
+
+const canSaveWorkspace = computed(
+  () =>
+    workspaceName.value.trim().length > 0 && workspaceFolders.value.length >= MIN_WORKSPACE_FOLDERS
+)
+
+const canRemoveExistingFolder = computed(
+  () => (workspaceStore.currentWorkspace?.folders.length ?? 0) > MIN_WORKSPACE_FOLDERS
+)
 
 function selectProject(id: string | null): void {
   workspaceStore.selectProject(id)
@@ -91,24 +101,45 @@ async function addFolderToWorkspace(): Promise<void> {
 }
 
 function removeFolderFromWorkspace(folder: string): void {
+  if (workspaceFolders.value.length <= MIN_WORKSPACE_FOLDERS) {
+    ElMessage.warning(t('project.workspaceMinFolders'))
+    return
+  }
   workspaceFolders.value = workspaceFolders.value.filter((f) => f !== folder)
 }
 
 async function saveWorkspace(): Promise<void> {
-  if (workspaceName.value.trim() && workspaceFolders.value.length) {
-    const wsId = await workspaceStore.createWorkspace(workspaceName.value.trim(), [
-      ...workspaceFolders.value
-    ])
-    for (const folder of workspaceFolders.value) {
-      await workspaceStore.ensureProjectForPath(folder)
-    }
-    workspaceStore.selectProject(wsId)
+  if (!canSaveWorkspace.value) {
+    ElMessage.warning(t('project.workspaceMinFolders'))
+    return
   }
+  const wsId = await workspaceStore.createWorkspace(workspaceName.value.trim(), [
+    ...workspaceFolders.value
+  ])
+  for (const folder of workspaceFolders.value) {
+    await workspaceStore.ensureProjectForPath(folder)
+  }
+  workspaceStore.selectProject(wsId)
   showWorkspacePanel.value = false
 }
 
 function closeWorkspacePanel(): void {
   showWorkspacePanel.value = false
+}
+
+async function addFolderToExistingWorkspace(): Promise<void> {
+  const ws = workspaceStore.currentWorkspace
+  if (!ws) return
+  await workspaceStore.addFolderToExistingWorkspace(ws.id)
+}
+
+async function removeFolderFromExistingWorkspace(folder: string): Promise<void> {
+  const ws = workspaceStore.currentWorkspace
+  if (!ws) return
+  const ok = await workspaceStore.removeFolderFromExistingWorkspace(ws.id, folder)
+  if (!ok) {
+    ElMessage.warning(t('project.workspaceMinFolders'))
+  }
 }
 </script>
 
@@ -154,7 +185,7 @@ function closeWorkspacePanel(): void {
             :key="proj.id"
             class="dropdown-item"
             :class="{ selected: workspaceStore.selectedProjectId === proj.id }"
-            @click="selectProject(proj.id)"
+            @click="() => selectProject(proj.id)"
           >
             <el-icon :size="14"><FolderOpened /></el-icon>
             <div class="item-content">
@@ -175,7 +206,7 @@ function closeWorkspacePanel(): void {
             :key="ws.id"
             class="dropdown-item"
             :class="{ selected: workspaceStore.selectedProjectId === ws.id }"
-            @click="selectWorkspace(ws.id)"
+            @click="() => selectWorkspace(ws.id)"
           >
             <el-icon :size="14"><Folder /></el-icon>
             <span class="item-label">{{ ws.name }}</span>
@@ -183,10 +214,10 @@ function closeWorkspacePanel(): void {
           </button>
         </div>
 
-        <!-- 选中工作空间时展示关联项目 -->
+        <!-- 选中工作空间时展示关联项目，支持随时增删 -->
         <template v-if="workspaceStore.currentWorkspace">
           <div class="dropdown-divider"></div>
-          <div class="dropdown-group-title">当前工作空间项目</div>
+          <div class="dropdown-group-title">{{ t('project.currentWorkspaceProjects') }}</div>
           <div class="dropdown-list workspace-projects elegant-scroll">
             <div
               v-for="folder in workspaceStore.currentWorkspace.folders"
@@ -196,8 +227,20 @@ function closeWorkspacePanel(): void {
               <el-icon :size="12"><FolderOpened /></el-icon>
               <span class="folder-path">{{ folder.split('/').pop() }}</span>
               <span class="folder-full-path">{{ folder }}</span>
+              <button
+                class="folder-remove"
+                :disabled="!canRemoveExistingFolder"
+                :title="canRemoveExistingFolder ? undefined : t('project.workspaceMinFolders')"
+                @click.stop="() => removeFolderFromExistingWorkspace(folder)"
+              >
+                <el-icon :size="12"><Close /></el-icon>
+              </button>
             </div>
           </div>
+          <button class="dropdown-item" @click="addFolderToExistingWorkspace">
+            <el-icon :size="14"><Plus /></el-icon>
+            <span class="item-label">{{ t('project.addFolder') }}</span>
+          </button>
         </template>
 
         <div class="dropdown-divider"></div>
@@ -234,11 +277,7 @@ function closeWorkspacePanel(): void {
             :placeholder="t('project.workspaceNamePlaceholder')"
             class="workspace-name-input"
           />
-          <button
-            v-if="workspaceName.trim() && workspaceFolders.length"
-            class="panel-save"
-            @click="saveWorkspace"
-          >
+          <button v-if="canSaveWorkspace" class="panel-save" @click="saveWorkspace">
             &#x2713;
           </button>
         </div>
@@ -247,11 +286,27 @@ function closeWorkspacePanel(): void {
           <div v-for="folder in workspaceFolders" :key="folder" class="workspace-folder-item">
             <el-icon :size="14"><Folder /></el-icon>
             <span class="folder-path">{{ folder }}</span>
-            <button class="folder-remove" @click="removeFolderFromWorkspace(folder)">
+            <button
+              class="folder-remove"
+              :disabled="workspaceFolders.length <= MIN_WORKSPACE_FOLDERS"
+              :title="
+                workspaceFolders.length <= MIN_WORKSPACE_FOLDERS
+                  ? t('project.workspaceMinFolders')
+                  : undefined
+              "
+              @click="() => removeFolderFromWorkspace(folder)"
+            >
               <el-icon :size="12"><Close /></el-icon>
             </button>
           </div>
         </div>
+
+        <p
+          v-if="workspaceFolders.length > 0 && workspaceFolders.length < MIN_WORKSPACE_FOLDERS"
+          class="workspace-hint"
+        >
+          {{ t('project.workspaceMinFolders') }}
+        </p>
 
         <div class="dropdown-divider"></div>
         <button class="dropdown-item" @click="addFolderToWorkspace">
@@ -422,7 +477,7 @@ function closeWorkspacePanel(): void {
 }
 
 .workspace-projects {
-  max-height: 120px;
+  max-height: 160px;
 }
 
 .ws-project-item {
@@ -434,6 +489,10 @@ function closeWorkspacePanel(): void {
   color: var(--content-text-secondary);
 }
 
+.ws-project-item:hover .folder-remove {
+  opacity: 1;
+}
+
 .ws-project-item .folder-path {
   flex-shrink: 0;
   font-weight: 500;
@@ -442,6 +501,7 @@ function closeWorkspacePanel(): void {
 
 .ws-project-item .folder-full-path {
   flex: 1;
+  min-width: 0;
   font-size: 11px;
   color: var(--content-text-tertiary);
   overflow: hidden;
@@ -529,11 +589,24 @@ function closeWorkspacePanel(): void {
   transition: opacity 0.15s;
   padding: 2px;
   border-radius: var(--radius-sm);
+  flex-shrink: 0;
 }
 
-.folder-remove:hover {
+.folder-remove:hover:not(:disabled) {
   color: var(--content-text);
   background: var(--btn-ghost-hover);
+}
+
+.folder-remove:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.workspace-hint {
+  margin: 0;
+  padding: 0 var(--spacing-md) var(--spacing-sm);
+  font-size: var(--font-size-xs);
+  color: var(--content-text-tertiary);
 }
 
 .folder-path {

@@ -1,9 +1,13 @@
 export type WireAdapter = 'openai-chat' | 'anthropic'
 
-/** Protocol endpoint: only address + key. Models are provider-shared. */
+/** Protocol endpoint: address + key, plus optional request overrides. Models are provider-shared. */
 export interface ProtocolEndpointConfig {
   baseUrl: string
   apiKey: string
+  /** Custom headers merged over gateway defaults (explicitly overrides auth headers if set). */
+  headers?: Record<string, string>
+  /** Default body fields filled only when the request body lacks that key. */
+  bodyDefaults?: Record<string, unknown>
 }
 
 export type ProtocolEndpointPublic = ProtocolEndpointConfig
@@ -55,7 +59,7 @@ export interface GatewayConfig {
 /**
  * Provider is global.
  * - models / defaultModel / modelMap: configured once for the provider
- * - protocols: only baseUrl + apiKey per wire protocol
+ * - protocols: baseUrl + apiKey (+ optional headers/bodyDefaults) per wire protocol
  * Channels select which protocol to use against the default provider.
  */
 export interface GatewayProviderConfig {
