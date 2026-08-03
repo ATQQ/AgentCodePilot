@@ -4,6 +4,7 @@ export interface ConversationRow {
   id: string
   title: string
   agent_id: string
+  provider_id: string | null
   model_id: string | null
   project_id: string | null
   cwd: string | null
@@ -52,6 +53,7 @@ export function createConversation(conv: {
   id: string
   title: string
   agentId: string
+  providerId?: string | null
   modelId?: string | null
   projectId: string | null
   cwd: string | null
@@ -61,12 +63,13 @@ export function createConversation(conv: {
 }): void {
   const db = getDatabase()
   db.prepare(
-    `INSERT INTO conversations (id, title, agent_id, model_id, project_id, cwd, approval_level, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO conversations (id, title, agent_id, provider_id, model_id, project_id, cwd, approval_level, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     conv.id,
     conv.title,
     conv.agentId,
+    conv.providerId ?? null,
     conv.modelId ?? null,
     conv.projectId,
     conv.cwd,
@@ -178,6 +181,7 @@ export function updateConversation(
     pinned?: boolean
     archived?: boolean
     approvalLevel?: string
+    providerId?: string | null
     modelId?: string
     agentId?: string
   }
@@ -206,6 +210,10 @@ export function updateConversation(
     sets.push('model_id = ?')
     values.push(fields.modelId)
   }
+  if (fields.providerId !== undefined) {
+    sets.push('provider_id = ?')
+    values.push(fields.providerId)
+  }
   if (fields.agentId !== undefined) {
     sets.push('agent_id = ?')
     values.push(fields.agentId)
@@ -218,6 +226,7 @@ export function updateConversation(
     fields.title === undefined &&
     fields.pinned === undefined &&
     fields.approvalLevel === undefined &&
+    fields.providerId === undefined &&
     fields.modelId === undefined &&
     fields.agentId === undefined
 

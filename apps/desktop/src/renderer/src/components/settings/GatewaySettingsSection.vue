@@ -10,6 +10,7 @@ import type {
   GatewayTakeoverApp,
   GatewayTakeoverStatus,
   ProviderConfigPayload,
+  ProviderRemoteModelPayload,
   ProviderTestResultPayload
 } from '../../../../preload/types'
 
@@ -30,6 +31,9 @@ const logViewer = ref<GatewayLogViewerStatus | null>(null)
 const editing = ref(false)
 const testingIds = ref<Record<string, boolean>>({})
 const testingDraft = ref(false)
+const fetchingModels = ref(false)
+const fetchedModels = ref<ProviderRemoteModelPayload[]>([])
+const modelFilter = ref('')
 const form = reactive({
   id: '',
   name: '',
@@ -46,6 +50,62 @@ const form = reactive({
 type WireProtocol = 'openai-chat' | 'anthropic'
 
 const ALL_CHANNEL_PROTOCOLS: WireProtocol[] = ['openai-chat', 'anthropic']
+
+function parseModels(text: string): string[] {
+  return text
+    .split(/[,，\n]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+const enteredModels = computed(() => parseModels(form.modelsText))
+
+const filteredFetchedModels = computed(() => {
+  const q = modelFilter.value.trim().toLowerCase()
+  if (!q) return fetchedModels.value
+  return fetchedModels.value.filter((m) => {
+    const name = (m.name || '').toLowerCase()
+    return m.id.toLowerCase().includes(q) || name.includes(q)
+  })
+})
+
+const fetchedCheckedIds = computed(() => {
+  const entered = new Set(enteredModels.value)
+  return fetchedModels.value.filter((m) => entered.has(m.id)).map((m) => m.id)
+})
+
+function syncDefaultModel(): void {
+  const models = enteredModels.value
+  if (!form.defaultModel) {
+    if (models.length) form.defaultModel = models[0]
+    return
+  }
+  if (!models.includes(form.defaultModel)) {
+    form.defaultModel = models[0] || ''
+  }
+}
+
+function setEnteredModels(models: string[]): void {
+  form.modelsText = [...new Set(models.map((m) => m.trim()).filter(Boolean))].join(', ')
+  syncDefaultModel()
+}
+
+function onFetchedSelectionChange(checkedIds: string[] | string | number | boolean): void {
+  const checked = Array.isArray(checkedIds)
+    ? checkedIds.map(String)
+    : checkedIds == null || checkedIds === false
+      ? []
+      : [String(checkedIds)]
+  const fetchedIds = new Set(fetchedModels.value.map((m) => m.id))
+  const keptManual = enteredModels.value.filter((id) => !fetchedIds.has(id))
+  setEnteredModels([...keptManual, ...checked])
+}
+
+function clearFetchState(): void {
+  fetchedModels.value = []
+  modelFilter.value = ''
+  fetchingModels.value = false
+}
 
 function protocolLabel(protocol: WireProtocol): string {
   return protocol === 'anthropic' ? 'Anthropic Messages' : 'OpenAI Chat'
@@ -190,6 +250,7 @@ async function setTakeover(app: GatewayTakeoverApp, enabled: boolean): Promise<v
 
 function openCreate(preset?: ProviderConfigPayload): void {
   editing.value = true
+  clearFetchState()
   form.id = preset?.id || `provider-${Date.now().toString(36)}`
   form.name = preset?.name || ''
   const protocols =
@@ -204,6 +265,7 @@ function openCreate(preset?: ProviderConfigPayload): void {
     : ''
   form.defaultModel =
     typeof preset?.config.defaultModel === 'string' ? preset.config.defaultModel : ''
+  syncDefaultModel()
 
   const openai = protocols?.['openai-chat']
   const anthropic = protocols?.anthropic
@@ -218,10 +280,12 @@ function openCreate(preset?: ProviderConfigPayload): void {
 
 function openEdit(provider: GatewayProviderPublicPayload): void {
   editing.value = true
+  clearFetchState()
   form.id = provider.id
   form.name = provider.name
   form.modelsText = (provider.config.models || []).join(', ')
   form.defaultModel = provider.config.defaultModel || ''
+  syncDefaultModel()
 
   const openai = provider.config.protocols?.['openai-chat']
   const anthropic = provider.config.protocols?.anthropic
@@ -241,13 +305,11 @@ function openEdit(provider: GatewayProviderPublicPayload): void {
 
 function cancelEdit(): void {
   editing.value = false
+  clearFetchState()
 }
 
-function parseModels(text: string): string[] {
-  return text
-    .split(/[,，\n]/)
-    .map((s) => s.trim())
-    .filter(Boolean)
+function onModelsTextInput(): void {
+  syncDefaultModel()
 }
 
 async function saveProvider(): Promise<void> {
@@ -284,18 +346,24 @@ async function saveProvider(): Promise<void> {
       }
     }
     const adapter: WireProtocol = form.openaiEnabled ? 'openai-chat' : 'anthropic'
+    const models = parseModels(form.modelsText)
+    const defaultModel =
+      form.defaultModel.trim() && models.includes(form.defaultModel.trim())
+        ? form.defaultModel.trim()
+        : models[0]
     await window.agentAPI.providers.save({
       id: form.id.trim(),
       name: form.name.trim(),
       type: adapter,
       config: {
         adapter,
-        models: parseModels(form.modelsText),
-        defaultModel: form.defaultModel.trim() || undefined,
+        models,
+        defaultModel: defaultModel || undefined,
         protocols
       }
     })
     editing.value = false
+    clearFetchState()
     providers.value = await window.agentAPI.providers.list()
     ElMessage.success(t('common.saveSuccess'))
   } catch (e) {
@@ -539,6 +607,51 @@ async function testDraftProvider(): Promise<void> {
     testingDraft.value = false
   }
 }
+
+async function fetchDraftModels(): Promise<void> {
+  if (!form.openaiEnabled && !form.anthropicEnabled) {
+    ElMessage.warning(t('settings.gateway.testNeedProtocol'))
+    return
+  }
+  if (
+    (form.openaiEnabled && !form.openaiBaseUrl.trim()) ||
+    (form.anthropicEnabled && !form.anthropicBaseUrl.trim())
+  ) {
+    ElMessage.warning(t('settings.gateway.testNeedProtocol'))
+    return
+  }
+  fetchingModels.value = true
+  try {
+    const result = await window.agentAPI.providers.fetchModels({
+      providerId: form.id.trim() || undefined,
+      draft: buildDraftFromForm()
+    })
+    fetchedModels.value = result.models
+    if (result.ok) {
+      if (result.errors.length) {
+        const detail = result.errors
+          .map((e) => `${protocolLabel(e.protocol)}: ${e.error}`)
+          .join('；')
+        ElMessage.warning(
+          `${t('settings.gateway.fetchModelsPartial', { count: result.models.length })} · ${detail}`
+        )
+      } else {
+        ElMessage.success(t('settings.gateway.fetchModelsOk', { count: result.models.length }))
+      }
+    } else {
+      const detail = result.errors.map((e) => `${protocolLabel(e.protocol)}: ${e.error}`).join('；')
+      ElMessage.error(
+        detail
+          ? `${t('settings.gateway.fetchModelsFailed')} · ${detail}`
+          : t('settings.gateway.fetchModelsFailed')
+      )
+    }
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : String(e))
+  } finally {
+    fetchingModels.value = false
+  }
+}
 </script>
 
 <template>
@@ -675,18 +788,63 @@ async function testDraftProvider(): Promise<void> {
           <div class="form-grid">
             <el-input v-model="form.id" :placeholder="t('settings.gateway.providerId')" />
             <el-input v-model="form.name" :placeholder="t('settings.gateway.providerName')" />
-            <div class="field-label">{{ t('settings.gateway.defaultModel') }}</div>
-            <el-input
-              v-model="form.defaultModel"
-              :placeholder="t('settings.gateway.defaultModel')"
-            />
             <div class="field-label">{{ t('settings.gateway.modelsLabel') }}</div>
             <el-input
               v-model="form.modelsText"
               type="textarea"
               :rows="2"
               :placeholder="t('settings.gateway.modelsPlaceholder')"
+              @input="onModelsTextInput"
             />
+            <div class="models-fetch-row">
+              <el-button
+                :loading="fetchingModels"
+                :disabled="saving || testingDraft"
+                @click="fetchDraftModels"
+              >
+                {{ t('settings.gateway.fetchModels') }}
+              </el-button>
+              <span v-if="fetchedModels.length" class="setting-desc">
+                {{ t('settings.gateway.fetchModelsHint', { count: fetchedModels.length }) }}
+              </span>
+            </div>
+            <div v-if="fetchedModels.length" class="fetched-models">
+              <el-input
+                v-model="modelFilter"
+                clearable
+                size="small"
+                :placeholder="t('settings.gateway.fetchModelsFilter')"
+              />
+              <el-checkbox-group
+                class="fetched-models-list"
+                :model-value="fetchedCheckedIds"
+                @change="onFetchedSelectionChange"
+              >
+                <el-checkbox
+                  v-for="m in filteredFetchedModels"
+                  :key="m.id"
+                  :label="m.id"
+                  :value="m.id"
+                >
+                  <span class="mono">{{ m.id }}</span>
+                  <span v-if="m.name && m.name !== m.id" class="model-name">{{ m.name }}</span>
+                </el-checkbox>
+              </el-checkbox-group>
+            </div>
+            <div class="field-label">{{ t('settings.gateway.defaultModel') }}</div>
+            <el-select
+              v-model="form.defaultModel"
+              clearable
+              filterable
+              :disabled="enteredModels.length === 0"
+              :placeholder="
+                enteredModels.length
+                  ? t('settings.gateway.defaultModel')
+                  : t('settings.gateway.defaultModelNeedList')
+              "
+            >
+              <el-option v-for="m in enteredModels" :key="m" :label="m" :value="m" />
+            </el-select>
           </div>
 
           <div class="protocol-block">
@@ -725,7 +883,11 @@ async function testDraftProvider(): Promise<void> {
 
           <div class="form-actions">
             <el-button @click="cancelEdit">{{ t('common.cancel') }}</el-button>
-            <el-button :loading="testingDraft" :disabled="saving" @click="testDraftProvider">
+            <el-button
+              :loading="testingDraft"
+              :disabled="saving || fetchingModels"
+              @click="testDraftProvider"
+            >
               {{ t('settings.gateway.testConnection') }}
             </el-button>
             <el-button type="primary" :loading="saving" @click="saveProvider">
@@ -1058,6 +1220,37 @@ async function testDraftProvider(): Promise<void> {
   display: grid;
   gap: 10px;
   padding: 12px 0;
+}
+.models-fetch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.fetched-models {
+  display: grid;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--el-border-color-extra-light);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--el-fill-color-blank) 70%, transparent);
+}
+.fetched-models-list {
+  display: grid;
+  gap: 4px;
+  max-height: 220px;
+  overflow: auto;
+}
+.fetched-models-list :deep(.el-checkbox) {
+  margin-right: 0;
+  height: auto;
+  align-items: flex-start;
+  white-space: normal;
+}
+.model-name {
+  margin-left: 8px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 .protocol-block {
   border-top: 1px solid var(--el-border-color-extra-light);

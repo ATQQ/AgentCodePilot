@@ -35,6 +35,7 @@ export const IPC_CHANNELS = {
   PROVIDERS_DELETE: 'providers:delete',
   PROVIDERS_PRESETS: 'providers:presets',
   PROVIDERS_TEST: 'providers:test',
+  PROVIDERS_FETCH_MODELS: 'providers:fetchModels',
   GATEWAY_STATUS: 'gateway:status',
   GATEWAY_START: 'gateway:start',
   GATEWAY_STOP: 'gateway:stop',
@@ -110,6 +111,7 @@ export interface SendMessagePayload {
   conversationId: string
   content: string
   agentId: string
+  providerId?: string
   modelId?: string
   cwd?: string
   workspaceFolders?: string[]
@@ -126,6 +128,7 @@ export interface SendMessageResult {
 
 export interface CreateConversationPayload {
   agentId: string
+  providerId?: string
   modelId?: string
   firstMessage: string
   projectId?: string | null
@@ -216,6 +219,7 @@ export interface ConversationUpdatePayload {
   pinned?: boolean
   archived?: boolean
   approvalLevel?: 'request' | 'auto' | 'full'
+  providerId?: string | null
   modelId?: string
 }
 
@@ -288,6 +292,23 @@ export interface ProviderTestProtocolResultPayload {
 export interface ProviderTestResultPayload {
   ok: boolean
   results: ProviderTestProtocolResultPayload[]
+}
+
+export interface ProviderRemoteModelPayload {
+  id: string
+  name?: string
+  protocol: 'openai-chat' | 'anthropic'
+}
+
+export interface ProviderFetchModelsErrorPayload {
+  protocol: 'openai-chat' | 'anthropic'
+  error: string
+}
+
+export interface ProviderFetchModelsResultPayload {
+  ok: boolean
+  models: ProviderRemoteModelPayload[]
+  errors: ProviderFetchModelsErrorPayload[]
 }
 
 export interface GatewayStatus {
@@ -400,6 +421,8 @@ export interface AgentInfo {
   id: string
   name: string
   enabled: boolean
+  disabledReason?: string
+  installSource?: 'global' | 'bundled' | 'none'
 }
 
 export interface AgentModelOption {
@@ -476,6 +499,7 @@ export interface ConversationListItem {
   id: string
   title: string
   agentId: string
+  providerId: string | null
   modelId: string | null
   projectId: string | null
   cwd: string | null
@@ -678,6 +702,7 @@ export interface AgentAPI {
     delete: (id: string) => Promise<void>
     presets: () => Promise<ProviderConfigPayload[]>
     test: (payload: ProviderTestInputPayload) => Promise<ProviderTestResultPayload>
+    fetchModels: (payload: ProviderTestInputPayload) => Promise<ProviderFetchModelsResultPayload>
   }
   settings: {
     get: () => Promise<SettingsInfo>

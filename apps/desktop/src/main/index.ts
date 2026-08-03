@@ -62,6 +62,7 @@ import {
   getLogViewerUrl,
   isLogViewerRunning,
   getGatewayLogsDir,
+  fetchProviderModels,
   type TakeoverUiApp
 } from './gateway'
 import { logInfo, logError, cleanOldLogs } from './logger'
@@ -480,11 +481,19 @@ function getRunApprovalLevel(conversationId: string): 'request' | 'auto' | 'full
   return repo.getConversationApprovalLevel(conversationId)
 }
 
+function resolveRunModel(payload: { providerId?: string; modelId?: string }): string | undefined {
+  if (loadGatewaySettings().enabled && payload.providerId && payload.modelId) {
+    return `${payload.providerId}/${payload.modelId}`
+  }
+  return payload.modelId
+}
+
 function mapConversationRow(r: repo.ConversationRow): ConversationListItem {
   return {
     id: r.id,
     title: r.title,
     agentId: r.agent_id,
+    providerId: r.provider_id ?? null,
     modelId: r.model_id ?? null,
     projectId: r.project_id,
     cwd: r.cwd ?? null,
@@ -506,7 +515,9 @@ function registerIpcHandlers(): void {
     return agentRegistry.list().map((a) => ({
       id: a.id,
       name: a.name,
-      enabled: a.enabled
+      enabled: a.enabled,
+      disabledReason: a.disabledReason,
+      installSource: a.installSource
     }))
   })
 
@@ -548,6 +559,7 @@ function registerIpcHandlers(): void {
         id,
         title,
         agentId: payload.agentId,
+        providerId: payload.providerId ?? null,
         modelId: payload.modelId ?? null,
         projectId: payload.projectId ?? null,
         cwd,
@@ -597,7 +609,7 @@ function registerIpcHandlers(): void {
         messageId: assistantMsgId,
         content: prompt,
         agentId: payload.agentId,
-        model: payload.modelId,
+        model: resolveRunModel(payload),
         cwd: resolveConversationCwd(payload.conversationId, payload.cwd),
         workspaceFolders: resolveConversationWorkspaceFolders(
           payload.conversationId,
@@ -658,7 +670,7 @@ function registerIpcHandlers(): void {
         messageId: assistantMsgId,
         content: prompt,
         agentId: payload.agentId,
-        model: payload.modelId,
+        model: resolveRunModel(payload),
         cwd: resolveConversationCwd(payload.conversationId, payload.cwd),
         workspaceFolders: resolveConversationWorkspaceFolders(
           payload.conversationId,
@@ -807,6 +819,7 @@ function registerIpcHandlers(): void {
         pinned: payload.pinned,
         archived: payload.archived,
         approvalLevel: payload.approvalLevel,
+        providerId: payload.providerId,
         modelId: payload.modelId
       })
     }
@@ -902,6 +915,10 @@ function registerIpcHandlers(): void {
     return testProviderConnectivity(payload || {})
   })
 
+  ipcMain.handle(IPC_CHANNELS.PROVIDERS_FETCH_MODELS, (_e, payload: ProviderTestInputPayload) => {
+    return fetchProviderModels(payload || {})
+  })
+
   // --- Settings ---
 
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, (): SettingsInfo => {
@@ -968,9 +985,9 @@ function registerIpcHandlers(): void {
     }
   })
 
-  ipcMain.handle(IPC_CHANNELS.GATEWAY_START, (): GatewayStatus => {
-    const result = startGateway()
-    reapplyPreferredTakeovers()
+  ipcMain.handle(IPC_CHANNELS.GATEWAY_START, async (): Promise<GatewayStatus> => {
+    const result = await startGateway()
+    await reapplyPreferredTakeovers()
     const cfg = getGatewayConfig()
     return {
       running: true,
@@ -991,28 +1008,28 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(
     IPC_CHANNELS.GATEWAY_UPDATE_SETTINGS,
-    (_e, payload: Partial<ReturnType<typeof loadGatewaySettings>>) => {
+    async (_e, payload: Partial<ReturnType<typeof loadGatewaySettings>>) => {
       const prev = loadGatewaySettings()
       const next = updateGatewaySettings(payload)
       if (payload.enabled === true && !isGatewayRunning()) {
-        startGateway({
+        await startGateway({
           host: next.host,
           port: next.port,
           token: next.token
         })
-        reapplyPreferredTakeovers()
+        await reapplyPreferredTakeovers()
       } else if (payload.enabled === false && isGatewayRunning()) {
         stopGateway({ restoreTakeovers: true })
       } else if (
         isGatewayRunning() &&
         (payload.host !== undefined || payload.port !== undefined || payload.token !== undefined)
       ) {
-        startGateway({
+        await startGateway({
           host: next.host,
           port: next.port,
           token: next.token
         })
-        reapplyPreferredTakeovers()
+        await reapplyPreferredTakeovers()
       }
 
       if (payload.logging) {
@@ -1406,7 +1423,7 @@ function createWindow(): void {
   })
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.agentcodepilot.app')
   initShellEnvironment()
   registerLocalFileProtocol()
@@ -1418,7 +1435,7 @@ app.whenReady().then(() => {
   logInfo('App', `Starting AgentCodePilot v${app.getVersion()}`)
   cleanOldLogs()
   getDatabase()
-  maybeAutoStartGateway()
+  await maybeAutoStartGateway()
   createWindow()
 
   app.on('browser-window-created', (_, window) => {

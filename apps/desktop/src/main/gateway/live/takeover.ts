@@ -35,19 +35,19 @@ function takeoverFlagKey(app: TakeoverUiApp): 'claudeCli' | 'claudeDesktop' | 'c
   return app
 }
 
-let startGatewayFn: (() => { token: string; port: number }) | null = null
+let startGatewayFn: (() => Promise<{ token: string; port: number }>) | null = null
 
 /** Avoid circular import: index registers this after load. */
-export function registerGatewayStarter(fn: () => { token: string; port: number }): void {
+export function registerGatewayStarter(fn: () => Promise<{ token: string; port: number }>): void {
   startGatewayFn = fn
 }
 
-function ensureRunning(): { host: string; port: number; token: string } {
+async function ensureRunning(): Promise<{ host: string; port: number; token: string }> {
   let settings = ensureGatewayToken(loadGatewaySettings())
   if (!startGatewayFn) {
     throw new Error('Gateway starter not registered')
   }
-  const result = startGatewayFn()
+  const result = await startGatewayFn()
   settings = updateGatewaySettings({
     enabled: true,
     token: result.token || settings.token,
@@ -73,9 +73,9 @@ export function getTakeoverStatus(): TakeoverStatus {
   }
 }
 
-export function enableTakeover(app: TakeoverUiApp): TakeoverStatus {
+export async function enableTakeover(app: TakeoverUiApp): Promise<TakeoverStatus> {
   const backupApp = uiAppToBackupApp(app)
-  const { host, port, token } = ensureRunning()
+  const { host, port, token } = await ensureRunning()
   const proxyBaseUrl = buildProxyBaseUrl(host, port)
   const existing = getLiveBackup(backupApp)
 
@@ -170,7 +170,7 @@ export function disableTakeover(app: TakeoverUiApp): TakeoverStatus {
   return getTakeoverStatus()
 }
 
-export function setTakeover(app: TakeoverUiApp, enabled: boolean): TakeoverStatus {
+export async function setTakeover(app: TakeoverUiApp, enabled: boolean): Promise<TakeoverStatus> {
   return enabled ? enableTakeover(app) : disableTakeover(app)
 }
 
@@ -192,13 +192,13 @@ export function restoreAllTakeovers(): void {
 }
 
 /** Re-apply takeovers that the user left enabled (after gateway start). */
-export function reapplyPreferredTakeovers(): void {
+export async function reapplyPreferredTakeovers(): Promise<void> {
   const settings = loadGatewaySettings()
   const apps: TakeoverUiApp[] = ['claudeCli', 'claudeDesktop', 'codex']
   for (const app of apps) {
     if (!settings.takeover[takeoverFlagKey(app)]) continue
     try {
-      enableTakeover(app)
+      await enableTakeover(app)
     } catch (e) {
       console.error(`[Gateway] failed to re-apply ${app}:`, e)
     }

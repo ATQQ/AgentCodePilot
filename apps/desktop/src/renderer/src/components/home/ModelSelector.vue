@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useModelStore } from '@renderer/stores/model.store'
 import { useAgentStore } from '@renderer/stores/agent.store'
 import { useChatStore } from '@renderer/stores/chat.store'
@@ -8,15 +8,64 @@ const modelStore = useModelStore()
 const agentStore = useAgentStore()
 const chatStore = useChatStore()
 
+onMounted(() => {
+  if (agentStore.selectedAgentId) {
+    void modelStore.fetchCatalog(agentStore.selectedAgentId)
+  }
+})
+
 const activeAgentId = computed(() => agentStore.selectedAgentId)
 
 const showSelector = computed(() => ['claude-code', 'codex'].includes(activeAgentId.value))
+
+const gatewayProviders = computed(() => modelStore.getGatewayProvidersForAgent(activeAgentId.value))
+
+const gatewayOptions = computed(() =>
+  gatewayProviders.value.map((provider) => {
+    const modelIds = [...(provider.config.models ?? [])]
+    if (provider.config.defaultModel && !modelIds.includes(provider.config.defaultModel)) {
+      modelIds.unshift(provider.config.defaultModel)
+    }
+    return {
+      value: provider.id,
+      label: provider.name,
+      children: modelIds.map((modelId) => ({ value: modelId, label: modelId }))
+    }
+  })
+)
+
+const currentGatewaySelection = computed(() =>
+  modelStore.getEffectiveGatewaySelection(
+    chatStore.activeConversation?.providerId,
+    chatStore.activeConversation?.modelId,
+    activeAgentId.value
+  )
+)
+
+const currentGatewayPath = computed(() => {
+  const selection = currentGatewaySelection.value
+  return selection ? [selection.providerId, selection.modelId] : []
+})
 
 const currentModelId = computed(() =>
   modelStore.getEffectiveModelId(chatStore.activeConversation?.modelId)
 )
 
 const currentModelName = computed(() => modelStore.getModelName(currentModelId.value))
+
+async function handleGatewaySelect(value: unknown): Promise<void> {
+  if (!Array.isArray(value) || value.length !== 2) return
+  const [providerId, modelId] = value
+  if (typeof providerId !== 'string' || typeof modelId !== 'string') return
+  modelStore.selectGatewayProviderModel(activeAgentId.value, providerId, modelId)
+  if (chatStore.activeConversationId) {
+    await chatStore.setConversationProviderModel(
+      chatStore.activeConversationId,
+      providerId,
+      modelId
+    )
+  }
+}
 
 function handleSelect(modelId: string): void {
   if (chatStore.activeConversationId) {
@@ -40,13 +89,26 @@ function handleSelect(modelId: string): void {
         </span>
       </div>
     </Transition>
+    <el-cascader
+      v-if="modelStore.gatewayEnabled"
+      class="provider-model-cascader"
+      :model-value="currentGatewayPath"
+      :options="gatewayOptions"
+      :disabled="gatewayOptions.length === 0"
+      :props="{ expandTrigger: 'hover' }"
+      :show-all-levels="true"
+      separator=" / "
+      placeholder="请配置 Provider 和模型"
+      :clearable="false"
+      @change="handleGatewaySelect"
+    />
     <el-dropdown trigger="click" @command="handleSelect">
-      <button class="model-btn" :title="currentModelName">
+      <button v-if="!modelStore.gatewayEnabled" class="model-btn" :title="currentModelName">
         <span class="model-name">{{ currentModelName }}</span>
         <span class="chevron">&#x25BE;</span>
       </button>
       <template #dropdown>
-        <el-dropdown-menu>
+        <el-dropdown-menu v-if="!modelStore.gatewayEnabled">
           <el-dropdown-item
             v-for="model in modelStore.models"
             :key="model.id"
@@ -67,6 +129,29 @@ function handleSelect(modelId: string): void {
 <style scoped>
 .model-selector {
   position: relative;
+}
+
+.provider-model-cascader {
+  width: 250px;
+}
+
+:deep(.provider-model-cascader .el-input__wrapper) {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  box-shadow: none;
+}
+
+:deep(.provider-model-cascader .el-input__inner) {
+  color: var(--content-text-secondary);
+  font-size: var(--font-size-sm);
+  text-overflow: ellipsis;
+}
+
+:deep(.provider-model-cascader .el-input__wrapper:hover) {
+  background: var(--btn-ghost-hover);
+  box-shadow: none;
 }
 
 .model-switch-notice {

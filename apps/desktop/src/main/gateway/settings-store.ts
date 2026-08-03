@@ -34,7 +34,7 @@ export function generateGatewayToken(): string {
 
 export function getDefaultGatewaySettings(): GatewaySettings {
   return {
-    enabled: false,
+    enabled: true,
     host: '127.0.0.1',
     port: 3456,
     token: '',

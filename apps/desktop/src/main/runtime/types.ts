@@ -25,6 +25,8 @@ export interface AgentAdapter {
   readonly id: string
   readonly name: string
   readonly enabled: boolean
+  readonly disabledReason?: string
+  readonly installSource?: 'global' | 'bundled' | 'none'
   run(input: AgentRunInput, emit: (event: AgentEvent) => void): Promise<void>
   stop(conversationId: string): void
 }

@@ -17,6 +17,7 @@ files:
 asarUnpack:
   - resources/**
   - node_modules/@anthropic-ai/**
+  - node_modules/@openai/**
   - node_modules/node-pty/**
 icon: build/icon.png
 win:

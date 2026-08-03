@@ -15,9 +15,11 @@ import type { AgentAdapter, AgentRunInput } from './types'
 import { resolveConfiguredApiKey, resolveEnvValue } from './agent-auth'
 import { getAgentConfig } from './agent-config'
 import { buildAgentPrompt, withWorkspaceContext } from './agent-prompt'
-import { hasLocalCodexCliConfig, resolveCodexExecutablePath } from './codex-executable'
+import { hasLocalCodexCliConfig, probeCodexExecutable } from './codex-executable'
 import { loadCodexSdk } from './codex-sdk-loader'
 import { getShellEnvironment } from '../shell/shell-env'
+import { loadGatewaySettings } from '../gateway/settings-store'
+import { PROXY_MANAGED, buildProxyV1Url } from '../gateway/live/constants'
 
 type ApprovalLevel = NonNullable<AgentRunInput['approvalLevel']>
 
@@ -99,13 +101,26 @@ function isCodexResumeFailure(error: unknown): boolean {
 export class CodexAgentAdapter implements AgentAdapter {
   readonly id = 'codex'
   readonly name = 'Codex'
-  readonly enabled = true
+  readonly enabled: boolean
+  readonly disabledReason?: string
+  readonly installSource: 'global' | 'bundled' | 'none'
+  private executablePath?: string
 
   private abortControllers = new Map<string, AbortController>()
   private threadIds = new Map<string, string>()
   private messageTextByItemId = new Map<string, string>()
   private emittedToolIds = new Set<string>()
   private toolStartedAt = new Map<string, string>()
+
+  constructor() {
+    const probe = probeCodexExecutable()
+    this.enabled = Boolean(probe.path)
+    this.installSource = probe.source
+    this.executablePath = probe.path
+    if (!probe.path) {
+      this.disabledReason = '未找到 Codex CLI（全局安装或应用随包版本）'
+    }
+  }
 
   async run(input: AgentRunInput, emit: (event: AgentEvent) => void): Promise<void> {
     // Explicit null from main means "do not resume" (e.g. mid-conversation agent switch).
@@ -153,11 +168,13 @@ export class CodexAgentAdapter implements AgentAdapter {
     emit: (event: AgentEvent) => void,
     sessionId: string | undefined
   ): Promise<void> {
+    const gatewaySettings = loadGatewaySettings()
+    const useGateway = gatewaySettings.enabled
     const configuredApiKey = resolveConfiguredApiKey('codex')
     const envApiKey = resolveEnvValue(['OPENAI_API_KEY', 'CODEX_API_KEY'])
     const usesLocalCliProfile = hasLocalCodexCliConfig()
 
-    if (!configuredApiKey && !envApiKey && !usesLocalCliProfile) {
+    if (!useGateway && !configuredApiKey && !envApiKey && !usesLocalCliProfile) {
       emit({
         type: 'message.error',
         conversationId: input.conversationId,
@@ -188,16 +205,22 @@ export class CodexAgentAdapter implements AgentAdapter {
     try {
       const { Codex } = await loadCodexSdk()
       const codexOptions: CodexOptions = {
-        env: getShellEnvironment()
+        env: getShellEnvironment(),
+        ...(useGateway
+          ? {
+              baseUrl: buildProxyV1Url(gatewaySettings.host, gatewaySettings.port),
+              apiKey: PROXY_MANAGED
+            }
+          : {})
       }
 
-      const codexPath = resolveCodexExecutablePath()
+      const codexPath = this.executablePath
       if (codexPath) {
         codexOptions.codexPathOverride = codexPath
       }
 
       const apiKey = configuredApiKey || (!usesLocalCliProfile ? envApiKey : undefined)
-      if (apiKey) {
+      if (!useGateway && apiKey) {
         codexOptions.apiKey = apiKey
       }
 

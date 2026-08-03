@@ -40,6 +40,7 @@ function migrate(database: Database.Database): void {
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       agent_id TEXT NOT NULL,
+      provider_id TEXT,
       project_id TEXT,
       cwd TEXT,
       pinned INTEGER DEFAULT 0,
@@ -136,6 +137,9 @@ function runMigrations(database: Database.Database): void {
   }
   if (!convCols2.find((c) => c.name === 'model_id')) {
     database.exec('ALTER TABLE conversations ADD COLUMN model_id TEXT')
+  }
+  if (!convCols2.find((c) => c.name === 'provider_id')) {
+    database.exec('ALTER TABLE conversations ADD COLUMN provider_id TEXT')
   }
 
   const planCols = database.pragma('table_info(plans)') as { name: string }[]

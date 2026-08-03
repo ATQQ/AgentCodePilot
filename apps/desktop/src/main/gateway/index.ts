@@ -17,7 +17,6 @@ import {
   updateGatewaySettings,
   generateGatewayToken
 } from './settings-store'
-import { PROXY_MANAGED } from './live/constants'
 import {
   reapplyPreferredTakeovers,
   registerGatewayStarter,
@@ -27,6 +26,7 @@ import { ensureLiveBackupTable } from './live/backup-store'
 import { buildPromptPreview, createRequestLog, finishRequestLog } from './request-log'
 import { syncLogViewerWithSettings } from './log-viewer'
 import { canPassthrough, clientProtocolForPath, handlePassthrough } from './passthrough'
+import { reclaimGatewayPort } from './port-reclaim'
 import { routeModel } from './router'
 
 let server: Server | null = null
@@ -89,17 +89,6 @@ function handleCors(req: IncomingMessage, res: ServerResponse): boolean {
   return false
 }
 
-function validateToken(req: IncomingMessage): boolean {
-  if (!config.token) return true
-  const auth = req.headers['authorization'] || ''
-  const apiKey = (req.headers['x-api-key'] as string) || ''
-  const bearer = auth.startsWith('Bearer ') ? auth.slice(7) : ''
-  if (bearer === config.token || apiKey === config.token) return true
-  // Live takeover writes PROXY_MANAGED into CLI configs
-  if (bearer === PROXY_MANAGED || apiKey === PROXY_MANAGED) return true
-  return false
-}
-
 function openaiToUnified(body: OpenAIChatRequest): UnifiedTurn {
   const messages: { role: 'user' | 'assistant' | 'system'; content: string }[] = []
   let systemPrompt: string | undefined
@@ -150,11 +139,6 @@ function createAbortFromRequest(req: IncomingMessage): AbortController {
 
 async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (handleCors(req, res)) return
-
-  if (!validateToken(req)) {
-    sendError(res, 401, 'Invalid or missing authentication token', 'authentication_error')
-    return
-  }
 
   const path = normalizePath(req.url || '')
   const abort = createAbortFromRequest(req)
@@ -314,7 +298,9 @@ export function getGatewayConfig(): GatewayConfig {
   return { ...config }
 }
 
-export function startGateway(overrides?: Partial<GatewayConfig>): { token: string; port: number } {
+export async function startGateway(
+  overrides?: Partial<GatewayConfig>
+): Promise<{ token: string; port: number }> {
   ensureLiveBackupTable()
   syncConfigFromSettings()
 
@@ -326,8 +312,70 @@ export function startGateway(overrides?: Partial<GatewayConfig>): { token: strin
   if (!config.token) {
     config.token = generateGatewayToken()
   }
-  config.enabled = true
+  const listenOnce = async (): Promise<void> => {
+    const nextServer = createServer((req, res) => {
+      handleRequest(req, res).catch((err) => {
+        console.error('[Gateway] unhandled error:', err)
+        if (!res.headersSent) {
+          sendError(res, 500, 'Internal server error')
+        }
+      })
+    })
+    server = nextServer
 
+    await new Promise<void>((resolve, reject) => {
+      const onError = (error: NodeJS.ErrnoException): void => {
+        nextServer.off('listening', onListening)
+        if (server === nextServer) server = null
+        reject(error)
+      }
+      const onListening = (): void => {
+        nextServer.off('error', onError)
+        resolve()
+      }
+      nextServer.once('error', onError)
+      nextServer.once('listening', onListening)
+      nextServer.listen(config.port, config.host)
+    })
+  }
+
+  try {
+    await listenOnce()
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException
+    if (err.code === 'EADDRINUSE') {
+      const reclaimed = await reclaimGatewayPort(config.port)
+      if (reclaimed.length > 0) {
+        console.warn(
+          `[Gateway] reclaimed port ${config.port} from pid(s) ${reclaimed.join(', ')}, retrying…`
+        )
+        try {
+          await listenOnce()
+        } catch (retryError) {
+          config.enabled = false
+          updateGatewaySettings({ enabled: false })
+          const retryErr = retryError as NodeJS.ErrnoException
+          const message =
+            retryErr.code === 'EADDRINUSE'
+              ? `Gateway 端口 ${config.host}:${config.port} 已被占用，请更换端口后重试。`
+              : `Gateway 启动失败：${retryErr.message}`
+          throw new Error(message, { cause: retryError })
+        }
+      } else {
+        config.enabled = false
+        updateGatewaySettings({ enabled: false })
+        throw new Error(`Gateway 端口 ${config.host}:${config.port} 已被占用，请更换端口后重试。`, {
+          cause: error
+        })
+      }
+    } else {
+      config.enabled = false
+      updateGatewaySettings({ enabled: false })
+      throw new Error(`Gateway 启动失败：${err.message}`, { cause: error })
+    }
+  }
+
+  config.enabled = true
   saveGatewaySettings({
     ...loadGatewaySettings(),
     enabled: true,
@@ -335,19 +383,7 @@ export function startGateway(overrides?: Partial<GatewayConfig>): { token: strin
     port: config.port,
     token: config.token
   })
-
-  server = createServer((req, res) => {
-    handleRequest(req, res).catch((err) => {
-      console.error('[Gateway] unhandled error:', err)
-      if (!res.headersSent) {
-        sendError(res, 500, 'Internal server error')
-      }
-    })
-  })
-
-  server.listen(config.port, config.host, () => {
-    console.log(`[Gateway] listening on http://${config.host}:${config.port}`)
-  })
+  console.log(`[Gateway] listening on http://${config.host}:${config.port}`)
 
   // Keep log viewer in sync if logging was previously enabled
   try {
@@ -391,17 +427,17 @@ export function stopGateway(options?: {
 }
 
 export function isGatewayRunning(): boolean {
-  return server !== null
+  return server?.listening === true
 }
 
-export function maybeAutoStartGateway(): void {
+export async function maybeAutoStartGateway(): Promise<void> {
   ensureLiveBackupTable()
   const settings = ensureGatewayToken(loadGatewaySettings())
   if (settings.enabled) {
     try {
-      startGateway()
+      await startGateway()
       // Preference flags survive quit; re-wire CLI/Desktop configs to this gateway.
-      reapplyPreferredTakeovers()
+      await reapplyPreferredTakeovers()
     } catch (e) {
       console.error('[Gateway] auto-start failed:', e)
     }
@@ -413,12 +449,12 @@ export function maybeAutoStartGateway(): void {
   }
 }
 
-registerGatewayStarter(() => {
+registerGatewayStarter(async () => {
   if (isGatewayRunning()) {
     const cfg = getGatewayConfig()
     return { token: cfg.token, port: cfg.port }
   }
-  return startGateway()
+  return await startGateway()
 })
 
 // Re-exports for main process consumers
@@ -435,6 +471,11 @@ export {
   type ProviderTestInput,
   type ProviderTestResult
 } from './provider-test'
+export {
+  fetchProviderModels,
+  type ProviderFetchModelsResult,
+  type ProviderRemoteModel
+} from './provider-models'
 export {
   getTakeoverStatus,
   setTakeover,

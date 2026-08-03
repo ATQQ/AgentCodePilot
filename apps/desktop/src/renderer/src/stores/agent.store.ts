@@ -12,12 +12,13 @@ export const useAgentStore = defineStore('agent', () => {
   async function fetchAgents(): Promise<void> {
     const list = await window.agentAPI.agents.list()
     agents.value = list
-    if (!selectedAgentId.value || !list.some((a) => a.id === selectedAgentId.value)) {
-      selectedAgentId.value = list[0]?.id ?? ''
+    if (!selectedAgentId.value || !list.some((a) => a.id === selectedAgentId.value && a.enabled)) {
+      selectedAgentId.value = list.find((agent) => agent.enabled)?.id ?? ''
     }
   }
 
   function selectAgent(id: string, options?: { fetchCatalog?: boolean }): void {
+    if (!agents.value.find((agent) => agent.id === id)?.enabled) return
     selectedAgentId.value = id
     const modelStore = useModelStore()
     if (options?.fetchCatalog === false) {

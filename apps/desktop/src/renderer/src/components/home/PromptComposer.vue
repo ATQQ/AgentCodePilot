@@ -13,6 +13,9 @@ import type {
 import { toLocalFileUrl } from '@renderer/utils/localFile'
 import { useImagePreview } from '@renderer/composables/useImagePreview'
 import { useComposerStore } from '@renderer/stores/composer.store'
+import { useModelStore } from '@renderer/stores/model.store'
+import { useAgentStore } from '@renderer/stores/agent.store'
+import { useChatStore } from '@renderer/stores/chat.store'
 import PlanPicker from '@renderer/components/plans/PlanPicker.vue'
 import SkillPicker from '@renderer/components/skills/SkillPicker.vue'
 import ComposerInlineInput from './ComposerInlineInput.vue'
@@ -20,6 +23,9 @@ import ComposerInlineInput from './ComposerInlineInput.vue'
 const { t } = useI18n()
 const { openImagePreview } = useImagePreview()
 const composerStore = useComposerStore()
+const modelStore = useModelStore()
+const agentStore = useAgentStore()
+const chatStore = useChatStore()
 const inlineInputRef = ref<InstanceType<typeof ComposerInlineInput> | null>(null)
 const inlineHasContent = ref(false)
 const composerRootRef = ref<HTMLElement | null>(null)
@@ -133,8 +139,21 @@ function getFileName(path: string): string {
 const hasComposerContent = computed(
   () => inlineHasContent.value || attachments.value.length > 0 || planRefs.value.length > 0
 )
+const hasUsableGatewayModel = computed(
+  () =>
+    !modelStore.gatewayEnabled ||
+    Boolean(
+      modelStore.getEffectiveGatewaySelection(
+        chatStore.activeConversation?.providerId,
+        chatStore.activeConversation?.modelId,
+        agentStore.selectedAgentId
+      )
+    )
+)
+const canSubmit = computed(() => hasComposerContent.value && hasUsableGatewayModel.value)
 
 function handleSubmit(): void {
+  if (!hasUsableGatewayModel.value) return
   const text = inlineInputRef.value?.getContent() ?? ''
   const skillRefs = inlineInputRef.value?.getSkillRefs() ?? []
   if (
@@ -414,7 +433,7 @@ defineExpose({
       <div v-for="(msg, idx) in props.queuedMessages" :key="idx" class="queued-banner">
         <span class="queued-badge">{{ idx + 1 }}</span>
         <span class="queued-text">{{ msg.content }}</span>
-        <button class="queued-cancel" @click="handleCancelQueue(idx)">&times;</button>
+        <button class="queued-cancel" @click="() => handleCancelQueue(idx)">&times;</button>
       </div>
     </div>
 
@@ -423,7 +442,7 @@ defineExpose({
       <div v-for="plan in planRefs" :key="plan.id" class="plan-ref-chip">
         <span class="plan-ref-icon">&#x1F4CB;</span>
         <span class="plan-ref-title">{{ plan.title }}</span>
-        <button type="button" class="plan-ref-remove" @click="removePlanRef(plan.id)">
+        <button type="button" class="plan-ref-remove" @click="() => removePlanRef(plan.id)">
           &times;
         </button>
       </div>
@@ -433,9 +452,9 @@ defineExpose({
     <div v-if="attachments.length > 0" class="attachments-area">
       <div v-for="att in attachments" :key="att.id" class="attachment-item">
         <template v-if="att.type === 'image'">
-          <div class="attachment-image" @click="previewComposerImage(att)">
+          <div class="attachment-image" @click="() => previewComposerImage(att)">
             <img :src="att.previewUrl" :alt="att.name" />
-            <button class="attachment-remove" @click.stop="removeAttachment(att.id)">
+            <button class="attachment-remove" @click.stop="() => removeAttachment(att.id)">
               &times;
             </button>
           </div>
@@ -444,14 +463,18 @@ defineExpose({
           <div class="attachment-file">
             <span class="attachment-file-icon">&#x1F4C4;</span>
             <span class="attachment-file-name">{{ att.name }}</span>
-            <button class="attachment-remove" @click="removeAttachment(att.id)">&times;</button>
+            <button class="attachment-remove" @click="() => removeAttachment(att.id)">
+              &times;
+            </button>
           </div>
         </template>
         <template v-else-if="att.type === 'url'">
           <div class="attachment-url">
             <span class="attachment-url-badge">#{{ getUrlIndex(att.id) }}</span>
             <span class="attachment-url-text">{{ truncateUrl(att.url) }}</span>
-            <button class="attachment-remove" @click="removeAttachment(att.id)">&times;</button>
+            <button class="attachment-remove" @click="() => removeAttachment(att.id)">
+              &times;
+            </button>
           </div>
         </template>
       </div>
@@ -631,7 +654,13 @@ defineExpose({
         >
           <span class="stop-icon"></span>
         </button>
-        <button v-else class="send-btn" :disabled="!hasComposerContent" @click="handleSubmit">
+        <button
+          v-else
+          class="send-btn"
+          :disabled="!canSubmit"
+          :title="hasUsableGatewayModel ? '' : '请先在 API Gateway 设置中配置 Provider 和模型'"
+          @click="handleSubmit"
+        >
           <el-icon :size="14"><Top /></el-icon>
         </button>
       </div>

@@ -43,7 +43,10 @@ function getAgentIcon(id: string): string {
               height="14"
               alt=""
             />
-            {{ agent.name }}
+            <span>{{ agent.name }}</span>
+            <span v-if="!agent.enabled" class="disabled-reason">
+              {{ agent.disabledReason || '未安装' }}
+            </span>
           </el-dropdown-item>
         </el-dropdown-menu>
       </template>
@@ -81,6 +84,12 @@ function getAgentIcon(id: string): string {
   border-radius: 50%;
   margin-right: 6px;
   vertical-align: middle;
+}
+
+.disabled-reason {
+  margin-left: 8px;
+  color: var(--content-text-tertiary);
+  font-size: 11px;
 }
 
 .chevron {

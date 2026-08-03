@@ -6,7 +6,9 @@ import type { ApprovalLevel } from './permissions'
 import { buildPermissionOptions, buildToolAccessOptions } from './permissions'
 import { DEFAULT_MAX_AGENT_TURNS } from '../../shared/agent-run-settings'
 import { getShellEnvironment } from '../shell/shell-env'
-import { resolveClaudeCodeExecutablePath } from './claude-executable'
+import { loadGatewaySettings } from '../gateway/settings-store'
+import { CLAUDE_AUTH_ENV_KEYS, PROXY_MANAGED, buildProxyBaseUrl } from '../gateway/live/constants'
+import { probeClaudeCodeExecutable } from './claude-executable'
 
 const AGENT_TOOLS = [
   'Read',
@@ -58,9 +60,22 @@ function withWorkspaceContext(prompt: string, workspaceFolders?: string[]): stri
 export class ClaudeAgentAdapter implements AgentAdapter {
   readonly id = 'claude-code'
   readonly name = 'Claude Code'
-  readonly enabled = true
+  readonly enabled: boolean
+  readonly disabledReason?: string
+  readonly installSource: 'global' | 'bundled' | 'none'
+  private executablePath?: string
   private abortControllers = new Map<string, AbortController>()
   private sessionIds = new Map<string, string>()
+
+  constructor() {
+    const probe = probeClaudeCodeExecutable()
+    this.enabled = Boolean(probe.path)
+    this.installSource = probe.source
+    this.executablePath = probe.path
+    if (!probe.path) {
+      this.disabledReason = '未找到 Claude CLI（全局安装或应用随包版本）'
+    }
+  }
 
   async run(input: AgentRunInput, emit: (event: AgentEvent) => void): Promise<void> {
     const sessionId = this.resolveSessionId(input)
@@ -139,11 +154,19 @@ export class ClaudeAgentAdapter implements AgentAdapter {
 
     const maxTurns = input.maxTurns ?? DEFAULT_MAX_AGENT_TURNS
 
-    const claudeExecutable = resolveClaudeCodeExecutablePath()
+    const claudeExecutable = this.executablePath
+    const gatewaySettings = loadGatewaySettings()
+    const queryEnv = { ...getShellEnvironment() }
+    if (gatewaySettings.enabled) {
+      queryEnv.ANTHROPIC_BASE_URL = buildProxyBaseUrl(gatewaySettings.host, gatewaySettings.port)
+      for (const key of CLAUDE_AUTH_ENV_KEYS) {
+        queryEnv[key] = PROXY_MANAGED
+      }
+    }
     const queryOptions: Options = {
       abortController: controller,
       cwd: input.cwd || app.getPath('home'),
-      env: getShellEnvironment(),
+      env: queryEnv,
       ...(claudeExecutable ? { pathToClaudeCodeExecutable: claudeExecutable } : {}),
       ...(input.attachmentDirectories?.length
         ? { additionalDirectories: input.attachmentDirectories }

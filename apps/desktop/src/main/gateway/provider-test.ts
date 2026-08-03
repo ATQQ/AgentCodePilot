@@ -122,7 +122,8 @@ async function probeEndpoint(
   }
 }
 
-function resolveConfig(input: ProviderTestInput): GatewayProviderConfig {
+/** Resolve saved provider + optional unsaved draft (empty draft apiKey falls back to saved). */
+export function resolveProviderConfigForDraft(input: ProviderTestInput): GatewayProviderConfig {
   const saved = input.providerId ? getProvider(input.providerId) : undefined
   if (!saved && !input.draft) {
     throw new Error(
@@ -166,7 +167,7 @@ function resolveConfig(input: ProviderTestInput): GatewayProviderConfig {
 export async function testProviderConnectivity(
   input: ProviderTestInput
 ): Promise<ProviderTestResult> {
-  const config = resolveConfig(input)
+  const config = resolveProviderConfigForDraft(input)
   const protocols = (Object.keys(config.protocols) as WireAdapter[]).filter(
     (p) => config.protocols[p]?.baseUrl
   )

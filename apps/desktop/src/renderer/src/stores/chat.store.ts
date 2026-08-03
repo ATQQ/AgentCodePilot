@@ -32,6 +32,7 @@ export const useChatStore = defineStore('chat', () => {
       conversationId: string
       content: string
       agentId: string
+      providerId?: string
       modelId?: string
       planMode?: boolean
       planRefs?: PlanReference[]
@@ -415,6 +416,7 @@ export const useChatStore = defineStore('chat', () => {
     id: string
     title: string
     agentId: string
+    providerId?: string | null
     modelId?: string | null
     projectId: string | null
     cwd: string | null
@@ -430,6 +432,7 @@ export const useChatStore = defineStore('chat', () => {
       exists.pinned = item.pinned
       exists.archived = item.archived
       exists.approvalLevel = item.approvalLevel ?? 'auto'
+      exists.providerId = item.providerId ?? null
       exists.modelId = item.modelId ?? exists.modelId
       exists.updatedAt = item.updatedAt
     } else {
@@ -437,6 +440,7 @@ export const useChatStore = defineStore('chat', () => {
         id: item.id,
         title: item.title,
         agentId: item.agentId,
+        providerId: item.providerId ?? null,
         modelId: item.modelId ?? null,
         projectId: item.projectId,
         cwd: item.cwd,
@@ -499,7 +503,12 @@ export const useChatStore = defineStore('chat', () => {
         const modelStore = useModelStore()
         agentStore.selectAgent(conv.agentId, { fetchCatalog: false })
         setPendingAgent(id, conv.agentId)
-        void modelStore.refreshCatalogForConversation(id, conv.agentId, conv.modelId)
+        void modelStore.refreshCatalogForConversation(
+          id,
+          conv.agentId,
+          conv.modelId,
+          conv.providerId
+        )
       }
     }
   }
@@ -515,12 +524,21 @@ export const useChatStore = defineStore('chat', () => {
     skillRefs?: SkillReference[]
   ): Promise<string> {
     const modelStore = useModelStore()
-    const resolvedModelId = modelId ?? modelStore.getEffectiveModelId()
+    await modelStore.refreshGatewayProviders(agentId)
+    const gatewaySelection = modelStore.gatewayEnabled
+      ? modelStore.getEffectiveGatewaySelection(undefined, modelId, agentId)
+      : null
+    if (modelStore.gatewayEnabled && !gatewaySelection) {
+      throw new Error('请先在设置 → API Gateway 中配置可用的 Provider 和模型。')
+    }
+    const resolvedProviderId = gatewaySelection?.providerId
+    const resolvedModelId = gatewaySelection?.modelId ?? modelId ?? modelStore.getEffectiveModelId()
     const plainPlanRefs = toPlainPlanRefs(planRefs)
     const plainSkillRefs = toPlainSkillRefs(skillRefs)
     const effectivePlanMode = plainPlanRefs?.length ? false : (planMode ?? false)
     const result = await window.agentAPI.chat.createConversation({
       agentId,
+      providerId: resolvedProviderId,
       modelId: resolvedModelId,
       firstMessage,
       projectId,
@@ -551,6 +569,7 @@ export const useChatStore = defineStore('chat', () => {
       id: result.id,
       title: result.title,
       agentId,
+      providerId: resolvedProviderId ?? null,
       modelId: resolvedModelId,
       projectId: projectId ?? null,
       cwd: result.cwd,
@@ -566,7 +585,12 @@ export const useChatStore = defineStore('chat', () => {
     touchStreamActivity(result.id)
     addWaitingConversation(result.id)
     setPendingAgent(result.id, agentId)
-    void modelStore.refreshCatalogForConversation(result.id, agentId, resolvedModelId)
+    void modelStore.refreshCatalogForConversation(
+      result.id,
+      agentId,
+      resolvedModelId,
+      resolvedProviderId
+    )
     return result.id
   }
 
@@ -624,7 +648,19 @@ export const useChatStore = defineStore('chat', () => {
   ): Promise<void> {
     const conv = conversations.value.find((c) => c.id === conversationId)
     const modelStore = useModelStore()
-    const modelId = modelStore.getEffectiveModelId(conv?.modelId)
+    await modelStore.refreshGatewayProviders(agentId)
+    const gatewaySelection = modelStore.gatewayEnabled
+      ? modelStore.getEffectiveGatewaySelection(conv?.providerId, conv?.modelId, agentId)
+      : null
+    if (modelStore.gatewayEnabled && !gatewaySelection) {
+      reportSendFailure(conversationId, '请先在设置 → API Gateway 中配置可用的 Provider 和模型。')
+      return
+    }
+    const providerId = gatewaySelection?.providerId
+    const modelId = gatewaySelection?.modelId ?? modelStore.getEffectiveModelId(conv?.modelId)
+    if (conv && providerId && (conv.providerId !== providerId || conv.modelId !== modelId)) {
+      await setConversationProviderModel(conversationId, providerId, modelId)
+    }
     const effectivePlanMode = planRefs?.length ? false : (planMode ?? false)
     const plainSkillRefs = toPlainSkillRefs(skillRefs)
     if (isConversationBusy(conversationId)) {
@@ -632,6 +668,7 @@ export const useChatStore = defineStore('chat', () => {
         conversationId,
         content,
         agentId,
+        providerId,
         modelId,
         planMode: effectivePlanMode,
         planRefs: toPlainPlanRefs(planRefs),
@@ -661,6 +698,7 @@ export const useChatStore = defineStore('chat', () => {
         conversationId,
         content,
         agentId,
+        providerId,
         modelId,
         cwd: conv?.cwd || workspaceStore.currentCwd,
         workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
@@ -729,6 +767,7 @@ export const useChatStore = defineStore('chat', () => {
         conversationId: next.conversationId,
         content: next.content,
         agentId: next.agentId,
+        providerId: next.providerId,
         modelId: next.modelId ?? modelStore.getEffectiveModelId(conv?.modelId),
         cwd: conv?.cwd || workspaceStore.currentCwd,
         workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
@@ -1021,6 +1060,18 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  async function setConversationProviderModel(
+    conversationId: string,
+    providerId: string,
+    modelId: string
+  ): Promise<void> {
+    const conv = conversations.value.find((c) => c.id === conversationId)
+    if (!conv) return
+    conv.providerId = providerId
+    conv.modelId = modelId
+    await window.agentAPI.conversations.update({ id: conversationId, providerId, modelId })
+  }
+
   function initApprovalNavigateListener(): () => void {
     return window.agentAPI.approval.onNavigate((conversationId) => {
       setActive(conversationId)
@@ -1143,6 +1194,7 @@ export const useChatStore = defineStore('chat', () => {
     respondToApproval,
     setConversationApprovalLevel,
     setConversationModelId,
+    setConversationProviderModel,
     initAgentEventListener,
     initApprovalNavigateListener,
     getPendingAgent,

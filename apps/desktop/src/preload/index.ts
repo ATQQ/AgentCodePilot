@@ -92,7 +92,9 @@ const agentAPI = {
     delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.PROVIDERS_DELETE, id),
     presets: () => ipcRenderer.invoke(IPC_CHANNELS.PROVIDERS_PRESETS),
     test: (payload: import('./types').ProviderTestInputPayload) =>
-      ipcRenderer.invoke(IPC_CHANNELS.PROVIDERS_TEST, payload)
+      ipcRenderer.invoke(IPC_CHANNELS.PROVIDERS_TEST, payload),
+    fetchModels: (payload: import('./types').ProviderTestInputPayload) =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROVIDERS_FETCH_MODELS, payload)
   },
   settings: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET),

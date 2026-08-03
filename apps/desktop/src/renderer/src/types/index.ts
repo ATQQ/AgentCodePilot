@@ -35,6 +35,8 @@ export interface AgentConfig {
   id: string
   name: string
   enabled: boolean
+  disabledReason?: string
+  installSource?: 'global' | 'bundled' | 'none'
 }
 
 export interface ModelConfig {
@@ -109,6 +111,7 @@ export interface Conversation {
   id: string
   title: string
   agentId: string
+  providerId?: string | null
   modelId?: string | null
   projectId: string | null
   cwd: string | null
