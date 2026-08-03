@@ -21,6 +21,19 @@ import { getShellEnvironment } from '../shell/shell-env'
 import { loadGatewaySettings } from '../gateway/settings-store'
 import { ensureGatewayRunning } from '../gateway/live/takeover'
 import { PROXY_MANAGED, buildProxyV1Url } from '../gateway/live/constants'
+import { routeModel } from '../gateway/router'
+
+/** Strip providerId/ prefix so local Codex usage logs show the upstream model id. */
+function toUpstreamFacingModelId(
+  model: string | undefined,
+  useGateway: boolean
+): string | undefined {
+  if (!model) return undefined
+  if (!useGateway) return model
+  const idx = model.indexOf('/')
+  if (idx <= 0) return model
+  return model.slice(idx + 1)
+}
 
 type ApprovalLevel = NonNullable<AgentRunInput['approvalLevel']>
 
@@ -193,10 +206,6 @@ export class CodexAgentAdapter implements AgentAdapter {
         const running = await ensureGatewayRunning()
         gatewayHost = running.host
         gatewayPort = running.port
-        // Prefer SDK baseUrl/apiKey override — do not rewrite ~/.codex/config.toml.
-        console.log(
-          `[CodexAgent] routing via gateway ${buildProxyV1Url(gatewayHost, gatewayPort)} (no config.toml write)`
-        )
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error)
         emit({
@@ -250,7 +259,27 @@ export class CodexAgentAdapter implements AgentAdapter {
 
       const codex = new Codex(codexOptions)
 
-      const selectedModel = input.model || codexConfig?.defaultModelId
+      const routeModelName = input.model || codexConfig?.defaultModelId
+      // Bare model id for local session/usage; gateway routeModel still resolves via models list.
+      const selectedModel = toUpstreamFacingModelId(routeModelName, useGateway)
+      if (useGateway) {
+        const gatewayUrl = buildProxyV1Url(gatewayHost, gatewayPort)
+        try {
+          const route = routeModelName ? routeModel(routeModelName, 'codex') : null
+          console.log(
+            `[CodexAgent] routing via gateway ${gatewayUrl} ` +
+              `routeModel=${routeModelName ?? '(cli-default)'} ` +
+              `upstreamModel=${route?.upstreamModel ?? '(n/a)'} ` +
+              `threadModel=${selectedModel ?? '(none)'} (no config.toml write)`
+          )
+        } catch (error) {
+          console.warn(
+            `[CodexAgent] routing via gateway ${gatewayUrl} ` +
+              `routeModel=${routeModelName ?? '(cli-default)'} threadModel=${selectedModel ?? '(none)'} ` +
+              `(route resolve failed: ${error instanceof Error ? error.message : String(error)})`
+          )
+        }
+      }
       const threadOptions = {
         ...(selectedModel ? { model: selectedModel } : {}),
         workingDirectory: cwd,

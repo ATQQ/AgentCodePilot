@@ -6,6 +6,7 @@ import type {
   UnifiedMessage,
   UnifiedTurn
 } from '../types'
+import { routeModel } from '../router'
 import { runUnifiedTurn } from '../upstream'
 import { consumeEvents, writeJson, writeSseHeaders } from '../bridge/common'
 import { appendLogEvent, finishRequestLog, type GatewayRequestLog } from '../request-log'
@@ -62,7 +63,9 @@ export async function handleResponses(
 ): Promise<void> {
   const turn = responsesToUnified(body)
   const id = `resp_${Date.now().toString(36)}`
-  const model = turn.model
+  // Echo the upstream-facing model id (not providerId/modelId) so Codex usage stats match Claude.
+  const route = routeModel(turn.model, channel)
+  const model = route.upstreamModel
 
   if (turn.stream) {
     writeSseHeaders(res)

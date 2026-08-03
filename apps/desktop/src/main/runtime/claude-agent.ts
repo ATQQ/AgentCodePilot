@@ -9,6 +9,7 @@ import { getShellEnvironment } from '../shell/shell-env'
 import { loadGatewaySettings } from '../gateway/settings-store'
 import { ensureGatewayRunning } from '../gateway/live/takeover'
 import { CLAUDE_AUTH_ENV_KEYS, PROXY_MANAGED, buildProxyBaseUrl } from '../gateway/live/constants'
+import { routeModel } from '../gateway/router'
 import { probeClaudeCodeExecutable } from './claude-executable'
 
 const AGENT_TOOLS = [
@@ -177,7 +178,20 @@ export class ClaudeAgentAdapter implements AgentAdapter {
         // Flag-layer settings (--settings) outrank user/project/local for scalar keys.
         gatewaySettingsOverlay = { env: gatewayEnv }
         settingSources = ['project', 'local']
-        console.log(`[ClaudeAgent] routing via gateway ${proxyBaseUrl} (no settings.json write)`)
+        const routeModelName = input.model ?? '(cli-default)'
+        try {
+          const route = input.model ? routeModel(input.model, 'claudeCli') : null
+          console.log(
+            `[ClaudeAgent] routing via gateway ${proxyBaseUrl} ` +
+              `routeModel=${routeModelName} upstreamModel=${route?.upstreamModel ?? '(n/a)'} ` +
+              `(no settings.json write)`
+          )
+        } catch (error) {
+          console.warn(
+            `[ClaudeAgent] routing via gateway ${proxyBaseUrl} routeModel=${routeModelName} ` +
+              `(route resolve failed: ${error instanceof Error ? error.message : String(error)})`
+          )
+        }
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error)
         this.abortControllers.delete(input.conversationId)
