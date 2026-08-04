@@ -116,13 +116,26 @@ export function estimateTimelineItemHeight(item: ChatTimelineItem, expanded = fa
 
   if (msg.parts?.length) {
     let height = 96
-    for (const part of msg.parts) {
-      if (part.type === 'thinking') {
-        height += part.completed ? 28 : Math.min(240, 24 + part.content.split('\n').length * 16)
-      } else if (part.type === 'tool') {
-        height += 48
-      } else if (part.type === 'text') {
-        height += Math.min(800, Math.max(1, part.content.split('\n').length) * 18)
+    const hasProcess = msg.parts.some(
+      (part) => (part.type === 'thinking' && part.content.trim()) || part.type === 'tool'
+    )
+    // After stream ends, process collapses into one fold row.
+    if (hasProcess && item.final !== false) {
+      height += 32
+      for (const part of msg.parts) {
+        if (part.type === 'text') {
+          height += Math.min(800, Math.max(1, part.content.split('\n').length) * 18)
+        }
+      }
+    } else {
+      for (const part of msg.parts) {
+        if (part.type === 'thinking') {
+          height += part.completed ? 28 : Math.min(240, 24 + part.content.split('\n').length * 16)
+        } else if (part.type === 'tool') {
+          height += 48
+        } else if (part.type === 'text') {
+          height += Math.min(800, Math.max(1, part.content.split('\n').length) * 18)
+        }
       }
     }
     if (msg.stopped) height += 28

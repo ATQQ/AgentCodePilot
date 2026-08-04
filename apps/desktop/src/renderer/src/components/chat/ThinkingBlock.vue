@@ -3,18 +3,27 @@ import { ref, watch, computed } from 'vue'
 import { ArrowRight } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 
-const props = defineProps<{
-  content: string
-  completed?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    content: string
+    completed?: boolean
+    /** When false, stay expanded (e.g. inside ProcessFold). */
+    autoCollapse?: boolean
+  }>(),
+  { autoCollapse: true }
+)
 
 const { t } = useI18n()
-const expanded = ref(!props.completed)
+const expanded = ref(!(props.completed && props.autoCollapse))
 const userToggled = ref(false)
 
 watch(
-  () => props.completed,
-  (completed) => {
+  [() => props.completed, () => props.autoCollapse],
+  ([completed, autoCollapse]) => {
+    if (!autoCollapse) {
+      expanded.value = true
+      return
+    }
     if (completed && !userToggled.value) {
       expanded.value = false
     } else if (!completed) {

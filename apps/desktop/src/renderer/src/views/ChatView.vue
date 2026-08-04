@@ -12,6 +12,7 @@ import ModelSelector from '@renderer/components/home/ModelSelector.vue'
 import ToolCallsSection from '@renderer/components/chat/ToolCallsSection.vue'
 import ToolCallCard from '@renderer/components/chat/ToolCallCard.vue'
 import ThinkingBlock from '@renderer/components/chat/ThinkingBlock.vue'
+import ProcessFold from '@renderer/components/chat/ProcessFold.vue'
 import ApprovalRequestCard from '@renderer/components/chat/ApprovalRequestCard.vue'
 import MessageAttachmentImage from '@renderer/components/chat/MessageAttachmentImage.vue'
 import CollapsibleUserMessageText from '@renderer/components/chat/CollapsibleUserMessageText.vue'
@@ -177,6 +178,37 @@ watch(
 
 function hasMessageParts(msg: Message): boolean {
   return !!msg.parts?.length
+}
+
+function countProcessParts(msg: Message): { thinkingCount: number; toolCount: number } {
+  let thinkingCount = 0
+  let toolCount = 0
+  for (const part of msg.parts ?? []) {
+    if (part.type === 'thinking' && part.content.trim()) thinkingCount += 1
+    else if (part.type === 'tool' && getToolCallForPart(msg, part.toolUseId)) toolCount += 1
+  }
+  return { thinkingCount, toolCount }
+}
+
+function hasProcessParts(msg: Message): boolean {
+  const { thinkingCount, toolCount } = countProcessParts(msg)
+  return thinkingCount > 0 || toolCount > 0
+}
+
+function isProcessBusy(msg: Message): boolean {
+  if (hasRunningTools(msg)) return true
+  return (
+    msg.parts?.some((part) => part.type === 'thinking' && part.content.trim() && !part.completed) ??
+    false
+  )
+}
+
+/** Fold thinking + tools once the answer is readable (stream ended, or text flowing with idle process). */
+function shouldFoldProcess(msg: Message): boolean {
+  if (!hasProcessParts(msg)) return false
+  if (!chatStore.isMessageStreaming(msg.id)) return true
+  const hasText = msg.parts?.some((part) => part.type === 'text' && part.content.trim()) ?? false
+  return hasText && !isProcessBusy(msg)
 }
 
 function hasVisibleAssistantBody(msg: Message): boolean {
@@ -638,63 +670,119 @@ function toggleUserMessageExpanded(messageId: string): void {
                         "
                       />
                       <template v-if="hasMessageParts(msg)">
-                        <template
-                          v-for="(part, partIndex) in msg.parts"
-                          :key="`${msg.id}-part-${partIndex}-${part.type}`"
-                        >
-                          <ThinkingBlock
-                            v-if="part.type === 'thinking' && part.content.trim()"
-                            :content="part.content"
-                            :completed="!!part.completed"
-                          />
-                          <div
-                            v-else-if="
-                              part.type === 'tool' && getToolCallForPart(msg, part.toolUseId)
-                            "
-                            class="message-tool-call"
+                        <template v-if="shouldFoldProcess(msg)">
+                          <ProcessFold
+                            v-if="hasProcessParts(msg)"
+                            :thinking-count="countProcessParts(msg).thinkingCount"
+                            :tool-count="countProcessParts(msg).toolCount"
+                            :completed="true"
                           >
-                            <ToolCallCard :tool-call="getToolCallForPart(msg, part.toolUseId)!" />
-                          </div>
-                          <MarkdownRender
-                            v-else-if="part.type === 'text' && part.content.trim()"
-                            v-bind="
-                              textPartMarkdownProps(
-                                markdownProps as unknown as Record<string, unknown> | undefined,
-                                part,
-                                !(
-                                  chatStore.isMessageStreaming(msg.id) &&
-                                  partIndex === lastStreamingTextPartIndex(msg)
+                            <template
+                              v-for="(part, partIndex) in msg.parts"
+                              :key="`${msg.id}-process-${partIndex}-${part.type}`"
+                            >
+                              <ThinkingBlock
+                                v-if="part.type === 'thinking' && part.content.trim()"
+                                :content="part.content"
+                                :completed="!!part.completed"
+                                :auto-collapse="false"
+                              />
+                              <div
+                                v-else-if="
+                                  part.type === 'tool' && getToolCallForPart(msg, part.toolUseId)
+                                "
+                                class="message-tool-call"
+                              >
+                                <ToolCallCard
+                                  :tool-call="getToolCallForPart(msg, part.toolUseId)!"
+                                  :auto-collapse="false"
+                                />
+                              </div>
+                            </template>
+                          </ProcessFold>
+                          <template
+                            v-for="(part, partIndex) in msg.parts"
+                            :key="`${msg.id}-text-${partIndex}`"
+                          >
+                            <MarkdownRender
+                              v-if="part.type === 'text' && part.content.trim()"
+                              v-bind="
+                                textPartMarkdownProps(
+                                  markdownProps as unknown as Record<string, unknown> | undefined,
+                                  part,
+                                  true
                                 )
-                              )
-                            "
-                            custom-id="chat"
-                            :smooth-streaming="
-                              chatStore.isMessageStreaming(msg.id) &&
-                              partIndex === lastStreamingTextPartIndex(msg)
-                                ? 'auto'
-                                : false
-                            "
-                            :fade="
-                              !chatStore.isMessageStreaming(msg.id) &&
-                              !chatStore.wasMessageStreamed(msg.id)
-                            "
-                            :typewriter="
-                              chatStore.isMessageStreaming(msg.id) &&
-                              partIndex === lastStreamingTextPartIndex(msg)
-                            "
-                            :max-live-nodes="
-                              chatStore.isMessageStreaming(msg.id) &&
-                              partIndex === lastStreamingTextPartIndex(msg)
-                                ? 120
-                                : 280
-                            "
-                            :code-block-stream="
-                              chatStore.isMessageStreaming(msg.id) &&
-                              partIndex === lastStreamingTextPartIndex(msg)
-                            "
-                            :is-dark="isDark"
-                            :code-block-props="CODE_BLOCK_PROPS"
-                          />
+                              "
+                              custom-id="chat"
+                              :smooth-streaming="false"
+                              :fade="!chatStore.wasMessageStreamed(msg.id)"
+                              :typewriter="false"
+                              :max-live-nodes="280"
+                              :code-block-stream="false"
+                              :is-dark="isDark"
+                              :code-block-props="CODE_BLOCK_PROPS"
+                            />
+                          </template>
+                        </template>
+                        <template v-else>
+                          <template
+                            v-for="(part, partIndex) in msg.parts"
+                            :key="`${msg.id}-part-${partIndex}-${part.type}`"
+                          >
+                            <ThinkingBlock
+                              v-if="part.type === 'thinking' && part.content.trim()"
+                              :content="part.content"
+                              :completed="!!part.completed"
+                            />
+                            <div
+                              v-else-if="
+                                part.type === 'tool' && getToolCallForPart(msg, part.toolUseId)
+                              "
+                              class="message-tool-call"
+                            >
+                              <ToolCallCard :tool-call="getToolCallForPart(msg, part.toolUseId)!" />
+                            </div>
+                            <MarkdownRender
+                              v-else-if="part.type === 'text' && part.content.trim()"
+                              v-bind="
+                                textPartMarkdownProps(
+                                  markdownProps as unknown as Record<string, unknown> | undefined,
+                                  part,
+                                  !(
+                                    chatStore.isMessageStreaming(msg.id) &&
+                                    partIndex === lastStreamingTextPartIndex(msg)
+                                  )
+                                )
+                              "
+                              custom-id="chat"
+                              :smooth-streaming="
+                                chatStore.isMessageStreaming(msg.id) &&
+                                partIndex === lastStreamingTextPartIndex(msg)
+                                  ? 'auto'
+                                  : false
+                              "
+                              :fade="
+                                !chatStore.isMessageStreaming(msg.id) &&
+                                !chatStore.wasMessageStreamed(msg.id)
+                              "
+                              :typewriter="
+                                chatStore.isMessageStreaming(msg.id) &&
+                                partIndex === lastStreamingTextPartIndex(msg)
+                              "
+                              :max-live-nodes="
+                                chatStore.isMessageStreaming(msg.id) &&
+                                partIndex === lastStreamingTextPartIndex(msg)
+                                  ? 120
+                                  : 280
+                              "
+                              :code-block-stream="
+                                chatStore.isMessageStreaming(msg.id) &&
+                                partIndex === lastStreamingTextPartIndex(msg)
+                              "
+                              :is-dark="isDark"
+                              :code-block-props="CODE_BLOCK_PROPS"
+                            />
+                          </template>
                         </template>
                       </template>
                       <template v-else>

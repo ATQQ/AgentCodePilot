@@ -12,11 +12,17 @@ const props = defineProps<{
 
 const expanded = ref(true)
 const autoCollapsed = ref(false)
+const userToggled = ref(false)
+
+const allFinished = computed(() =>
+  props.toolCalls.every((tc) => tc.status === 'completed' || tc.status === 'error')
+)
 
 watch(
-  () => props.hasTextContent,
-  (has) => {
-    if (has && !autoCollapsed.value) {
+  [() => props.hasTextContent, allFinished],
+  ([hasText, finished]) => {
+    if (userToggled.value || autoCollapsed.value) return
+    if (hasText || finished) {
       expanded.value = false
       autoCollapsed.value = true
     }
@@ -29,6 +35,7 @@ const collapsedSummary = computed(() => {
 })
 
 function toggle(): void {
+  userToggled.value = true
   expanded.value = !expanded.value
 }
 </script>

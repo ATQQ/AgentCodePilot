@@ -71,6 +71,7 @@ declare module 'vue' {
     OpenPathMenu: typeof import('./src/components/environment/OpenPathMenu.vue')['default']
     PlanPicker: typeof import('./src/components/plans/PlanPicker.vue')['default']
     PlansPanel: typeof import('./src/components/plans/PlansPanel.vue')['default']
+    ProcessFold: typeof import('./src/components/chat/ProcessFold.vue')['default']
     PromptComposer: typeof import('./src/components/home/PromptComposer.vue')['default']
     ResizableSplit: typeof import('./src/components/layout/ResizableSplit.vue')['default']
     ReviewTreeActions: typeof import('./src/components/workspace/ReviewTreeActions.vue')['default']
