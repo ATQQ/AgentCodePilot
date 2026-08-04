@@ -17,6 +17,13 @@ export async function* runUnifiedTurn(
   channel?: GatewayChannel
 ): AsyncGenerator<AdapterEvent> {
   const { provider, protocol, endpoint, upstreamModel } = routeModel(turn.model, channel)
+  if (protocol !== 'openai-chat' && protocol !== 'anthropic') {
+    yield {
+      type: 'error',
+      error: `UnifiedTurn does not support protocol ${protocol}`
+    }
+    return
+  }
   const adapter = resolveAdapter(protocol)
   const request = adapter.buildRequest(turn, endpoint, upstreamModel)
 

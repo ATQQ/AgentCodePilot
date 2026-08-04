@@ -247,7 +247,7 @@ export interface GatewayProviderPublicPayload {
   name: string
   type: string
   config: {
-    adapter: 'openai-chat' | 'anthropic'
+    adapter: 'openai-chat' | 'anthropic' | 'openai-responses'
     baseUrl: string
     apiKey: string
     models?: string[]
@@ -256,7 +256,7 @@ export interface GatewayProviderPublicPayload {
     hasApiKey: boolean
     protocols: Partial<
       Record<
-        'openai-chat' | 'anthropic',
+        'openai-chat' | 'anthropic' | 'openai-responses',
         {
           baseUrl: string
           apiKey: string
@@ -274,7 +274,7 @@ export interface ProviderTestDraftPayload {
   defaultModel?: string
   protocols: Partial<
     Record<
-      'openai-chat' | 'anthropic',
+      'openai-chat' | 'anthropic' | 'openai-responses',
       {
         baseUrl: string
         apiKey?: string
@@ -288,11 +288,11 @@ export interface ProviderTestDraftPayload {
 export interface ProviderTestInputPayload {
   providerId?: string
   draft?: ProviderTestDraftPayload
-  protocol?: 'openai-chat' | 'anthropic'
+  protocol?: 'openai-chat' | 'anthropic' | 'openai-responses'
 }
 
 export interface ProviderTestProtocolResultPayload {
-  protocol: 'openai-chat' | 'anthropic'
+  protocol: 'openai-chat' | 'anthropic' | 'openai-responses'
   ok: boolean
   status?: number
   latencyMs: number
@@ -309,11 +309,11 @@ export interface ProviderTestResultPayload {
 export interface ProviderRemoteModelPayload {
   id: string
   name?: string
-  protocol: 'openai-chat' | 'anthropic'
+  protocol: 'openai-chat' | 'anthropic' | 'openai-responses'
 }
 
 export interface ProviderFetchModelsErrorPayload {
-  protocol: 'openai-chat' | 'anthropic'
+  protocol: 'openai-chat' | 'anthropic' | 'openai-responses'
   error: string
 }
 
@@ -338,9 +338,9 @@ export interface GatewaySettingsPayload {
   token: string
   defaultProviderId?: string
   channelProtocols: {
-    claudeCli?: 'openai-chat' | 'anthropic'
-    claudeDesktop?: 'openai-chat' | 'anthropic'
-    codex?: 'openai-chat' | 'anthropic'
+    claudeCli?: 'openai-chat' | 'anthropic' | 'openai-responses'
+    claudeDesktop?: 'openai-chat' | 'anthropic' | 'openai-responses'
+    codex?: 'openai-chat' | 'anthropic' | 'openai-responses'
   }
   takeover: {
     claudeCli: boolean

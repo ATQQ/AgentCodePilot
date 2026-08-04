@@ -8,7 +8,7 @@ import type {
 } from './types'
 import { handleChatCompletions } from './handlers/chat-completions'
 import { handleMessages } from './handlers/messages'
-import { handleResponses } from './handlers/responses'
+import { handleResponsesViaChat } from './handlers/responses-via-chat'
 import { listGatewayModels } from './handlers/models'
 import {
   ensureGatewayToken,
@@ -154,7 +154,7 @@ function logGatewayRoute(input: {
   model?: string
   providerId?: string
   protocol?: string
-  proxyMode: 'passthrough' | 'unified' | 'rejected'
+  proxyMode: 'passthrough' | 'unified' | 'rejected' | 'convert'
   detail?: string
 }): void {
   const parts = [
@@ -378,30 +378,52 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         requestBody: body
       })
 
-      if (bodyHasTools(body)) {
-        const errMsg =
-          'Responses 路径经 unified 重建会丢弃 tools。请使用支持同协议透传的 Provider，或去掉 tools 后重试。'
+      if (canPassthrough('openai-responses', route.protocol)) {
         logGatewayRoute({
           path: effectivePath,
           model: body.model,
           providerId: route.provider.id,
           protocol: route.protocol,
-          proxyMode: 'rejected',
-          detail: errMsg
+          proxyMode: 'passthrough'
         })
-        finishRequestLog(log, 'error', { error: errMsg })
-        sendError(res, 400, errMsg)
+        await handlePassthrough({
+          clientProtocol: 'openai-responses',
+          parsedBody: body,
+          clientHeaders: req.headers,
+          res,
+          signal: abort.signal,
+          log,
+          channel: 'codex'
+        })
         return
       }
 
+      if (route.protocol === 'openai-chat') {
+        logGatewayRoute({
+          path: effectivePath,
+          model: body.model,
+          providerId: route.provider.id,
+          protocol: route.protocol,
+          proxyMode: 'convert'
+        })
+        await handleResponsesViaChat(body, res, abort.signal, log, 'codex')
+        return
+      }
+
+      const errMsg =
+        route.protocol === 'anthropic'
+          ? 'Codex Responses→Anthropic 转换尚未支持。请将 Codex 通道协议设为 openai-chat（网关转换）或 openai-responses（原生透传）。'
+          : `Codex /v1/responses 无法路由到协议 ${route.protocol}。请配置 openai-chat 或 openai-responses。`
       logGatewayRoute({
         path: effectivePath,
         model: body.model,
         providerId: route.provider.id,
         protocol: route.protocol,
-        proxyMode: 'unified'
+        proxyMode: 'rejected',
+        detail: errMsg
       })
-      await handleResponses(body, res, abort.signal, log, 'codex')
+      finishRequestLog(log, 'error', { error: errMsg })
+      sendError(res, 400, errMsg)
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Invalid request body'
       console.warn(`[Gateway] ${effectivePath} error: ${msg}`)

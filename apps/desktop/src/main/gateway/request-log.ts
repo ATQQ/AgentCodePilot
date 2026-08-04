@@ -27,7 +27,7 @@ export interface GatewayUpstreamRequestLog {
 }
 
 /** How the gateway handled the request. */
-export type GatewayProxyMode = 'passthrough' | 'unified'
+export type GatewayProxyMode = 'passthrough' | 'unified' | 'convert'
 
 /** Middle-box snapshot for passthrough (proves body was not stripped). */
 export interface GatewayInterceptInfo {
@@ -497,7 +497,8 @@ function matches(summary: GatewayLogSummary, query: ListGatewayLogsQuery): boole
       summary.promptPreview,
       summary.proxyMode,
       summary.proxyMode === 'passthrough' ? '透传 pipe' : '',
-      summary.proxyMode === 'unified' ? '重建 unified' : ''
+      summary.proxyMode === 'unified' ? '重建 unified' : '',
+      summary.proxyMode === 'convert' ? '转换 convert' : ''
     ]
       .filter(Boolean)
       .join(' ')

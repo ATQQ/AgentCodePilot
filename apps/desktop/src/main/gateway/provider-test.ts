@@ -1,5 +1,7 @@
 import { resolveAdapter } from './adapters'
+import { joinUrl } from './adapters/base'
 import { getProvider, parseProviderConfig } from './provider-store'
+import { applyHeaderOverrides } from './request-overrides'
 import type {
   GatewayProviderConfig,
   ProtocolEndpointConfig,
@@ -91,7 +93,62 @@ async function probeEndpoint(
     }
   }
 
-  const adapter = resolveAdapter(protocol)
+  if (protocol === 'openai-responses') {
+    const url = joinUrl(endpoint.baseUrl, '/v1/responses')
+    const headers = applyHeaderOverrides(
+      {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Authorization: `Bearer ${endpoint.apiKey.trim()}`
+      },
+      endpoint.headers
+    )
+    const body = JSON.stringify({
+      model,
+      input: 'ping',
+      max_output_tokens: 1,
+      stream: false
+    })
+    const started = Date.now()
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers,
+        body,
+        signal: AbortSignal.timeout(TEST_TIMEOUT_MS)
+      })
+      const latencyMs = Date.now() - started
+      const text = await res.text().catch(() => '')
+      if (res.ok) {
+        return {
+          protocol,
+          ok: true,
+          status: res.status,
+          latencyMs,
+          url,
+          message: `HTTP ${res.status}`
+        }
+      }
+      return {
+        protocol,
+        ok: false,
+        status: res.status,
+        latencyMs,
+        url,
+        error: `HTTP ${res.status}: ${text.slice(0, 240) || res.statusText}`
+      }
+    } catch (e) {
+      return {
+        protocol,
+        ok: false,
+        latencyMs: Date.now() - started,
+        url,
+        error: e instanceof Error ? e.message : String(e)
+      }
+    }
+  }
+
+  const adapter = resolveAdapter(protocol === 'anthropic' ? 'anthropic' : 'openai-chat')
   const req = adapter.buildRequest(buildTurn(model), endpoint, model)
   const started = Date.now()
   try {

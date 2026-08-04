@@ -31,6 +31,7 @@ const HOP_BY_HOP = new Set([
 export function clientProtocolForPath(path: string): WireAdapter | null {
   if (path === '/v1/messages') return 'anthropic'
   if (path === '/v1/chat/completions') return 'openai-chat'
+  if (path === '/v1/responses') return 'openai-responses'
   return null
 }
 
@@ -42,7 +43,9 @@ export function canPassthrough(
 }
 
 function upstreamPath(protocol: WireAdapter): string {
-  return protocol === 'anthropic' ? '/v1/messages' : '/v1/chat/completions'
+  if (protocol === 'anthropic') return '/v1/messages'
+  if (protocol === 'openai-responses') return '/v1/responses'
+  return '/v1/chat/completions'
 }
 
 function buildUpstreamHeaders(

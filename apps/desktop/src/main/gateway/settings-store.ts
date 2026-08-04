@@ -57,7 +57,7 @@ function parseLogging(raw: Partial<GatewayLoggingSettings> | undefined): Gateway
 }
 
 function isWireAdapter(value: unknown): value is WireAdapter {
-  return value === 'openai-chat' || value === 'anthropic'
+  return value === 'openai-chat' || value === 'anthropic' || value === 'openai-responses'
 }
 
 function parseChannelProtocols(

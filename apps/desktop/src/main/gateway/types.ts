@@ -1,4 +1,4 @@
-export type WireAdapter = 'openai-chat' | 'anthropic'
+export type WireAdapter = 'openai-chat' | 'anthropic' | 'openai-responses'
 
 /** Protocol endpoint: address + key, plus optional request overrides. Models are provider-shared. */
 export interface ProtocolEndpointConfig {
@@ -42,7 +42,7 @@ export interface GatewaySettings {
   port: number
   token: string
   defaultProviderId?: string
-  /** Per-channel upstream protocol (openai-chat / anthropic). */
+  /** Per-channel upstream protocol (openai-chat / anthropic / openai-responses). */
   channelProtocols: ChannelProtocolBindings
   takeover: GatewayTakeoverFlags
   logging: GatewayLoggingSettings
@@ -254,9 +254,14 @@ export interface ResponsesInputItem {
 
 export interface ResponsesRequest {
   model: string
-  input?: string | ResponsesInputItem[]
-  instructions?: string
+  input?: string | ResponsesInputItem[] | Record<string, unknown>
+  instructions?: string | unknown
   stream?: boolean
   temperature?: number
   max_output_tokens?: number
+  tools?: unknown[]
+  tool_choice?: unknown
+  parallel_tool_calls?: boolean
+  reasoning?: unknown
+  [key: string]: unknown
 }

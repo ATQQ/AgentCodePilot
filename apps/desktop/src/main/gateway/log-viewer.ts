@@ -421,6 +421,7 @@ const VIEWER_HTML = `<!doctype html>
     function modeBadge(mode) {
       if (mode === 'passthrough') return '<span class="badge pass">透传</span>';
       if (mode === 'unified') return '<span class="badge unified">重建</span>';
+      if (mode === 'convert') return '<span class="badge unified">转换</span>';
       return '';
     }
 
@@ -442,7 +443,13 @@ const VIEWER_HTML = `<!doctype html>
           '</div></div>' +
           '<div class="arrow">→</div>' +
           '<div class="node"><div class="label">② 网关拦截</div><div class="mono">' +
-            escapeHtml(mode === 'passthrough' ? '原样透传' : 'UnifiedTurn 重建') +
+            escapeHtml(
+              mode === 'passthrough'
+                ? '原样透传'
+                : mode === 'convert'
+                  ? 'Responses↔Chat 转换'
+                  : 'UnifiedTurn 重建'
+            ) +
             '<br/>改写: ' + escapeHtml((ix.rewritten || []).join(', ') || '-') +
           '</div></div>' +
           '<div class="arrow">→</div>' +

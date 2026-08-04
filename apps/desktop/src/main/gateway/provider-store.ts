@@ -15,10 +15,10 @@ import type {
 
 const KEEP = '__KEEP__'
 
-export const WIRE_ADAPTERS: WireAdapter[] = ['openai-chat', 'anthropic']
+export const WIRE_ADAPTERS: WireAdapter[] = ['openai-chat', 'anthropic', 'openai-responses']
 
 function isWireAdapter(value: unknown): value is WireAdapter {
-  return value === 'openai-chat' || value === 'anthropic'
+  return value === 'openai-chat' || value === 'anthropic' || value === 'openai-responses'
 }
 
 function parseStringList(raw: unknown): string[] | undefined {
@@ -118,6 +118,7 @@ function flattenPrimary(
   const adapter =
     (preferred && protocols[preferred] ? preferred : undefined) ||
     (protocols['openai-chat'] ? 'openai-chat' : undefined) ||
+    (protocols['openai-responses'] ? 'openai-responses' : undefined) ||
     (protocols.anthropic ? 'anthropic' : undefined) ||
     preferred ||
     'openai-chat'

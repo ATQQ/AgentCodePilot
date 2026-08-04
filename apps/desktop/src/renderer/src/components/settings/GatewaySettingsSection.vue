@@ -39,7 +39,7 @@ const fetchingModels = ref(false)
 const fetchedModels = ref<ProviderRemoteModelPayload[]>([])
 const modelFilter = ref('')
 
-type WireProtocol = 'openai-chat' | 'anthropic'
+type WireProtocol = 'openai-chat' | 'anthropic' | 'openai-responses'
 type KvRow = { key: string; value: string }
 type ProtocolOverrides = {
   headers?: Record<string, string>
@@ -56,14 +56,17 @@ const form = reactive({
   openaiApiKey: '',
   openaiHeaders: [] as KvRow[],
   openaiBodyDefaults: [] as KvRow[],
+  responsesEnabled: false,
+  responsesBaseUrl: '',
+  responsesApiKey: '',
+  responsesHeaders: [] as KvRow[],
+  responsesBodyDefaults: [] as KvRow[],
   anthropicEnabled: false,
   anthropicBaseUrl: '',
   anthropicApiKey: '',
   anthropicHeaders: [] as KvRow[],
   anthropicBodyDefaults: [] as KvRow[]
 })
-
-const ALL_CHANNEL_PROTOCOLS: WireProtocol[] = ['openai-chat', 'anthropic']
 
 const drawerTitle = computed(() =>
   formMode.value === 'edit' ? t('settings.gateway.editProvider') : t('settings.gateway.addProvider')
@@ -267,20 +270,27 @@ function clearFetchState(): void {
 }
 
 function protocolLabel(protocol: WireProtocol): string {
-  return protocol === 'anthropic' ? 'Anthropic Messages' : 'OpenAI Chat'
+  if (protocol === 'anthropic') return 'Anthropic Messages'
+  if (protocol === 'openai-responses') return 'OpenAI Responses（透传）'
+  return 'OpenAI Chat（网关转换）'
 }
 
 function availableProtocols(provider: GatewayProviderPublicPayload): WireProtocol[] {
   const keys = Object.keys(provider.config.protocols || {}) as WireProtocol[]
   if (keys.length) return keys.filter((k) => provider.config.protocols[k]?.baseUrl)
-  return provider.config.baseUrl ? [provider.config.adapter] : []
+  return provider.config.baseUrl ? [provider.config.adapter as WireProtocol] : []
 }
 
 function channelProtocol(channel: GatewayTakeoverApp): WireProtocol {
   const bound = settings.value?.channelProtocols?.[channel]
-  if (bound === 'openai-chat' || bound === 'anthropic') return bound
+  if (bound === 'openai-chat' || bound === 'anthropic' || bound === 'openai-responses') return bound
   if (channel === 'codex') return 'openai-chat'
   return 'anthropic'
+}
+
+function channelProtocolsFor(channel: GatewayTakeoverApp): WireProtocol[] {
+  if (channel === 'codex') return ['openai-chat', 'openai-responses', 'anthropic']
+  return ['openai-chat', 'anthropic']
 }
 const baseUrlDisplay = computed(() => {
   if (!settings.value) return ''
@@ -428,6 +438,7 @@ function openCreate(preset?: ProviderConfigPayload): void {
   syncDefaultModel()
 
   const openai = protocols?.['openai-chat']
+  const responses = protocols?.['openai-responses']
   const anthropic = protocols?.anthropic
   form.openaiEnabled = Boolean(openai?.baseUrl) || legacyAdapter === 'openai-chat'
   form.openaiBaseUrl = openai?.baseUrl || (legacyAdapter === 'openai-chat' ? legacyBase : '')
@@ -435,6 +446,14 @@ function openCreate(preset?: ProviderConfigPayload): void {
   const openaiOverrides = loadEndpointOverrides(openai)
   form.openaiHeaders = openaiOverrides.headers
   form.openaiBodyDefaults = openaiOverrides.bodyDefaults
+
+  form.responsesEnabled = Boolean(responses?.baseUrl) || legacyAdapter === 'openai-responses'
+  form.responsesBaseUrl =
+    responses?.baseUrl || (legacyAdapter === 'openai-responses' ? legacyBase : '')
+  form.responsesApiKey = ''
+  const responsesOverrides = loadEndpointOverrides(responses)
+  form.responsesHeaders = responsesOverrides.headers
+  form.responsesBodyDefaults = responsesOverrides.bodyDefaults
 
   form.anthropicEnabled = Boolean(anthropic?.baseUrl) || legacyAdapter === 'anthropic'
   form.anthropicBaseUrl = anthropic?.baseUrl || (legacyAdapter === 'anthropic' ? legacyBase : '')
@@ -455,8 +474,10 @@ function openEdit(provider: GatewayProviderPublicPayload): void {
   syncDefaultModel()
 
   const openai = provider.config.protocols?.['openai-chat']
+  const responses = provider.config.protocols?.['openai-responses']
   const anthropic = provider.config.protocols?.anthropic
   const legacyIsOpenAi = provider.config.adapter === 'openai-chat'
+  const legacyIsResponses = provider.config.adapter === 'openai-responses'
   const legacyIsAnthropic = provider.config.adapter === 'anthropic'
 
   form.openaiEnabled = Boolean(openai?.baseUrl) || legacyIsOpenAi
@@ -465,6 +486,15 @@ function openEdit(provider: GatewayProviderPublicPayload): void {
   const openaiOverrides = loadEndpointOverrides(openai)
   form.openaiHeaders = openaiOverrides.headers
   form.openaiBodyDefaults = openaiOverrides.bodyDefaults
+
+  form.responsesEnabled = Boolean(responses?.baseUrl) || legacyIsResponses
+  form.responsesBaseUrl =
+    responses?.baseUrl || (legacyIsResponses ? provider.config.baseUrl : '') || ''
+  form.responsesApiKey =
+    responses?.apiKey || (legacyIsResponses ? provider.config.apiKey : '') || ''
+  const responsesOverrides = loadEndpointOverrides(responses)
+  form.responsesHeaders = responsesOverrides.headers
+  form.responsesBodyDefaults = responsesOverrides.bodyDefaults
 
   form.anthropicEnabled = Boolean(anthropic?.baseUrl) || legacyIsAnthropic
   form.anthropicBaseUrl =
@@ -493,11 +523,15 @@ async function saveProvider(): Promise<void> {
     ElMessage.warning(t('settings.gateway.providerRequired'))
     return
   }
-  if (!form.openaiEnabled && !form.anthropicEnabled) {
+  if (!form.openaiEnabled && !form.responsesEnabled && !form.anthropicEnabled) {
     ElMessage.warning(t('settings.gateway.protocolRequired'))
     return
   }
   if (form.openaiEnabled && !form.openaiBaseUrl.trim()) {
+    ElMessage.warning(t('settings.gateway.providerRequired'))
+    return
+  }
+  if (form.responsesEnabled && !form.responsesBaseUrl.trim()) {
     ElMessage.warning(t('settings.gateway.providerRequired'))
     return
   }
@@ -518,6 +552,15 @@ async function saveProvider(): Promise<void> {
         overridesFromKv(form.openaiHeaders, form.openaiBodyDefaults)
       )
     }
+    if (form.responsesEnabled) {
+      protocols['openai-responses'] = attachProtocolOverrides(
+        {
+          baseUrl: form.responsesBaseUrl.trim(),
+          apiKey: form.responsesApiKey.trim()
+        },
+        overridesFromKv(form.responsesHeaders, form.responsesBodyDefaults)
+      )
+    }
     if (form.anthropicEnabled) {
       protocols.anthropic = attachProtocolOverrides(
         {
@@ -527,7 +570,11 @@ async function saveProvider(): Promise<void> {
         overridesFromKv(form.anthropicHeaders, form.anthropicBodyDefaults)
       )
     }
-    const adapter: WireProtocol = form.openaiEnabled ? 'openai-chat' : 'anthropic'
+    const adapter: WireProtocol = form.openaiEnabled
+      ? 'openai-chat'
+      : form.responsesEnabled
+        ? 'openai-responses'
+        : 'anthropic'
     const models = parseModels(form.modelsText)
     const defaultModel =
       form.defaultModel.trim() && models.includes(form.defaultModel.trim())
@@ -716,6 +763,12 @@ function buildDraftFromForm() {
       headers?: Record<string, string>
       bodyDefaults?: Record<string, unknown>
     }
+    'openai-responses'?: {
+      baseUrl: string
+      apiKey?: string
+      headers?: Record<string, string>
+      bodyDefaults?: Record<string, unknown>
+    }
     anthropic?: {
       baseUrl: string
       apiKey?: string
@@ -731,6 +784,15 @@ function buildDraftFromForm() {
       },
       overridesFromKv(form.openaiHeaders, form.openaiBodyDefaults)
     ) as (typeof protocols)['openai-chat']
+  }
+  if (form.responsesEnabled && form.responsesBaseUrl.trim()) {
+    protocols['openai-responses'] = attachProtocolOverrides(
+      {
+        baseUrl: form.responsesBaseUrl.trim(),
+        apiKey: form.responsesApiKey.trim() || undefined
+      },
+      overridesFromKv(form.responsesHeaders, form.responsesBodyDefaults)
+    ) as (typeof protocols)['openai-responses']
   }
   if (form.anthropicEnabled && form.anthropicBaseUrl.trim()) {
     protocols.anthropic = attachProtocolOverrides(
@@ -781,12 +843,13 @@ async function testSavedProvider(providerId: string): Promise<void> {
 }
 
 async function testDraftProvider(): Promise<void> {
-  if (!form.openaiEnabled && !form.anthropicEnabled) {
+  if (!form.openaiEnabled && !form.responsesEnabled && !form.anthropicEnabled) {
     ElMessage.warning(t('settings.gateway.testNeedProtocol'))
     return
   }
   if (
     (form.openaiEnabled && !form.openaiBaseUrl.trim()) ||
+    (form.responsesEnabled && !form.responsesBaseUrl.trim()) ||
     (form.anthropicEnabled && !form.anthropicBaseUrl.trim())
   ) {
     ElMessage.warning(t('settings.gateway.testNeedProtocol'))
@@ -807,12 +870,13 @@ async function testDraftProvider(): Promise<void> {
 }
 
 async function fetchDraftModels(): Promise<void> {
-  if (!form.openaiEnabled && !form.anthropicEnabled) {
+  if (!form.openaiEnabled && !form.responsesEnabled && !form.anthropicEnabled) {
     ElMessage.warning(t('settings.gateway.testNeedProtocol'))
     return
   }
   if (
     (form.openaiEnabled && !form.openaiBaseUrl.trim()) ||
+    (form.responsesEnabled && !form.responsesBaseUrl.trim()) ||
     (form.anthropicEnabled && !form.anthropicBaseUrl.trim())
   ) {
     ElMessage.warning(t('settings.gateway.testNeedProtocol'))
@@ -1033,7 +1097,7 @@ async function fetchDraftModels(): Promise<void> {
             <div class="protocol-block">
               <label class="protocol-toggle">
                 <input v-model="form.openaiEnabled" type="checkbox" />
-                <span>OpenAI Chat</span>
+                <span>OpenAI Chat（网关可转换为 Responses）</span>
               </label>
               <div v-if="form.openaiEnabled" class="form-grid">
                 <el-input
@@ -1079,6 +1143,57 @@ async function fetchDraftModels(): Promise<void> {
                   />
                 </div>
                 <el-button size="small" @click="addKvRow(form.openaiBodyDefaults)">
+                  {{ t('settings.gateway.addKvRow') }}
+                </el-button>
+              </div>
+            </div>
+
+            <div class="protocol-block">
+              <label class="protocol-toggle">
+                <input v-model="form.responsesEnabled" type="checkbox" />
+                <span>OpenAI Responses（原生透传）</span>
+              </label>
+              <div v-if="form.responsesEnabled" class="form-grid">
+                <el-input v-model="form.responsesBaseUrl" placeholder="https://api.openai.com/v1" />
+                <el-input
+                  v-model="form.responsesApiKey"
+                  :placeholder="t('settings.gateway.apiKeyPlaceholder')"
+                />
+                <div class="field-label">{{ t('settings.gateway.headersLabel') }}</div>
+                <div class="setting-desc">{{ t('settings.gateway.headersDesc') }}</div>
+                <div v-for="(row, idx) in form.responsesHeaders" :key="`rh-${idx}`" class="kv-row">
+                  <el-input v-model="row.key" :placeholder="t('settings.gateway.kvKey')" />
+                  <el-input v-model="row.value" :placeholder="t('settings.gateway.kvValue')" />
+                  <el-button
+                    :icon="Delete"
+                    text
+                    type="danger"
+                    @click="() => removeKvRow(form.responsesHeaders, idx)"
+                  />
+                </div>
+                <el-button size="small" @click="addKvRow(form.responsesHeaders)">
+                  {{ t('settings.gateway.addKvRow') }}
+                </el-button>
+                <div class="field-label">{{ t('settings.gateway.bodyDefaultsLabel') }}</div>
+                <div class="setting-desc">{{ t('settings.gateway.bodyDefaultsDesc') }}</div>
+                <div
+                  v-for="(row, idx) in form.responsesBodyDefaults"
+                  :key="`rb-${idx}`"
+                  class="kv-row"
+                >
+                  <el-input v-model="row.key" :placeholder="t('settings.gateway.kvKey')" />
+                  <el-input
+                    v-model="row.value"
+                    :placeholder="t('settings.gateway.bodyValuePlaceholder')"
+                  />
+                  <el-button
+                    :icon="Delete"
+                    text
+                    type="danger"
+                    @click="() => removeKvRow(form.responsesBodyDefaults, idx)"
+                  />
+                </div>
+                <el-button size="small" @click="addKvRow(form.responsesBodyDefaults)">
                   {{ t('settings.gateway.addKvRow') }}
                 </el-button>
               </div>
@@ -1363,19 +1478,26 @@ async function fetchDraftModels(): Promise<void> {
               <div class="setting-row">
                 <div>
                   <div class="setting-label">{{ t('settings.gateway.channelProtocol') }}</div>
-                  <div class="setting-desc">{{ t('settings.gateway.channelProtocolDesc') }}</div>
+                  <div class="setting-desc">
+                    <template v-if="channel.key === 'codex'">
+                      客户端固定 wire_api=responses。选 Chat = 网关做 Responses↔Chat 转换（含
+                      tools）；选 Responses = 上游原生透传。
+                    </template>
+                    <template v-else>{{ t('settings.gateway.channelProtocolDesc') }}</template>
+                  </div>
                 </div>
                 <el-select
                   :model-value="channelProtocol(channel.key)"
-                  style="width: 200px"
+                  style="width: 260px"
                   :disabled="saving"
                   @change="(v: WireProtocol) => setChannelProtocol(channel.key, v)"
                 >
                   <el-option
-                    v-for="proto in ALL_CHANNEL_PROTOCOLS"
+                    v-for="proto in channelProtocolsFor(channel.key)"
                     :key="proto"
                     :label="protocolLabel(proto)"
                     :value="proto"
+                    :disabled="proto === 'anthropic' && channel.key === 'codex'"
                   />
                 </el-select>
               </div>

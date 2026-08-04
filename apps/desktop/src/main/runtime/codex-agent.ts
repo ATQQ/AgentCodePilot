@@ -20,7 +20,7 @@ import { loadCodexSdk } from './codex-sdk-loader'
 import { getShellEnvironment } from '../shell/shell-env'
 import { loadGatewaySettings } from '../gateway/settings-store'
 import { ensureGatewayRunning } from '../gateway/live/takeover'
-import { PROXY_MANAGED, buildProxyV1Url } from '../gateway/live/constants'
+import { CODEX_PROXY_PROVIDER_ID, PROXY_MANAGED, buildProxyV1Url } from '../gateway/live/constants'
 import { routeModel } from '../gateway/router'
 
 /** Strip providerId/ prefix so local Codex usage logs show the upstream model id. */
@@ -237,12 +237,28 @@ export class CodexAgentAdapter implements AgentAdapter {
 
     try {
       const { Codex } = await loadCodexSdk()
+      const gatewayUrl = useGateway ? buildProxyV1Url(gatewayHost, gatewayPort) : undefined
+      // Codex CLI prefers model_providers.<id>.base_url over openai_base_url when
+      // ~/.codex/config.toml has model_provider = "custom" (e.g. CC Switch on :15721).
+      // Force a process-local provider override so in-app runs hit our gateway without
+      // rewriting config.toml.
       const codexOptions: CodexOptions = {
         env: getShellEnvironment(),
-        ...(useGateway
+        ...(useGateway && gatewayUrl
           ? {
-              baseUrl: buildProxyV1Url(gatewayHost, gatewayPort),
-              apiKey: PROXY_MANAGED
+              baseUrl: gatewayUrl,
+              apiKey: PROXY_MANAGED,
+              config: {
+                model_provider: CODEX_PROXY_PROVIDER_ID,
+                model_providers: {
+                  [CODEX_PROXY_PROVIDER_ID]: {
+                    name: 'Agent Desktop Gateway',
+                    base_url: gatewayUrl,
+                    wire_api: 'responses',
+                    experimental_bearer_token: PROXY_MANAGED
+                  }
+                }
+              }
             }
           : {})
       }
@@ -262,15 +278,15 @@ export class CodexAgentAdapter implements AgentAdapter {
       const routeModelName = input.model || codexConfig?.defaultModelId
       // Bare model id for local session/usage; gateway routeModel still resolves via models list.
       const selectedModel = toUpstreamFacingModelId(routeModelName, useGateway)
-      if (useGateway) {
-        const gatewayUrl = buildProxyV1Url(gatewayHost, gatewayPort)
+      if (useGateway && gatewayUrl) {
         try {
           const route = routeModelName ? routeModel(routeModelName, 'codex') : null
           console.log(
             `[CodexAgent] routing via gateway ${gatewayUrl} ` +
               `routeModel=${routeModelName ?? '(cli-default)'} ` +
               `upstreamModel=${route?.upstreamModel ?? '(n/a)'} ` +
-              `threadModel=${selectedModel ?? '(none)'} (no config.toml write)`
+              `threadModel=${selectedModel ?? '(none)'} ` +
+              `(provider override=${CODEX_PROXY_PROVIDER_ID}, no config.toml write)`
           )
         } catch (error) {
           console.warn(

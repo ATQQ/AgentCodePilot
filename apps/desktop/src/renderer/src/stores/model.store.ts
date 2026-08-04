@@ -42,7 +42,7 @@ export const useModelStore = defineStore('model', () => {
   let catalogFetchGeneration = 0
   let refreshGeneration = 0
 
-  type GatewayProtocol = 'openai-chat' | 'anthropic'
+  type GatewayProtocol = 'openai-chat' | 'anthropic' | 'openai-responses'
 
   function gatewayProtocolForAgent(agentId: string): GatewayProtocol {
     if (agentId === 'codex') {

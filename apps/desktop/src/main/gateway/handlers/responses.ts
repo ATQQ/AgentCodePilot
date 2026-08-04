@@ -46,7 +46,7 @@ export function responsesToUnified(body: ResponsesRequest): UnifiedTurn {
 
   return {
     model: body.model,
-    systemPrompt: body.instructions,
+    systemPrompt: typeof body.instructions === 'string' ? body.instructions : undefined,
     messages,
     stream: body.stream ?? false,
     temperature: body.temperature,
