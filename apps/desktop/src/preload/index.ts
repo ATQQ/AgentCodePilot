@@ -24,7 +24,7 @@ import { cloneForIpc } from '../shared/ipc-clone'
 
 const agentAPI = {
   agents: {
-    list: () => ipcRenderer.invoke(IPC_CHANNELS.AGENTS_LIST),
+    list: (forceRefresh?: boolean) => ipcRenderer.invoke(IPC_CHANNELS.AGENTS_LIST, forceRefresh),
     listModels: (agentId: string, forceRefresh?: boolean) =>
       ipcRenderer.invoke(IPC_CHANNELS.AGENTS_MODELS_LIST, agentId, forceRefresh),
     getConfig: (agentId: string) => ipcRenderer.invoke(IPC_CHANNELS.AGENTS_CONFIG_GET, agentId),
@@ -89,7 +89,12 @@ const agentAPI = {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.PROVIDERS_LIST),
     save: (payload: ProviderConfigPayload) =>
       ipcRenderer.invoke(IPC_CHANNELS.PROVIDERS_SAVE, payload),
-    delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.PROVIDERS_DELETE, id)
+    delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.PROVIDERS_DELETE, id),
+    presets: () => ipcRenderer.invoke(IPC_CHANNELS.PROVIDERS_PRESETS),
+    test: (payload: import('./types').ProviderTestInputPayload) =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROVIDERS_TEST, payload),
+    fetchModels: (payload: import('./types').ProviderTestInputPayload) =>
+      ipcRenderer.invoke(IPC_CHANNELS.PROVIDERS_FETCH_MODELS, payload)
   },
   settings: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET),
@@ -98,7 +103,15 @@ const agentAPI = {
   gateway: {
     status: () => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_STATUS),
     start: () => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_START),
-    stop: () => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_STOP)
+    stop: () => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_STOP),
+    getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_GET_SETTINGS),
+    updateSettings: (payload: Partial<import('./types').GatewaySettingsPayload>) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_UPDATE_SETTINGS, payload),
+    takeoverGet: () => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_TAKEOVER_GET),
+    takeoverSet: (app: import('./types').GatewayTakeoverApp, enabled: boolean) =>
+      ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_TAKEOVER_SET, app, enabled),
+    logViewerStatus: () => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_LOG_VIEWER_STATUS),
+    logViewerOpen: () => ipcRenderer.invoke(IPC_CHANNELS.GATEWAY_LOG_VIEWER_OPEN)
   },
   dialog: {
     selectFolder: () => ipcRenderer.invoke(IPC_CHANNELS.DIALOG_SELECT_FOLDER),

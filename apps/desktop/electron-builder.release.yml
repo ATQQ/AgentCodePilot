@@ -7,6 +7,8 @@ appId: com.agentcodepilot.app
 productName: AgentCodePilot
 directories:
   buildResources: build
+compression: maximum
+afterPack: scripts/after-pack.cjs
 files:
   - '!**/.vscode/*'
   - '!src/*'
@@ -14,9 +16,19 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!**/*.tsbuildinfo'
+  - '!electron-builder*.yml'
+  - '!scripts/**'
+  - '!node_modules/@anthropic-ai/claude-agent-sdk-*/**'
+  - '!**/node_modules/@anthropic-ai/claude-agent-sdk-*/**'
+  - '!node_modules/@openai/codex-*/**'
+  - '!**/node_modules/@openai/codex-*/**'
+  - '!node_modules/better-sqlite3/{deps,src}/**'
+  - '!node_modules/better-sqlite3/build/Release/obj/**'
+  - '!node_modules/better-sqlite3/build/Release/obj.target/**'
+  - '!node_modules/better-sqlite3/**/*.{c,cc,h,hpp,o,a}'
 asarUnpack:
   - resources/**
-  - node_modules/@anthropic-ai/**
   - node_modules/node-pty/**
 icon: build/icon.png
 win:

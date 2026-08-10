@@ -463,7 +463,7 @@ export class CursorAgentAdapter implements AgentAdapter {
       case 'thinking':
         if (event.text) {
           emit({
-            type: 'message.delta',
+            type: 'message.thinking.delta',
             conversationId: input.conversationId,
             messageId: input.messageId,
             delta: event.text

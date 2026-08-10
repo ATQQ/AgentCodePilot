@@ -13,7 +13,10 @@ export default defineConfig(
       // Cursor Agent sources kept but excluded from build/typecheck (see CURSOR_AGENT_DISABLED.md)
       '**/src/main/runtime/cursor-*.ts',
       '**/scripts/verify-cursor-sdk.mjs',
-      '**/scripts/lib/cursor-token-usage.mjs'
+      '**/scripts/lib/cursor-token-usage.mjs',
+      // electron-builder hooks / pack utilities (CJS/plain JS)
+      '**/scripts/after-pack.cjs',
+      '**/scripts/report-pack-size.mjs'
     ]
   },
   tseslint.configs.recommended,

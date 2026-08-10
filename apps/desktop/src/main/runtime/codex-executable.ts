@@ -1,8 +1,25 @@
-import { execFileSync } from 'child_process'
+import { createRequire } from 'module'
 import { existsSync } from 'fs'
 import { homedir } from 'os'
-import { join } from 'path'
-import { getShellEnvironment } from '../shell/shell-env'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
+import {
+  type ExecutableProbe,
+  isUsableExecutable,
+  normalizeAsarExecutablePath,
+  resolveGlobalExecutable
+} from './executable-probe'
+
+const require = createRequire(fileURLToPath(import.meta.url))
+
+const CODEX_TARGETS: Record<string, string> = {
+  'linux-x64': 'x86_64-unknown-linux-musl',
+  'linux-arm64': 'aarch64-unknown-linux-musl',
+  'darwin-x64': 'x86_64-apple-darwin',
+  'darwin-arm64': 'aarch64-apple-darwin',
+  'win32-x64': 'x86_64-pc-windows-msvc',
+  'win32-arm64': 'aarch64-pc-windows-msvc'
+}
 
 export function getCodexHomeDir(): string {
   return join(homedir(), '.codex')
@@ -15,32 +32,27 @@ export function hasLocalCodexCliConfig(): boolean {
 }
 
 /**
- * Prefer the user's PATH `codex` binary so SDK behavior matches their working CLI install.
- * Falls back to the bundled binary inside @openai/codex-sdk when not found.
+ * Prefer the user's PATH `codex` binary.
+ * Bundled SDK platform binaries are excluded from the installer to keep package size small;
+ * they may still resolve during local `electron-vite` development.
  */
-export function resolveCodexExecutablePath(): string | undefined {
-  if (process.platform === 'win32') {
-    const pathVar = process.env.Path || process.env.PATH || ''
-    for (const dir of pathVar.split(';')) {
-      const candidate = join(dir.trim(), 'codex.exe')
-      if (candidate && existsSync(candidate)) return candidate
-    }
-    return undefined
-  }
-
-  const shell = process.env.SHELL || '/bin/zsh'
-  if (!existsSync(shell)) return undefined
-
+export function probeCodexExecutable(): ExecutableProbe {
+  const globalPath = resolveGlobalExecutable('codex')
+  if (globalPath) return { path: globalPath, source: 'global' }
+  const target = CODEX_TARGETS[`${process.platform}-${process.arch}`]
+  if (!target) return { source: 'none' }
+  const suffix = process.platform === 'win32' ? '.exe' : ''
   try {
-    const resolved = execFileSync(shell, ['-ilc', 'command -v codex'], {
-      encoding: 'utf8',
-      timeout: 10000,
-      env: getShellEnvironment()
-    }).trim()
-    if (resolved && existsSync(resolved)) return resolved
+    const platformPkg = `@openai/codex-${process.platform}-${process.arch}`
+    const pkgJson = require.resolve(`${platformPkg}/package.json`)
+    const candidate = join(dirname(pkgJson), 'vendor', target, 'bin', `codex${suffix}`)
+    const resolved = normalizeAsarExecutablePath(candidate)
+    return isUsableExecutable(resolved) ? { path: resolved, source: 'bundled' } : { source: 'none' }
   } catch {
-    // Fall back to SDK bundled codex.
+    return { source: 'none' }
   }
+}
 
-  return undefined
+export function resolveCodexExecutablePath(): string | undefined {
+  return probeCodexExecutable().path
 }

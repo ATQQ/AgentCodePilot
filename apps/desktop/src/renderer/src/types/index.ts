@@ -35,6 +35,8 @@ export interface AgentConfig {
   id: string
   name: string
   enabled: boolean
+  disabledReason?: string
+  installSource?: 'global' | 'bundled' | 'none'
 }
 
 export interface ModelConfig {
@@ -65,6 +67,8 @@ export interface ToolCall {
   startedAt?: string
 }
 
+export type MessagePart = import('../../../preload/types').MessagePart
+
 export interface Message {
   id: string
   role: 'user' | 'assistant'
@@ -85,6 +89,8 @@ export interface Message {
   }
   attachments?: Attachment[]
   toolCalls?: ToolCall[]
+  /** Chronological content parts for interleaved thinking / text / tools. */
+  parts?: MessagePart[]
   debugInput?: string
   debugOutput?: string
   stopped?: boolean
@@ -109,6 +115,7 @@ export interface Conversation {
   id: string
   title: string
   agentId: string
+  providerId?: string | null
   modelId?: string | null
   projectId: string | null
   cwd: string | null

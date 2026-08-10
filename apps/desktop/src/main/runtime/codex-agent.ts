@@ -15,9 +15,25 @@ import type { AgentAdapter, AgentRunInput } from './types'
 import { resolveConfiguredApiKey, resolveEnvValue } from './agent-auth'
 import { getAgentConfig } from './agent-config'
 import { buildAgentPrompt, withWorkspaceContext } from './agent-prompt'
-import { hasLocalCodexCliConfig, resolveCodexExecutablePath } from './codex-executable'
+import { hasLocalCodexCliConfig, probeCodexExecutable } from './codex-executable'
 import { loadCodexSdk } from './codex-sdk-loader'
 import { getShellEnvironment } from '../shell/shell-env'
+import { loadGatewaySettings } from '../gateway/settings-store'
+import { ensureGatewayRunning } from '../gateway/live/takeover'
+import { CODEX_PROXY_PROVIDER_ID, PROXY_MANAGED, buildProxyV1Url } from '../gateway/live/constants'
+import { routeModel } from '../gateway/router'
+
+/** Strip providerId/ prefix so local Codex usage logs show the upstream model id. */
+function toUpstreamFacingModelId(
+  model: string | undefined,
+  useGateway: boolean
+): string | undefined {
+  if (!model) return undefined
+  if (!useGateway) return model
+  const idx = model.indexOf('/')
+  if (idx <= 0) return model
+  return model.slice(idx + 1)
+}
 
 type ApprovalLevel = NonNullable<AgentRunInput['approvalLevel']>
 
@@ -35,12 +51,16 @@ function mapApprovalPolicy(level: ApprovalLevel): 'never' | 'on-request' | 'on-f
 
 function mapUsage(usage: Usage | null | undefined): TokenUsage | undefined {
   if (!usage) return undefined
+  // Codex cached_input_tokens is a subset of input_tokens (inclusive), not additive.
+  const reasoning = usage.reasoning_output_tokens > 0 ? usage.reasoning_output_tokens : undefined
   return {
     inputTokens: usage.input_tokens,
     outputTokens: usage.output_tokens,
     cacheReadTokens: usage.cached_input_tokens,
     cacheCreationTokens: 0,
-    costUSD: 0
+    totalTokens: usage.input_tokens + usage.output_tokens,
+    costUSD: 0,
+    ...(reasoning != null ? { reasoningTokens: reasoning } : {})
   }
 }
 
@@ -85,10 +105,20 @@ function serializeDebugPayload(payload: unknown): string | undefined {
   }
 }
 
+function isCodexResumeFailure(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error)
+  return /resume|thread|session|not found|no such|unknown thread|ResponseCompleted|total_tokens|failed to parse/i.test(
+    msg
+  )
+}
+
 export class CodexAgentAdapter implements AgentAdapter {
   readonly id = 'codex'
   readonly name = 'Codex'
-  readonly enabled = true
+  readonly enabled: boolean
+  readonly disabledReason?: string
+  readonly installSource: 'global' | 'bundled' | 'none'
+  private executablePath?: string
 
   private abortControllers = new Map<string, AbortController>()
   private threadIds = new Map<string, string>()
@@ -96,12 +126,47 @@ export class CodexAgentAdapter implements AgentAdapter {
   private emittedToolIds = new Set<string>()
   private toolStartedAt = new Map<string, string>()
 
+  constructor() {
+    const probe = probeCodexExecutable()
+    this.enabled = Boolean(probe.path)
+    this.installSource = probe.source
+    this.executablePath = probe.path
+    if (!probe.path) {
+      this.disabledReason = '未找到 Codex CLI。请安装后重试：npm i -g @openai/codex'
+    }
+  }
+
   async run(input: AgentRunInput, emit: (event: AgentEvent) => void): Promise<void> {
-    const sessionId = input.agentSessionId ?? this.threadIds.get(input.conversationId) ?? undefined
+    // Explicit null from main means "do not resume" (e.g. mid-conversation agent switch).
+    if (input.agentSessionId === null) {
+      this.threadIds.delete(input.conversationId)
+    }
+    const sessionId =
+      input.agentSessionId === null
+        ? undefined
+        : (input.agentSessionId ?? this.threadIds.get(input.conversationId) ?? undefined)
 
     try {
       await this.runOnce(input, emit, sessionId)
     } catch (error: unknown) {
+      if (sessionId && isCodexResumeFailure(error)) {
+        this.threadIds.delete(input.conversationId)
+        emit({ type: 'session.cleared', conversationId: input.conversationId })
+        try {
+          await this.runOnce(input, emit, undefined)
+          return
+        } catch (retryError: unknown) {
+          const errorMessage = retryError instanceof Error ? retryError.message : String(retryError)
+          emit({
+            type: 'message.error',
+            conversationId: input.conversationId,
+            messageId: input.messageId,
+            error: errorMessage
+          })
+          return
+        }
+      }
+
       const errorMessage = error instanceof Error ? error.message : String(error)
       emit({
         type: 'message.error',
@@ -117,11 +182,13 @@ export class CodexAgentAdapter implements AgentAdapter {
     emit: (event: AgentEvent) => void,
     sessionId: string | undefined
   ): Promise<void> {
+    const gatewaySettings = loadGatewaySettings()
+    const useGateway = gatewaySettings.enabled
     const configuredApiKey = resolveConfiguredApiKey('codex')
     const envApiKey = resolveEnvValue(['OPENAI_API_KEY', 'CODEX_API_KEY'])
     const usesLocalCliProfile = hasLocalCodexCliConfig()
 
-    if (!configuredApiKey && !envApiKey && !usesLocalCliProfile) {
+    if (!useGateway && !configuredApiKey && !envApiKey && !usesLocalCliProfile) {
       emit({
         type: 'message.error',
         conversationId: input.conversationId,
@@ -130,6 +197,25 @@ export class CodexAgentAdapter implements AgentAdapter {
           '缺少 Codex 鉴权。请在设置中配置 API Key、设置 OPENAI_API_KEY / CODEX_API_KEY，或先在终端运行 codex login 生成本地 ~/.codex 配置。'
       })
       return
+    }
+
+    let gatewayHost = gatewaySettings.host
+    let gatewayPort = gatewaySettings.port
+    if (useGateway) {
+      try {
+        const running = await ensureGatewayRunning()
+        gatewayHost = running.host
+        gatewayPort = running.port
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error)
+        emit({
+          type: 'message.error',
+          conversationId: input.conversationId,
+          messageId: input.messageId,
+          error: `内置网关未运行：${msg}`
+        })
+        return
+      }
     }
 
     const controller = new AbortController()
@@ -151,23 +237,65 @@ export class CodexAgentAdapter implements AgentAdapter {
 
     try {
       const { Codex } = await loadCodexSdk()
+      const gatewayUrl = useGateway ? buildProxyV1Url(gatewayHost, gatewayPort) : undefined
+      // Codex CLI prefers model_providers.<id>.base_url over openai_base_url when
+      // ~/.codex/config.toml has model_provider = "custom" (e.g. CC Switch on :15721).
+      // Force a process-local provider override so in-app runs hit our gateway without
+      // rewriting config.toml.
       const codexOptions: CodexOptions = {
-        env: getShellEnvironment()
+        env: getShellEnvironment(),
+        ...(useGateway && gatewayUrl
+          ? {
+              baseUrl: gatewayUrl,
+              apiKey: PROXY_MANAGED,
+              config: {
+                model_provider: CODEX_PROXY_PROVIDER_ID,
+                model_providers: {
+                  [CODEX_PROXY_PROVIDER_ID]: {
+                    name: 'Agent Desktop Gateway',
+                    base_url: gatewayUrl,
+                    wire_api: 'responses',
+                    experimental_bearer_token: PROXY_MANAGED
+                  }
+                }
+              }
+            }
+          : {})
       }
 
-      const codexPath = resolveCodexExecutablePath()
+      const codexPath = this.executablePath
       if (codexPath) {
         codexOptions.codexPathOverride = codexPath
       }
 
       const apiKey = configuredApiKey || (!usesLocalCliProfile ? envApiKey : undefined)
-      if (apiKey) {
+      if (!useGateway && apiKey) {
         codexOptions.apiKey = apiKey
       }
 
       const codex = new Codex(codexOptions)
 
-      const selectedModel = input.model || codexConfig?.defaultModelId
+      const routeModelName = input.model || codexConfig?.defaultModelId
+      // Bare model id for local session/usage; gateway routeModel still resolves via models list.
+      const selectedModel = toUpstreamFacingModelId(routeModelName, useGateway)
+      if (useGateway && gatewayUrl) {
+        try {
+          const route = routeModelName ? routeModel(routeModelName, 'codex') : null
+          console.log(
+            `[CodexAgent] routing via gateway ${gatewayUrl} ` +
+              `routeModel=${routeModelName ?? '(cli-default)'} ` +
+              `upstreamModel=${route?.upstreamModel ?? '(n/a)'} ` +
+              `threadModel=${selectedModel ?? '(none)'} ` +
+              `(provider override=${CODEX_PROXY_PROVIDER_ID}, no config.toml write)`
+          )
+        } catch (error) {
+          console.warn(
+            `[CodexAgent] routing via gateway ${gatewayUrl} ` +
+              `routeModel=${routeModelName ?? '(cli-default)'} threadModel=${selectedModel ?? '(none)'} ` +
+              `(route resolve failed: ${error instanceof Error ? error.message : String(error)})`
+          )
+        }
+      }
       const threadOptions = {
         ...(selectedModel ? { model: selectedModel } : {}),
         workingDirectory: cwd,
@@ -185,14 +313,23 @@ export class CodexAgentAdapter implements AgentAdapter {
 
       const streamed = await thread.runStreamed(prompt, { signal: controller.signal })
       let usage: TokenUsage | undefined
+      let turnFailed = false
       const rawEvents: unknown[] = []
 
       for await (const event of streamed.events) {
         if (controller.signal.aborted) break
         rawEvents.push(event)
-        this.handleThreadEvent(event, input, emit, (nextUsage) => {
-          usage = nextUsage
-        })
+        this.handleThreadEvent(
+          event,
+          input,
+          emit,
+          (nextUsage) => {
+            usage = nextUsage
+          },
+          () => {
+            turnFailed = true
+          }
+        )
 
         const threadId = thread.id
         if (threadId && threadId !== sessionId) {
@@ -204,6 +341,8 @@ export class CodexAgentAdapter implements AgentAdapter {
           })
         }
       }
+
+      if (turnFailed) return
 
       emit({
         type: 'message.completed',
@@ -234,7 +373,8 @@ export class CodexAgentAdapter implements AgentAdapter {
     event: ThreadEvent,
     input: AgentRunInput,
     emit: (event: AgentEvent) => void,
-    setUsage: (usage: TokenUsage | undefined) => void
+    setUsage: (usage: TokenUsage | undefined) => void,
+    setFailed?: () => void
   ): void {
     switch (event.type) {
       case 'thread.started':
@@ -249,6 +389,7 @@ export class CodexAgentAdapter implements AgentAdapter {
         setUsage(mapUsage(event.usage))
         break
       case 'turn.failed':
+        setFailed?.()
         emit({
           type: 'message.error',
           conversationId: input.conversationId,
@@ -257,6 +398,7 @@ export class CodexAgentAdapter implements AgentAdapter {
         })
         break
       case 'error':
+        setFailed?.()
         emit({
           type: 'message.error',
           conversationId: input.conversationId,
@@ -307,13 +449,23 @@ export class CodexAgentAdapter implements AgentAdapter {
     }
 
     if (item.type === 'reasoning') {
-      if (phase !== 'completed' && item.text) {
+      const previous = this.messageTextByItemId.get(item.id) ?? ''
+      if (item.text.length > previous.length) {
         emit({
-          type: 'message.delta',
+          type: 'message.thinking.delta',
+          conversationId: input.conversationId,
+          messageId: input.messageId,
+          delta: item.text.slice(previous.length)
+        })
+        this.messageTextByItemId.set(item.id, item.text)
+      } else if (phase === 'started' && item.text) {
+        emit({
+          type: 'message.thinking.delta',
           conversationId: input.conversationId,
           messageId: input.messageId,
           delta: item.text
         })
+        this.messageTextByItemId.set(item.id, item.text)
       }
       return
     }

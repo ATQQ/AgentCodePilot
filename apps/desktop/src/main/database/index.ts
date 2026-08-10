@@ -40,6 +40,7 @@ function migrate(database: Database.Database): void {
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       agent_id TEXT NOT NULL,
+      provider_id TEXT,
       project_id TEXT,
       cwd TEXT,
       pinned INTEGER DEFAULT 0,
@@ -137,6 +138,9 @@ function runMigrations(database: Database.Database): void {
   if (!convCols2.find((c) => c.name === 'model_id')) {
     database.exec('ALTER TABLE conversations ADD COLUMN model_id TEXT')
   }
+  if (!convCols2.find((c) => c.name === 'provider_id')) {
+    database.exec('ALTER TABLE conversations ADD COLUMN provider_id TEXT')
+  }
 
   const planCols = database.pragma('table_info(plans)') as { name: string }[]
   const hasLegacyPlansTable = planCols.length > 0 && !planCols.find((c) => c.name === 'owner_type')
@@ -184,11 +188,22 @@ function runMigrations(database: Database.Database): void {
   if (!msgCols3.find((c) => c.name === 'skill_refs')) {
     database.exec('ALTER TABLE messages ADD COLUMN skill_refs TEXT')
   }
+  if (!msgCols3.find((c) => c.name === 'content_parts')) {
+    database.exec('ALTER TABLE messages ADD COLUMN content_parts TEXT')
+  }
 
   const projectCols = database.pragma('table_info(projects)') as { name: string }[]
   if (!projectCols.find((c) => c.name === 'deleted_at')) {
     database.exec('ALTER TABLE projects ADD COLUMN deleted_at TEXT')
   }
+
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS gateway_live_backup (
+      app_type TEXT PRIMARY KEY,
+      original_config TEXT NOT NULL,
+      backed_up_at TEXT NOT NULL
+    );
+  `)
 }
 
 export function closeDatabase(): void {

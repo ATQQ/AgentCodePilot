@@ -6,7 +6,11 @@ import type { ApprovalLevel } from './permissions'
 import { buildPermissionOptions, buildToolAccessOptions } from './permissions'
 import { DEFAULT_MAX_AGENT_TURNS } from '../../shared/agent-run-settings'
 import { getShellEnvironment } from '../shell/shell-env'
-import { resolveClaudeCodeExecutablePath } from './claude-executable'
+import { loadGatewaySettings } from '../gateway/settings-store'
+import { ensureGatewayRunning } from '../gateway/live/takeover'
+import { CLAUDE_AUTH_ENV_KEYS, PROXY_MANAGED, buildProxyBaseUrl } from '../gateway/live/constants'
+import { routeModel } from '../gateway/router'
+import { probeClaudeCodeExecutable } from './claude-executable'
 
 const AGENT_TOOLS = [
   'Read',
@@ -58,9 +62,23 @@ function withWorkspaceContext(prompt: string, workspaceFolders?: string[]): stri
 export class ClaudeAgentAdapter implements AgentAdapter {
   readonly id = 'claude-code'
   readonly name = 'Claude Code'
-  readonly enabled = true
+  readonly enabled: boolean
+  readonly disabledReason?: string
+  readonly installSource: 'global' | 'bundled' | 'none'
+  private executablePath?: string
   private abortControllers = new Map<string, AbortController>()
   private sessionIds = new Map<string, string>()
+
+  constructor() {
+    const probe = probeClaudeCodeExecutable()
+    this.enabled = Boolean(probe.path)
+    this.installSource = probe.source
+    this.executablePath = probe.path
+    if (!probe.path) {
+      this.disabledReason =
+        '未找到 Claude CLI。请安装后重试：curl -fsSL https://claude.ai/install.sh | bash'
+    }
+  }
 
   async run(input: AgentRunInput, emit: (event: AgentEvent) => void): Promise<void> {
     const sessionId = this.resolveSessionId(input)
@@ -85,6 +103,10 @@ export class ClaudeAgentAdapter implements AgentAdapter {
   }
 
   private resolveSessionId(input: AgentRunInput): string | undefined {
+    if (input.agentSessionId === null) {
+      this.sessionIds.delete(input.conversationId)
+      return undefined
+    }
     const sessionId = input.agentSessionId ?? this.sessionIds.get(input.conversationId)
     if (sessionId) {
       this.sessionIds.set(input.conversationId, sessionId)
@@ -135,11 +157,60 @@ export class ClaudeAgentAdapter implements AgentAdapter {
 
     const maxTurns = input.maxTurns ?? DEFAULT_MAX_AGENT_TURNS
 
-    const claudeExecutable = resolveClaudeCodeExecutablePath()
+    const claudeExecutable = this.executablePath
+    const gatewaySettings = loadGatewaySettings()
+    const queryEnv = { ...getShellEnvironment() }
+    let gatewaySettingsOverlay: { env: Record<string, string> } | undefined
+    // When routing via gateway, skip user settings so ~/.claude/settings.json env
+    // (Volces / other proxies) cannot override our BASE_URL. Keep project/local for
+    // CLAUDE.md without rewriting the user's global Claude config.
+    let settingSources: Array<'user' | 'project' | 'local'> | undefined
+    if (gatewaySettings.enabled) {
+      try {
+        const running = await ensureGatewayRunning()
+        const proxyBaseUrl = buildProxyBaseUrl(running.host, running.port)
+        const gatewayEnv: Record<string, string> = {
+          ANTHROPIC_BASE_URL: proxyBaseUrl
+        }
+        for (const key of CLAUDE_AUTH_ENV_KEYS) {
+          gatewayEnv[key] = PROXY_MANAGED
+        }
+        Object.assign(queryEnv, gatewayEnv)
+        // Flag-layer settings (--settings) outrank user/project/local for scalar keys.
+        gatewaySettingsOverlay = { env: gatewayEnv }
+        settingSources = ['project', 'local']
+        const routeModelName = input.model ?? '(cli-default)'
+        try {
+          const route = input.model ? routeModel(input.model, 'claudeCli') : null
+          console.log(
+            `[ClaudeAgent] routing via gateway ${proxyBaseUrl} ` +
+              `routeModel=${routeModelName} upstreamModel=${route?.upstreamModel ?? '(n/a)'} ` +
+              `(no settings.json write)`
+          )
+        } catch (error) {
+          console.warn(
+            `[ClaudeAgent] routing via gateway ${proxyBaseUrl} routeModel=${routeModelName} ` +
+              `(route resolve failed: ${error instanceof Error ? error.message : String(error)})`
+          )
+        }
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error)
+        this.abortControllers.delete(input.conversationId)
+        emit({
+          type: 'message.error',
+          conversationId: input.conversationId,
+          messageId: input.messageId,
+          error: `内置网关未运行：${msg}`
+        })
+        return
+      }
+    }
     const queryOptions: Options = {
       abortController: controller,
       cwd: input.cwd || app.getPath('home'),
-      env: getShellEnvironment(),
+      env: queryEnv,
+      ...(gatewaySettingsOverlay ? { settings: gatewaySettingsOverlay } : {}),
+      ...(settingSources ? { settingSources } : {}),
       ...(claudeExecutable ? { pathToClaudeCodeExecutable: claudeExecutable } : {}),
       ...(input.attachmentDirectories?.length
         ? { additionalDirectories: input.attachmentDirectories }
@@ -293,6 +364,8 @@ export class ClaudeAgentAdapter implements AgentAdapter {
               outputTokens: totalOutput,
               cacheReadTokens: totalCacheRead,
               cacheCreationTokens: totalCacheCreation,
+              // Anthropic cache fields are additive (not a subset of inputTokens).
+              totalTokens: totalInput + totalOutput + totalCacheRead + totalCacheCreation,
               costUSD: totalCost
             }
           }

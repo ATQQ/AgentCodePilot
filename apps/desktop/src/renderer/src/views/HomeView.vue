@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import HomeEmptyState from '@renderer/components/home/HomeEmptyState.vue'
 import PromptComposer from '@renderer/components/home/PromptComposer.vue'
 import AgentSelector from '@renderer/components/home/AgentSelector.vue'
@@ -38,16 +39,22 @@ async function handleSubmit(
     ? skillRefs.map((ref) => ({ name: ref.name, path: ref.path, scope: ref.scope }))
     : undefined
   const effectivePlanMode = plainPlanRefs?.length ? false : planMode
-  const convId = await chatStore.createConversation(
-    agentId,
-    text,
-    projectId,
-    attachments,
-    effectivePlanMode,
-    undefined,
-    plainPlanRefs,
-    plainSkillRefs
-  )
+  let convId: string
+  try {
+    convId = await chatStore.createConversation(
+      agentId,
+      text,
+      projectId,
+      attachments,
+      effectivePlanMode,
+      undefined,
+      plainPlanRefs,
+      plainSkillRefs
+    )
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : String(error))
+    return
+  }
   composerStore.transferHomePlanModeToConversation(convId)
   if (effectivePlanMode) composerStore.setPlanMode(convId, true)
   router.push('/chat')
@@ -63,7 +70,8 @@ async function handleSubmit(
     conversationId: convId,
     content: text,
     agentId,
-    modelId: modelStore.getEffectiveModelId(conv?.modelId),
+    providerId: conv?.providerId ?? undefined,
+    modelId: conv?.modelId ?? modelStore.getEffectiveModelId(),
     cwd,
     workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
     attachments:

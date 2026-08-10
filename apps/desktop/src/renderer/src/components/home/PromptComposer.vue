@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Plus, Top, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 import type {
@@ -13,13 +14,20 @@ import type {
 import { toLocalFileUrl } from '@renderer/utils/localFile'
 import { useImagePreview } from '@renderer/composables/useImagePreview'
 import { useComposerStore } from '@renderer/stores/composer.store'
+import { useModelStore } from '@renderer/stores/model.store'
+import { useAgentStore } from '@renderer/stores/agent.store'
+import { useChatStore } from '@renderer/stores/chat.store'
 import PlanPicker from '@renderer/components/plans/PlanPicker.vue'
 import SkillPicker from '@renderer/components/skills/SkillPicker.vue'
 import ComposerInlineInput from './ComposerInlineInput.vue'
 
 const { t } = useI18n()
+const router = useRouter()
 const { openImagePreview } = useImagePreview()
 const composerStore = useComposerStore()
+const modelStore = useModelStore()
+const agentStore = useAgentStore()
+const chatStore = useChatStore()
 const inlineInputRef = ref<InstanceType<typeof ComposerInlineInput> | null>(null)
 const inlineHasContent = ref(false)
 const composerRootRef = ref<HTMLElement | null>(null)
@@ -50,8 +58,8 @@ onMounted(() => {
 onUnmounted(() => {
   compactObserver?.disconnect()
   cancelMenuClose()
-  window.removeEventListener('resize', updateSkillSubmenuPosition)
-  window.removeEventListener('scroll', updateSkillSubmenuPosition, true)
+  window.removeEventListener('resize', onSkillSubmenuReposition)
+  window.removeEventListener('scroll', onSkillSubmenuReposition, true)
 })
 
 watch(
@@ -133,8 +141,27 @@ function getFileName(path: string): string {
 const hasComposerContent = computed(
   () => inlineHasContent.value || attachments.value.length > 0 || planRefs.value.length > 0
 )
+const hasUsableGatewayModel = computed(
+  () =>
+    !modelStore.gatewayEnabled ||
+    Boolean(
+      modelStore.getEffectiveGatewaySelection(
+        chatStore.activeConversation?.providerId,
+        chatStore.activeConversation?.modelId,
+        agentStore.selectedAgentId
+      )
+    )
+)
+
+function openGatewayProviderSettings(): void {
+  void router.push({ path: '/settings', query: { section: 'gateway', tab: 'providers' } })
+}
 
 function handleSubmit(): void {
+  if (!hasUsableGatewayModel.value) {
+    openGatewayProviderSettings()
+    return
+  }
   const text = inlineInputRef.value?.getContent() ?? ''
   const skillRefs = inlineInputRef.value?.getSkillRefs() ?? []
   if (
@@ -189,6 +216,14 @@ function scheduleMenuClose(): void {
   }, 160)
 }
 
+/** 离开 Skill 入口时只收起子菜单，不要连带关掉整个 + 菜单 */
+function scheduleSkillSubmenuClose(): void {
+  cancelMenuClose()
+  menuCloseTimer = setTimeout(() => {
+    showSkillSubmenu.value = false
+  }, 160)
+}
+
 function openSkillSubmenu(): void {
   cancelMenuClose()
   showSkillSubmenu.value = true
@@ -209,21 +244,40 @@ function updateSkillSubmenuPosition(): void {
   const margin = 8
   const gap = 4
 
+  // 顶部对齐触发项：内容变高时向下扩展，避免整块面板上下跳动
   let left = rect.right + gap
-  let top = rect.bottom - panelHeight
+  let top = rect.top
 
-  if (top < margin) top = margin
   if (top + panelHeight > window.innerHeight - margin) {
     top = Math.max(margin, window.innerHeight - panelHeight - margin)
   }
+  if (top < margin) top = margin
+
   if (left + panelWidth > window.innerWidth - margin) {
     left = Math.max(margin, rect.left - panelWidth - gap)
   }
 
-  skillSubmenuStyle.value = {
-    top: `${top}px`,
-    left: `${left}px`
+  const nextTop = `${top}px`
+  const nextLeft = `${left}px`
+  if (skillSubmenuStyle.value.top === nextTop && skillSubmenuStyle.value.left === nextLeft) {
+    return
   }
+
+  skillSubmenuStyle.value = {
+    top: nextTop,
+    left: nextLeft
+  }
+}
+
+/** 忽略技能面板内部滚动，避免列表滑动时反复重算定位导致跳动/误关闭 */
+function onSkillSubmenuReposition(event?: Event): void {
+  if (event?.type === 'scroll') {
+    const target = event.target
+    if (target instanceof Node && skillSubmenuPanelRef.value?.contains(target)) {
+      return
+    }
+  }
+  updateSkillSubmenuPosition()
 }
 
 function handleAddMenuLeave(): void {
@@ -232,11 +286,11 @@ function handleAddMenuLeave(): void {
 
 watch(showSkillSubmenu, (open) => {
   if (open) {
-    window.addEventListener('resize', updateSkillSubmenuPosition)
-    window.addEventListener('scroll', updateSkillSubmenuPosition, true)
+    window.addEventListener('resize', onSkillSubmenuReposition)
+    window.addEventListener('scroll', onSkillSubmenuReposition, true)
   } else {
-    window.removeEventListener('resize', updateSkillSubmenuPosition)
-    window.removeEventListener('scroll', updateSkillSubmenuPosition, true)
+    window.removeEventListener('resize', onSkillSubmenuReposition)
+    window.removeEventListener('scroll', onSkillSubmenuReposition, true)
   }
 })
 
@@ -414,7 +468,7 @@ defineExpose({
       <div v-for="(msg, idx) in props.queuedMessages" :key="idx" class="queued-banner">
         <span class="queued-badge">{{ idx + 1 }}</span>
         <span class="queued-text">{{ msg.content }}</span>
-        <button class="queued-cancel" @click="handleCancelQueue(idx)">&times;</button>
+        <button class="queued-cancel" @click="() => handleCancelQueue(idx)">&times;</button>
       </div>
     </div>
 
@@ -423,7 +477,7 @@ defineExpose({
       <div v-for="plan in planRefs" :key="plan.id" class="plan-ref-chip">
         <span class="plan-ref-icon">&#x1F4CB;</span>
         <span class="plan-ref-title">{{ plan.title }}</span>
-        <button type="button" class="plan-ref-remove" @click="removePlanRef(plan.id)">
+        <button type="button" class="plan-ref-remove" @click="() => removePlanRef(plan.id)">
           &times;
         </button>
       </div>
@@ -433,9 +487,9 @@ defineExpose({
     <div v-if="attachments.length > 0" class="attachments-area">
       <div v-for="att in attachments" :key="att.id" class="attachment-item">
         <template v-if="att.type === 'image'">
-          <div class="attachment-image" @click="previewComposerImage(att)">
+          <div class="attachment-image" @click="() => previewComposerImage(att)">
             <img :src="att.previewUrl" :alt="att.name" />
-            <button class="attachment-remove" @click.stop="removeAttachment(att.id)">
+            <button class="attachment-remove" @click.stop="() => removeAttachment(att.id)">
               &times;
             </button>
           </div>
@@ -444,14 +498,18 @@ defineExpose({
           <div class="attachment-file">
             <span class="attachment-file-icon">&#x1F4C4;</span>
             <span class="attachment-file-name">{{ att.name }}</span>
-            <button class="attachment-remove" @click="removeAttachment(att.id)">&times;</button>
+            <button class="attachment-remove" @click="() => removeAttachment(att.id)">
+              &times;
+            </button>
           </div>
         </template>
         <template v-else-if="att.type === 'url'">
           <div class="attachment-url">
             <span class="attachment-url-badge">#{{ getUrlIndex(att.id) }}</span>
             <span class="attachment-url-text">{{ truncateUrl(att.url) }}</span>
-            <button class="attachment-remove" @click="removeAttachment(att.id)">&times;</button>
+            <button class="attachment-remove" @click="() => removeAttachment(att.id)">
+              &times;
+            </button>
           </div>
         </template>
       </div>
@@ -517,7 +575,7 @@ defineExpose({
                 ref="skillSubmenuTriggerRef"
                 class="menu-submenu-wrapper"
                 @mouseenter="openSkillSubmenu"
-                @mouseleave="scheduleMenuClose"
+                @mouseleave="scheduleSkillSubmenuClose"
               >
                 <button
                   type="button"
@@ -631,7 +689,16 @@ defineExpose({
         >
           <span class="stop-icon"></span>
         </button>
-        <button v-else class="send-btn" :disabled="!hasComposerContent" @click="handleSubmit">
+        <button
+          v-else
+          class="send-btn"
+          :class="{ 'send-btn--needs-config': !hasUsableGatewayModel }"
+          :disabled="hasUsableGatewayModel && !hasComposerContent"
+          :title="
+            hasUsableGatewayModel ? '' : '点击前往 API Gateway 配置 Provider 和模型'
+          "
+          @click="handleSubmit"
+        >
           <el-icon :size="14"><Top /></el-icon>
         </button>
       </div>
@@ -651,6 +718,7 @@ defineExpose({
         :style="skillSubmenuStyle"
         @mouseenter="cancelMenuClose"
         @mouseleave="scheduleMenuClose"
+        @wheel.stop
       >
         <SkillPicker
           :active="showSkillSubmenu"
@@ -1103,6 +1171,15 @@ defineExpose({
 .send-btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
+}
+
+.send-btn--needs-config {
+  opacity: 0.45;
+  cursor: pointer;
+}
+
+.send-btn--needs-config:hover {
+  opacity: 0.7;
 }
 
 .send-btn:not(:disabled):hover {

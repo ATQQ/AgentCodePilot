@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { useAgentStore } from '@renderer/stores/agent.store'
+import { useModelStore } from '@renderer/stores/model.store'
 import { useSettingsStore } from '@renderer/stores/settings.store'
 import { getAgentIcon } from '@renderer/utils/agentIcons'
 import {
@@ -16,6 +17,7 @@ import type { AgentModelOption, ModelCatalogSource, ReplyLanguage } from '@rende
 
 const { t } = useI18n()
 const agentStore = useAgentStore()
+const modelStore = useModelStore()
 const settingsStore = useSettingsStore()
 
 const draftMaxTurns = ref(DEFAULT_MAX_AGENT_TURNS)
@@ -39,15 +41,38 @@ const useCustomModels = ref(false)
 const discoveredModels = ref<AgentModelOption[]>([])
 const discoveredSource = ref<ModelCatalogSource>('fallback')
 
-const configurableAgents = computed(() => agentStore.agents.filter((agent) => agent.enabled))
+const configurableAgents = computed(() =>
+  agentStore.agents.filter((agent) => agent.enabled || ['claude-code', 'codex'].includes(agent.id))
+)
 
 const supportsModelConfig = computed(() => ['claude-code', 'codex'].includes(activeAgentId.value))
 const supportsMockConfig = computed(() => activeAgentId.value === 'mock')
 const supportsCodexConfig = computed(() => activeAgentId.value === 'codex')
+/** Gateway owns upstream models / API keys; hide duplicate Agent model UI when enabled. */
+const showAgentModelSettings = computed(() => !modelStore.gatewayEnabled)
+const showAgentConfigActions = computed(
+  () => showAgentModelSettings.value || supportsCodexConfig.value
+)
 
 const draftCodexApiKey = ref('')
 const draftCodexHasApiKey = ref(false)
 const draftCodexSandbox = ref<'read_only' | 'workspace_write' | 'full_access'>('workspace_write')
+
+const activeAgent = computed(() =>
+  agentStore.agents.find((agent) => agent.id === activeAgentId.value)
+)
+const showCliInstallGuide = computed(
+  () =>
+    ['claude-code', 'codex'].includes(activeAgentId.value) &&
+    activeAgent.value?.installSource === 'none'
+)
+
+const cliSourceLabel = computed(() => {
+  const source = activeAgent.value?.installSource
+  if (source === 'global') return t('settings.agentConfig.cliSourceGlobal')
+  if (source === 'bundled') return t('settings.agentConfig.cliSourceBundled')
+  return t('settings.agentConfig.cliSourceNone')
+})
 
 const sourceLabel = computed(() => {
   const map: Record<ModelCatalogSource, string> = {
@@ -98,6 +123,11 @@ async function loadAgent(agentId: string): Promise<void> {
 
 onMounted(async () => {
   await settingsStore.fetchSettings()
+  try {
+    await modelStore.refreshGatewayProviders(activeAgentId.value || 'claude-code')
+  } catch {
+    // Keep Agent settings usable even if gateway status cannot be loaded.
+  }
   draftMaxTurns.value = settingsStore.maxAgentTurns
   draftReplyLanguage.value = settingsStore.replyLanguage
   await agentStore.fetchAgents()
@@ -143,10 +173,29 @@ async function refreshDiscovered(): Promise<void> {
   await loadAgent(activeAgentId.value)
 }
 
+async function refreshAgents(): Promise<void> {
+  await agentStore.fetchAgents(true)
+}
+
 async function saveConfig(): Promise<void> {
   if (!supportsModelConfig.value) return
   saving.value = true
   try {
+    // Gateway mode: only persist Codex sandbox; leave model catalog untouched.
+    if (!showAgentModelSettings.value) {
+      if (!supportsCodexConfig.value) return
+      const existing = await window.agentAPI.agents.getConfig(activeAgentId.value)
+      await window.agentAPI.agents.updateConfig(activeAgentId.value, {
+        codex: {
+          defaultModelId: existing.codex?.defaultModelId ?? existing.defaultModelId,
+          sandbox: draftCodexSandbox.value,
+          apiKey: existing.codex?.hasApiKey ? '__KEEP__' : ''
+        }
+      })
+      ElMessage.success(t('common.saveSuccess'))
+      return
+    }
+
     const models = useCustomModels.value
       ? draftModels.value
           .filter((model) => model.id.trim() && model.name.trim())
@@ -259,7 +308,38 @@ async function resetConfig(): Promise<void> {
     <div v-if="loading" class="loading-hint">{{ t('common.loading') }}</div>
 
     <template v-else-if="supportsModelConfig">
-      <div v-if="supportsCodexConfig" class="setting-card">
+      <div class="setting-card">
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">{{ t('settings.agentConfig.cliStatus') }}</div>
+            <div class="setting-desc">{{ cliSourceLabel }}</div>
+            <div v-if="activeAgent?.disabledReason" class="setting-desc cli-disabled-reason">
+              {{ activeAgent.disabledReason }}
+            </div>
+          </div>
+          <button class="ghost-btn" :disabled="loading" @click="refreshAgents">
+            {{ t('settings.agentConfig.cliRefresh') }}
+          </button>
+        </div>
+
+        <div
+          v-if="showCliInstallGuide && activeAgentId === 'claude-code'"
+          class="cli-install-guide"
+        >
+          <div class="setting-label">{{ t('settings.agentConfig.cliInstallClaudeTitle') }}</div>
+          <p class="setting-desc">{{ t('settings.agentConfig.cliInstallClaudeDesc') }}</p>
+          <code class="cli-cmd">{{ t('settings.agentConfig.cliInstallClaudeCmd') }}</code>
+          <p class="setting-desc">{{ t('settings.agentConfig.cliInstallClaudeAlt') }}</p>
+        </div>
+
+        <div v-else-if="showCliInstallGuide && activeAgentId === 'codex'" class="cli-install-guide">
+          <div class="setting-label">{{ t('settings.agentConfig.cliInstallCodexTitle') }}</div>
+          <p class="setting-desc">{{ t('settings.agentConfig.cliInstallCodexDesc') }}</p>
+          <code class="cli-cmd">{{ t('settings.agentConfig.cliInstallCodexCmd') }}</code>
+        </div>
+      </div>
+
+      <div v-if="supportsCodexConfig && showAgentModelSettings" class="setting-card">
         <div class="setting-row">
           <div>
             <div class="setting-label">{{ t('settings.agentConfig.apiKey') }}</div>
@@ -296,90 +376,97 @@ async function resetConfig(): Promise<void> {
         </div>
       </div>
 
-      <div class="setting-card">
-        <div class="setting-row">
-          <div>
-            <div class="setting-label">{{ t('settings.agentConfig.discoveredSource') }}</div>
-            <div class="setting-desc">{{ sourceLabel }}</div>
+      <template v-if="showAgentModelSettings">
+        <div class="setting-card">
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">{{ t('settings.agentConfig.discoveredSource') }}</div>
+              <div class="setting-desc">{{ sourceLabel }}</div>
+            </div>
+            <button class="ghost-btn" :disabled="loading" @click="refreshDiscovered">
+              {{ t('settings.agentConfig.refresh') }}
+            </button>
           </div>
-          <button class="ghost-btn" :disabled="loading" @click="refreshDiscovered">
-            {{ t('settings.agentConfig.refresh') }}
-          </button>
+
+          <div class="discovered-list">
+            <div v-for="model in discoveredModels" :key="model.id" class="discovered-item">
+              <div class="discovered-name">{{ model.name }}</div>
+              <div class="discovered-meta">{{ model.id }}</div>
+              <div v-if="model.description" class="discovered-desc">{{ model.description }}</div>
+            </div>
+          </div>
         </div>
 
-        <div class="discovered-list">
-          <div v-for="model in discoveredModels" :key="model.id" class="discovered-item">
-            <div class="discovered-name">{{ model.name }}</div>
-            <div class="discovered-meta">{{ model.id }}</div>
-            <div v-if="model.description" class="discovered-desc">{{ model.description }}</div>
+        <div class="setting-card">
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">{{ t('settings.agentConfig.defaultModel') }}</div>
+              <div class="setting-desc">{{ t('settings.agentConfig.defaultModelDesc') }}</div>
+            </div>
+            <select v-model="draftDefaultModelId" class="model-select">
+              <option
+                v-for="model in useCustomModels ? draftModels : discoveredModels"
+                :key="model.id"
+                :value="model.id"
+              >
+                {{ model.name }}
+              </option>
+            </select>
           </div>
         </div>
-      </div>
 
-      <div class="setting-card">
-        <div class="setting-row">
-          <div>
-            <div class="setting-label">{{ t('settings.agentConfig.defaultModel') }}</div>
-            <div class="setting-desc">{{ t('settings.agentConfig.defaultModelDesc') }}</div>
-          </div>
-          <select v-model="draftDefaultModelId" class="model-select">
-            <option
-              v-for="model in useCustomModels ? draftModels : discoveredModels"
-              :key="model.id"
-              :value="model.id"
-            >
-              {{ model.name }}
-            </option>
-          </select>
-        </div>
-      </div>
-
-      <div class="setting-card">
-        <div class="setting-row">
-          <div>
-            <div class="setting-label">{{ t('settings.agentConfig.customModels') }}</div>
-            <div class="setting-desc">{{ t('settings.agentConfig.customModelsDesc') }}</div>
-          </div>
-          <button
-            type="button"
-            class="toggle-switch"
-            :class="{ active: useCustomModels }"
-            role="switch"
-            :aria-checked="useCustomModels"
-            @click="toggleCustomModels(!useCustomModels)"
-          />
-        </div>
-
-        <div v-if="useCustomModels" class="custom-models">
-          <div v-for="(model, index) in draftModels" :key="index" class="custom-model-row">
-            <input
-              v-model="model.id"
-              class="field-input"
-              :placeholder="t('settings.agentConfig.modelId')"
+        <div class="setting-card">
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">{{ t('settings.agentConfig.customModels') }}</div>
+              <div class="setting-desc">{{ t('settings.agentConfig.customModelsDesc') }}</div>
+            </div>
+            <button
+              type="button"
+              class="toggle-switch"
+              :class="{ active: useCustomModels }"
+              role="switch"
+              :aria-checked="useCustomModels"
+              @click="toggleCustomModels(!useCustomModels)"
             />
-            <input
-              v-model="model.name"
-              class="field-input"
-              :placeholder="t('settings.agentConfig.modelName')"
-            />
-            <input
-              v-model="model.description"
-              class="field-input field-input--wide"
-              :placeholder="t('settings.agentConfig.modelDescription')"
-            />
-            <button class="icon-btn" @click="() => removeModelRow(index)">×</button>
           </div>
-          <button class="ghost-btn" @click="addModelRow">
-            {{ t('settings.agentConfig.addModel') }}
-          </button>
-        </div>
-      </div>
 
-      <div class="actions">
+          <div v-if="useCustomModels" class="custom-models">
+            <div v-for="(model, index) in draftModels" :key="index" class="custom-model-row">
+              <input
+                v-model="model.id"
+                class="field-input"
+                :placeholder="t('settings.agentConfig.modelId')"
+              />
+              <input
+                v-model="model.name"
+                class="field-input"
+                :placeholder="t('settings.agentConfig.modelName')"
+              />
+              <input
+                v-model="model.description"
+                class="field-input field-input--wide"
+                :placeholder="t('settings.agentConfig.modelDescription')"
+              />
+              <button class="icon-btn" @click="() => removeModelRow(index)">×</button>
+            </div>
+            <button class="ghost-btn" @click="addModelRow">
+              {{ t('settings.agentConfig.addModel') }}
+            </button>
+          </div>
+        </div>
+      </template>
+
+      <div v-if="showAgentConfigActions" class="actions">
         <button class="primary-btn" :disabled="saving" @click="saveConfig">
           {{ t('common.save') }}
         </button>
-        <button class="ghost-btn" :disabled="saving" @click="resetConfig">
+        <button
+          v-if="showAgentModelSettings"
+          class="ghost-btn"
+          :disabled="saving"
+          @click="resetConfig"
+        >
           {{ t('settings.agentConfig.reset') }}
         </button>
       </div>
@@ -486,6 +573,32 @@ async function resetConfig(): Promise<void> {
   margin-top: 4px;
   font-size: var(--font-size-xs);
   color: var(--content-text-secondary);
+}
+
+.cli-disabled-reason {
+  color: var(--color-warning, #b45309);
+}
+
+.cli-install-guide {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--btn-secondary-bg);
+}
+
+.cli-cmd {
+  display: block;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: var(--content-bg);
+  border: 1px solid var(--sidebar-border);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  color: var(--content-text);
+  word-break: break-all;
+  user-select: all;
 }
 
 .discovered-list {

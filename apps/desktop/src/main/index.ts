@@ -17,8 +17,10 @@ import type {
   ConversationUpdatePayload,
   GatewayStatus,
   MessageInfo,
+  MessagePart,
   ProjectPayload,
   ProviderConfigPayload,
+  ProviderTestInputPayload,
   WorkspacePayload,
   SendMessagePayload,
   SendMessageResult,
@@ -28,7 +30,13 @@ import type {
   OpenPathResult,
   ToolUseInfo
 } from '../preload/types'
-import { agentRegistry, ensureAgentRegistry } from './runtime'
+import {
+  appendTextDelta,
+  appendThinkingDelta,
+  appendToolPart,
+  finalizeMessageParts
+} from '../shared/message-parts'
+import { agentRegistry, ensureAgentRegistry, refreshCliAgentRegistry } from './runtime'
 import { supervisedRun, supervisedStop, supervisedStopAll } from './runtime/supervisor'
 import { cloneForIpc } from '../shared/ipc-clone'
 import { parseMaxAgentTurnsSetting, clampMaxAgentTurns } from '../shared/agent-run-settings'
@@ -40,7 +48,30 @@ import {
 } from './runtime/model-catalog'
 import { respondToApproval, cancelApprovalsForConversation } from './runtime/approval-manager'
 import type { ApprovalRespondPayload } from '../preload/types'
-import { startGateway, stopGateway, getGatewayConfig, isGatewayRunning } from './gateway'
+import {
+  startGateway,
+  stopGateway,
+  getGatewayConfig,
+  isGatewayRunning,
+  loadGatewaySettings,
+  updateGatewaySettings,
+  listPublicProviders,
+  saveProvider,
+  removeProvider,
+  PROVIDER_PRESETS,
+  testProviderConnectivity,
+  getTakeoverStatus,
+  setTakeover,
+  reapplyPreferredTakeovers,
+  maybeAutoStartGateway,
+  startLogViewer,
+  stopLogViewer,
+  getLogViewerUrl,
+  isLogViewerRunning,
+  getGatewayLogsDir,
+  fetchProviderModels,
+  type TakeoverUiApp
+} from './gateway'
 import { logInfo, logError, cleanOldLogs } from './logger'
 import { getDatabase, closeDatabase } from './database'
 import * as repo from './database/repositories'
@@ -100,31 +131,26 @@ registerLocalFileScheme()
 
 let mainWindow: BrowserWindow | null = null
 
-const streamingMessages = new Map<
-  string,
-  {
-    conversationId: string
-    content: string
-    rawInput: string
-    agentId?: string
-    toolCalls: Map<string, ToolUseInfo>
-  }
->()
+type StreamingMessageEntry = {
+  conversationId: string
+  content: string
+  parts: MessagePart[]
+  rawInput: string
+  agentId?: string
+  toolCalls: Map<string, ToolUseInfo>
+}
+
+const streamingMessages = new Map<string, StreamingMessageEntry>()
 
 function createStreamingEntry(
   conversationId: string,
   rawInput: string,
   agentId?: string
-): {
-  conversationId: string
-  content: string
-  rawInput: string
-  agentId?: string
-  toolCalls: Map<string, ToolUseInfo>
-} {
+): StreamingMessageEntry {
   return {
     conversationId,
     content: '',
+    parts: [],
     rawInput,
     agentId,
     toolCalls: new Map()
@@ -220,11 +246,16 @@ function finalizeToolCallsForSave(toolCalls: Map<string, ToolUseInfo>): ToolUseI
 interface DeltaBatchEntry {
   conversationId: string
   messageId: string
+  kind: 'text' | 'thinking'
   deltas: string[]
 }
 
 const deltaBatch = new Map<string, DeltaBatchEntry>()
 let deltaFlushTimer: ReturnType<typeof setTimeout> | null = null
+
+function deltaBatchKey(messageId: string, kind: 'text' | 'thinking'): string {
+  return `${messageId}:${kind}`
+}
 
 function flushDeltaBatch(): void {
   if (deltaFlushTimer) {
@@ -234,7 +265,7 @@ function flushDeltaBatch(): void {
   for (const batch of deltaBatch.values()) {
     if (batch.deltas.length === 0) continue
     mainWindow?.webContents.send(IPC_CHANNELS.AGENT_EVENT, {
-      type: 'message.delta',
+      type: batch.kind === 'thinking' ? 'message.thinking.delta' : 'message.delta',
       conversationId: batch.conversationId,
       messageId: batch.messageId,
       delta: batch.deltas.join('')
@@ -248,7 +279,31 @@ function scheduleDeltaFlush(): void {
   deltaFlushTimer = setTimeout(flushDeltaBatch, DELTA_BATCH_MS)
 }
 
-function getConversationRunContext(conversationId: string): {
+function enqueueDeltaBatch(
+  kind: 'text' | 'thinking',
+  conversationId: string,
+  messageId: string,
+  delta: string
+): void {
+  const key = deltaBatchKey(messageId, kind)
+  let batch = deltaBatch.get(key)
+  if (!batch) {
+    batch = {
+      conversationId,
+      messageId,
+      kind,
+      deltas: []
+    }
+    deltaBatch.set(key, batch)
+  }
+  batch.deltas.push(delta)
+  scheduleDeltaFlush()
+}
+
+function getConversationRunContext(
+  conversationId: string,
+  agentId?: string
+): {
   agentSessionId: string | null
   conversationHistory: { role: 'user' | 'assistant'; content: string }[]
 } {
@@ -257,8 +312,16 @@ function getConversationRunContext(conversationId: string): {
     repo.getRecentMessagesByConversation(conversationId, AGENT_HISTORY_LIMIT)
   )
 
+  let agentSessionId = conv?.agent_session_id ?? null
+  // Mid-conversation agent switch must not resume the previous agent's session.
+  if (agentId && conv && conv.agent_id !== agentId) {
+    repo.setConversationSessionId(conversationId, null)
+    repo.updateConversation(conversationId, { agentId })
+    agentSessionId = null
+  }
+
   return {
-    agentSessionId: conv?.agent_session_id ?? null,
+    agentSessionId,
     conversationHistory: messages.map((m) => ({
       role: m.role as 'user' | 'assistant',
       content:
@@ -282,6 +345,11 @@ function mapPlanRow(r: repo.PlanRow): PlanInfo {
   }
 }
 
+function serializeContentParts(parts: MessagePart[]): string | null {
+  if (!parts.length) return null
+  return JSON.stringify(finalizeMessageParts(parts))
+}
+
 function emitAgentEvent(event: AgentEvent): void {
   if (event.type === 'message.started') {
     if (!streamingMessages.has(event.messageId)) {
@@ -289,10 +357,19 @@ function emitAgentEvent(event: AgentEvent): void {
     }
   } else if (event.type === 'message.delta') {
     const entry = streamingMessages.get(event.messageId)
-    if (entry) entry.content += event.delta
+    if (entry) {
+      appendTextDelta(entry.parts, event.delta)
+      entry.content += event.delta
+    }
+  } else if (event.type === 'message.thinking.delta') {
+    const entry = streamingMessages.get(event.messageId)
+    if (entry) {
+      appendThinkingDelta(entry.parts, event.delta)
+    }
   } else if (event.type === 'tool.started') {
     const entry = streamingMessages.get(event.messageId)
     if (entry) {
+      appendToolPart(entry.parts, event.tool.toolUseId)
       entry.toolCalls.set(event.tool.toolUseId, {
         ...event.tool,
         startedAt: event.tool.startedAt ?? new Date().toISOString()
@@ -322,8 +399,10 @@ function emitAgentEvent(event: AgentEvent): void {
         let content = entry.content
         if (stopped && !content.trim()) {
           content = STOPPED_ASSISTANT_TEXT
+          appendTextDelta(entry.parts, STOPPED_ASSISTANT_TEXT)
         }
         const finalizedTools = finalizeToolCallsForSave(entry.toolCalls)
+        const contentParts = serializeContentParts(entry.parts)
         repo.addMessage({
           id: event.messageId,
           conversationId: entry.conversationId,
@@ -340,7 +419,8 @@ function emitAgentEvent(event: AgentEvent): void {
           debugInput: event.debugInput || null,
           debugOutput: event.debugOutput || null,
           stopped,
-          toolCalls: finalizedTools.length > 0 ? JSON.stringify(finalizedTools) : null
+          toolCalls: finalizedTools.length > 0 ? JSON.stringify(finalizedTools) : null,
+          contentParts
         })
         savePlanFromAssistantMessage(entry.conversationId, event.messageId, content)
       } catch (e) {
@@ -365,6 +445,10 @@ function emitAgentEvent(event: AgentEvent): void {
       const errorText = `[Error] ${formatAgentErrorMessage(event.error)}`
       const content = entry?.content.trim() ? `${entry.content.trim()}\n\n${errorText}` : errorText
       const finalizedTools = entry ? finalizeToolCallsForSave(entry.toolCalls) : []
+      if (entry) {
+        appendTextDelta(entry.parts, entry.content.trim() ? `\n\n${errorText}` : errorText)
+      }
+      const contentParts = entry ? serializeContentParts(entry.parts) : null
       repo.addMessage({
         id: messageId,
         conversationId: event.conversationId,
@@ -374,10 +458,25 @@ function emitAgentEvent(event: AgentEvent): void {
         agentId: entry?.agentId ?? null,
         rawInput: entry?.rawInput || null,
         error: true,
-        toolCalls: finalizedTools.length > 0 ? JSON.stringify(finalizedTools) : null
+        toolCalls: finalizedTools.length > 0 ? JSON.stringify(finalizedTools) : null,
+        contentParts
       })
     } catch (e) {
-      console.error('[emitAgentEvent] Failed to save error message to db:', e)
+      const code = (e as { code?: string } | null)?.code
+      // turn.failed + outer catch can both emit message.error for the same id
+      if (code === 'SQLITE_CONSTRAINT_PRIMARYKEY') {
+        try {
+          const errorText = `[Error] ${formatAgentErrorMessage(event.error)}`
+          const content = entry?.content.trim()
+            ? `${entry.content.trim()}\n\n${errorText}`
+            : errorText
+          repo.updateMessageContent(messageId, content)
+        } catch (updateErr) {
+          console.error('[emitAgentEvent] Failed to update error message:', updateErr)
+        }
+      } else {
+        console.error('[emitAgentEvent] Failed to save error message to db:', e)
+      }
     }
     if (entry) {
       streamingMessages.delete(messageId)
@@ -389,17 +488,12 @@ function emitAgentEvent(event: AgentEvent): void {
   }
 
   if (event.type === 'message.delta') {
-    let batch = deltaBatch.get(event.messageId)
-    if (!batch) {
-      batch = {
-        conversationId: event.conversationId,
-        messageId: event.messageId,
-        deltas: []
-      }
-      deltaBatch.set(event.messageId, batch)
-    }
-    batch.deltas.push(event.delta)
-    scheduleDeltaFlush()
+    enqueueDeltaBatch('text', event.conversationId, event.messageId, event.delta)
+    return
+  }
+
+  if (event.type === 'message.thinking.delta') {
+    enqueueDeltaBatch('thinking', event.conversationId, event.messageId, event.delta)
     return
   }
 
@@ -432,11 +526,19 @@ function getRunApprovalLevel(conversationId: string): 'request' | 'auto' | 'full
   return repo.getConversationApprovalLevel(conversationId)
 }
 
+function resolveRunModel(payload: { providerId?: string; modelId?: string }): string | undefined {
+  if (loadGatewaySettings().enabled && payload.providerId && payload.modelId) {
+    return `${payload.providerId}/${payload.modelId}`
+  }
+  return payload.modelId
+}
+
 function mapConversationRow(r: repo.ConversationRow): ConversationListItem {
   return {
     id: r.id,
     title: r.title,
     agentId: r.agent_id,
+    providerId: r.provider_id ?? null,
     modelId: r.model_id ?? null,
     projectId: r.project_id,
     cwd: r.cwd ?? null,
@@ -453,14 +555,22 @@ function mapConversationRow(r: repo.ConversationRow): ConversationListItem {
 }
 
 function registerIpcHandlers(): void {
-  ipcMain.handle(IPC_CHANNELS.AGENTS_LIST, async (): Promise<AgentInfo[]> => {
-    await ensureAgentRegistry()
-    return agentRegistry.list().map((a) => ({
-      id: a.id,
-      name: a.name,
-      enabled: a.enabled
-    }))
-  })
+  ipcMain.handle(
+    IPC_CHANNELS.AGENTS_LIST,
+    async (_e, forceRefresh?: boolean): Promise<AgentInfo[]> => {
+      await ensureAgentRegistry()
+      if (forceRefresh) {
+        await refreshCliAgentRegistry()
+      }
+      return agentRegistry.list().map((a) => ({
+        id: a.id,
+        name: a.name,
+        enabled: a.enabled,
+        disabledReason: a.disabledReason,
+        installSource: a.installSource
+      }))
+    }
+  )
 
   ipcMain.handle(IPC_CHANNELS.AGENTS_MODELS_LIST, (_e, agentId: string, forceRefresh?: boolean) =>
     getModelCatalog(agentId, forceRefresh ?? false)
@@ -500,6 +610,7 @@ function registerIpcHandlers(): void {
         id,
         title,
         agentId: payload.agentId,
+        providerId: payload.providerId ?? null,
         modelId: payload.modelId ?? null,
         projectId: payload.projectId ?? null,
         cwd,
@@ -542,14 +653,14 @@ function registerIpcHandlers(): void {
         assistantMsgId,
         createStreamingEntry(payload.conversationId, prompt, payload.agentId)
       )
-      const runContext = getConversationRunContext(payload.conversationId)
+      const runContext = getConversationRunContext(payload.conversationId, payload.agentId)
       const approvalLevel = getRunApprovalLevel(payload.conversationId)
       const runInput = {
         conversationId: payload.conversationId,
         messageId: assistantMsgId,
         content: prompt,
         agentId: payload.agentId,
-        model: payload.modelId,
+        model: resolveRunModel(payload),
         cwd: resolveConversationCwd(payload.conversationId, payload.cwd),
         workspaceFolders: resolveConversationWorkspaceFolders(
           payload.conversationId,
@@ -603,14 +714,14 @@ function registerIpcHandlers(): void {
         assistantMsgId,
         createStreamingEntry(payload.conversationId, prompt, payload.agentId)
       )
-      const runContext = getConversationRunContext(payload.conversationId)
+      const runContext = getConversationRunContext(payload.conversationId, payload.agentId)
       const approvalLevel = getRunApprovalLevel(payload.conversationId)
       const runInput = {
         conversationId: payload.conversationId,
         messageId: assistantMsgId,
         content: prompt,
         agentId: payload.agentId,
-        model: payload.modelId,
+        model: resolveRunModel(payload),
         cwd: resolveConversationCwd(payload.conversationId, payload.cwd),
         workspaceFolders: resolveConversationWorkspaceFolders(
           payload.conversationId,
@@ -706,11 +817,21 @@ function registerIpcHandlers(): void {
           }
         }
         if (r.input_tokens != null && r.output_tokens != null) {
+          const inputTokens = r.input_tokens
+          const outputTokens = r.output_tokens
+          const cacheReadTokens = r.cache_read_tokens ?? 0
+          const cacheCreationTokens = r.cache_creation_tokens ?? 0
+          // Claude/Anthropic: cache is additive. Codex/OpenAI: cache is subset of input.
+          const totalTokens =
+            r.agent_id === 'claude-code'
+              ? inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens
+              : inputTokens + outputTokens
           msg.usage = {
-            inputTokens: r.input_tokens,
-            outputTokens: r.output_tokens,
-            cacheReadTokens: r.cache_read_tokens ?? 0,
-            cacheCreationTokens: r.cache_creation_tokens ?? 0,
+            inputTokens,
+            outputTokens,
+            cacheReadTokens,
+            cacheCreationTokens,
+            totalTokens,
             costUSD: r.cost_usd ?? 0
           }
         }
@@ -726,6 +847,13 @@ function registerIpcHandlers(): void {
         if (r.tool_calls) {
           try {
             msg.toolCalls = JSON.parse(r.tool_calls) as MessageInfo['toolCalls']
+          } catch {
+            /* ignore */
+          }
+        }
+        if (r.content_parts) {
+          try {
+            msg.parts = JSON.parse(r.content_parts) as MessageInfo['parts']
           } catch {
             /* ignore */
           }
@@ -749,6 +877,7 @@ function registerIpcHandlers(): void {
         pinned: payload.pinned,
         archived: payload.archived,
         approvalLevel: payload.approvalLevel,
+        providerId: payload.providerId,
         modelId: payload.modelId
       })
     }
@@ -814,26 +943,38 @@ function registerIpcHandlers(): void {
 
   // --- Providers ---
 
-  ipcMain.handle(IPC_CHANNELS.PROVIDERS_LIST, (): ProviderConfigPayload[] => {
-    return repo.getAllProviderConfigs().map((p) => ({
-      id: p.id,
-      name: p.name,
-      type: p.type,
-      config: JSON.parse(p.config) as Record<string, unknown>
-    }))
+  ipcMain.handle(IPC_CHANNELS.PROVIDERS_LIST, () => {
+    return listPublicProviders()
   })
 
-  ipcMain.handle(IPC_CHANNELS.PROVIDERS_SAVE, (_e, payload: ProviderConfigPayload): void => {
-    repo.saveProviderConfig({
+  ipcMain.handle(IPC_CHANNELS.PROVIDERS_SAVE, (_e, payload: ProviderConfigPayload) => {
+    return saveProvider({
       id: payload.id,
       name: payload.name,
       type: payload.type,
-      config: JSON.stringify(payload.config)
+      config: payload.config
     })
   })
 
   ipcMain.handle(IPC_CHANNELS.PROVIDERS_DELETE, (_e, id: string): void => {
-    repo.deleteProviderConfig(id)
+    removeProvider(id)
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROVIDERS_PRESETS, () => {
+    return PROVIDER_PRESETS.map((p) => ({
+      id: p.id,
+      name: p.name,
+      type: p.type,
+      config: { ...p.config, apiKey: '' }
+    }))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROVIDERS_TEST, (_e, payload: ProviderTestInputPayload) => {
+    return testProviderConnectivity(payload || {})
+  })
+
+  ipcMain.handle(IPC_CHANNELS.PROVIDERS_FETCH_MODELS, (_e, payload: ProviderTestInputPayload) => {
+    return fetchProviderModels(payload || {})
   })
 
   // --- Settings ---
@@ -892,17 +1033,124 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.GATEWAY_STATUS, (): GatewayStatus => {
     const cfg = getGatewayConfig()
-    return { running: isGatewayRunning(), host: cfg.host, port: cfg.port, token: cfg.token }
+    const settings = loadGatewaySettings()
+    return {
+      running: isGatewayRunning(),
+      host: cfg.host,
+      port: cfg.port,
+      token: cfg.token,
+      enabled: settings.enabled
+    }
   })
 
-  ipcMain.handle(IPC_CHANNELS.GATEWAY_START, (): GatewayStatus => {
-    const result = startGateway()
+  ipcMain.handle(IPC_CHANNELS.GATEWAY_START, async (): Promise<GatewayStatus> => {
+    const result = await startGateway()
+    await reapplyPreferredTakeovers()
     const cfg = getGatewayConfig()
-    return { running: true, host: cfg.host, port: cfg.port, token: result.token }
+    return {
+      running: true,
+      host: cfg.host,
+      port: cfg.port,
+      token: result.token,
+      enabled: true
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.GATEWAY_STOP, (): void => {
-    stopGateway()
+    stopGateway({ restoreTakeovers: true, persistDisabled: true })
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GATEWAY_GET_SETTINGS, () => {
+    return loadGatewaySettings()
+  })
+
+  ipcMain.handle(
+    IPC_CHANNELS.GATEWAY_UPDATE_SETTINGS,
+    async (_e, payload: Partial<ReturnType<typeof loadGatewaySettings>>) => {
+      const prev = loadGatewaySettings()
+      const next = updateGatewaySettings(payload)
+      if (payload.enabled === true && !isGatewayRunning()) {
+        await startGateway({
+          host: next.host,
+          port: next.port,
+          token: next.token
+        })
+        await reapplyPreferredTakeovers()
+      } else if (payload.enabled === false && isGatewayRunning()) {
+        stopGateway({ restoreTakeovers: true })
+      } else if (
+        isGatewayRunning() &&
+        (payload.host !== undefined || payload.port !== undefined || payload.token !== undefined)
+      ) {
+        await startGateway({
+          host: next.host,
+          port: next.port,
+          token: next.token
+        })
+        await reapplyPreferredTakeovers()
+      }
+
+      if (payload.logging) {
+        if (next.logging.enabled) {
+          const portChanged =
+            payload.logging.viewerPort !== undefined &&
+            payload.logging.viewerPort !== prev.logging.viewerPort
+          if (portChanged && isLogViewerRunning()) {
+            stopLogViewer()
+            startLogViewer({ port: next.logging.viewerPort, openBrowser: false })
+          } else {
+            startLogViewer({
+              port: next.logging.viewerPort,
+              openBrowser:
+                !prev.logging.enabled ||
+                (payload.logging.openBrowser !== false && next.logging.openBrowser)
+            })
+          }
+        } else if (prev.logging.enabled) {
+          stopLogViewer()
+        }
+      }
+
+      return loadGatewaySettings()
+    }
+  )
+
+  ipcMain.handle(IPC_CHANNELS.GATEWAY_TAKEOVER_GET, () => {
+    return getTakeoverStatus()
+  })
+
+  ipcMain.handle(
+    IPC_CHANNELS.GATEWAY_TAKEOVER_SET,
+    (_e, appName: TakeoverUiApp, enabled: boolean) => {
+      return setTakeover(appName, enabled)
+    }
+  )
+
+  ipcMain.handle(IPC_CHANNELS.GATEWAY_LOG_VIEWER_STATUS, () => {
+    const settings = loadGatewaySettings()
+    return {
+      running: isLogViewerRunning(),
+      url: getLogViewerUrl(),
+      port: settings.logging.viewerPort,
+      logsDir: getGatewayLogsDir()
+    }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.GATEWAY_LOG_VIEWER_OPEN, () => {
+    const settings = loadGatewaySettings()
+    const result = startLogViewer({
+      port: settings.logging.viewerPort,
+      openBrowser: true
+    })
+    if (!settings.logging.enabled) {
+      updateGatewaySettings({ logging: { ...settings.logging, enabled: true } })
+    }
+    return {
+      running: true,
+      url: result.url,
+      port: result.port,
+      logsDir: getGatewayLogsDir()
+    }
   })
 
   ipcMain.handle(IPC_CHANNELS.DIALOG_SELECT_FOLDER, async (): Promise<string | null> => {
@@ -1233,7 +1481,7 @@ function createWindow(): void {
   })
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.agentcodepilot.app')
   initShellEnvironment()
   registerLocalFileProtocol()
@@ -1245,6 +1493,7 @@ app.whenReady().then(() => {
   logInfo('App', `Starting AgentCodePilot v${app.getVersion()}`)
   cleanOldLogs()
   getDatabase()
+  await maybeAutoStartGateway()
   createWindow()
 
   app.on('browser-window-created', (_, window) => {
@@ -1263,6 +1512,7 @@ function shutdownResources(): void {
   supervisedStopAll()
   cleanupAllTerminals()
   stopGateway()
+  stopLogViewer()
   closeDatabase()
 }
 

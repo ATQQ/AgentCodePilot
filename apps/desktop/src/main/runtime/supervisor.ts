@@ -43,6 +43,15 @@ export function supervisedRun(input: AgentRunInput, emit: (event: AgentEvent) =>
       })
       return
     }
+    if (!adapter.enabled) {
+      emit({
+        type: 'message.error',
+        conversationId: input.conversationId,
+        messageId: input.messageId,
+        error: adapter.disabledReason || `Agent "${input.agentId}" is unavailable`
+      })
+      return
+    }
 
     activeRuns.set(input.conversationId, { adapter, retries: 0, messageId: input.messageId })
     logInfo('Supervisor', `Starting run: ${formatRunContext(input)}`)

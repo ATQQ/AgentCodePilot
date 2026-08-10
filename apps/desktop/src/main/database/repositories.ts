@@ -4,6 +4,7 @@ export interface ConversationRow {
   id: string
   title: string
   agent_id: string
+  provider_id: string | null
   model_id: string | null
   project_id: string | null
   cwd: string | null
@@ -35,6 +36,7 @@ export interface MessageRow {
   skill_refs: string | null
   agent_id: string | null
   tool_calls: string | null
+  content_parts: string | null
   stopped: number | null
   error: number | null
 }
@@ -52,6 +54,7 @@ export function createConversation(conv: {
   id: string
   title: string
   agentId: string
+  providerId?: string | null
   modelId?: string | null
   projectId: string | null
   cwd: string | null
@@ -61,12 +64,13 @@ export function createConversation(conv: {
 }): void {
   const db = getDatabase()
   db.prepare(
-    `INSERT INTO conversations (id, title, agent_id, model_id, project_id, cwd, approval_level, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO conversations (id, title, agent_id, provider_id, model_id, project_id, cwd, approval_level, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     conv.id,
     conv.title,
     conv.agentId,
+    conv.providerId ?? null,
     conv.modelId ?? null,
     conv.projectId,
     conv.cwd,
@@ -178,7 +182,9 @@ export function updateConversation(
     pinned?: boolean
     archived?: boolean
     approvalLevel?: string
+    providerId?: string | null
     modelId?: string
+    agentId?: string
   }
 ): void {
   const db = getDatabase()
@@ -205,6 +211,14 @@ export function updateConversation(
     sets.push('model_id = ?')
     values.push(fields.modelId)
   }
+  if (fields.providerId !== undefined) {
+    sets.push('provider_id = ?')
+    values.push(fields.providerId)
+  }
+  if (fields.agentId !== undefined) {
+    sets.push('agent_id = ?')
+    values.push(fields.agentId)
+  }
 
   if (sets.length === 0) return
 
@@ -213,7 +227,9 @@ export function updateConversation(
     fields.title === undefined &&
     fields.pinned === undefined &&
     fields.approvalLevel === undefined &&
-    fields.modelId === undefined
+    fields.providerId === undefined &&
+    fields.modelId === undefined &&
+    fields.agentId === undefined
 
   if (!onlyArchiveChange) {
     sets.push('updated_at = ?')
@@ -259,13 +275,14 @@ export function addMessage(msg: {
   skillRefs?: string | null
   agentId?: string | null
   toolCalls?: string | null
+  contentParts?: string | null
   stopped?: boolean | null
   error?: boolean | null
 }): void {
   const db = getDatabase()
   db.prepare(
-    `INSERT INTO messages (id, conversation_id, role, content, created_at, attachments, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, raw_input, debug_input, debug_output, plan_mode, plan_refs, skill_refs, agent_id, tool_calls, stopped, error)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO messages (id, conversation_id, role, content, created_at, attachments, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost_usd, raw_input, debug_input, debug_output, plan_mode, plan_refs, skill_refs, agent_id, tool_calls, content_parts, stopped, error)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     msg.id,
     msg.conversationId,
@@ -286,6 +303,7 @@ export function addMessage(msg: {
     msg.skillRefs ?? null,
     msg.agentId ?? null,
     msg.toolCalls ?? null,
+    msg.contentParts ?? null,
     msg.stopped ? 1 : 0,
     msg.error ? 1 : 0
   )

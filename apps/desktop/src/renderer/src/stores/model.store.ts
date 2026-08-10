@@ -1,7 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import type { AgentModelOption, ModelCatalogResult, ModelCatalogSource } from '@renderer/types'
+import type {
+  AgentModelOption,
+  GatewayProviderPublicPayload,
+  GatewaySettingsPayload,
+  ModelCatalogResult,
+  ModelCatalogSource
+} from '../../../preload/types'
 import { DEFAULT_CLAUDE_MODEL_ID } from '@renderer/constants/claude-models'
 import i18n from '@renderer/i18n'
 import { useAgentStore } from './agent.store'
@@ -25,11 +31,114 @@ export const useModelStore = defineStore('model', () => {
   const catalogSource = ref<ModelCatalogSource>('fallback')
   const discoveredSource = ref<ModelCatalogSource>('fallback')
   const loading = ref(false)
+  const gatewayEnabled = ref(false)
+  const gatewayProviders = ref<GatewayProviderPublicPayload[]>([])
+  const gatewaySettings = ref<GatewaySettingsPayload | null>(null)
+  const selectedProviderByAgent = ref<Record<string, string>>({})
+  const selectedModelByAgent = ref<Record<string, string>>({})
   const switchNotice = ref<{ from: string; to: string } | null>(null)
   let switchNoticeTimer: ReturnType<typeof setTimeout> | null = null
   const catalogByAgent = new Map<string, AgentCatalogSnapshot>()
   let catalogFetchGeneration = 0
   let refreshGeneration = 0
+
+  type GatewayProtocol = 'openai-chat' | 'anthropic' | 'openai-responses'
+
+  function gatewayProtocolForAgent(agentId: string): GatewayProtocol {
+    if (agentId === 'codex') {
+      return gatewaySettings.value?.channelProtocols.codex ?? 'openai-chat'
+    }
+    return gatewaySettings.value?.channelProtocols.claudeCli ?? 'anthropic'
+  }
+
+  function getGatewayProvidersForAgent(
+    agentId = activeAgentId.value
+  ): GatewayProviderPublicPayload[] {
+    const protocol = gatewayProtocolForAgent(agentId)
+    return gatewayProviders.value.filter((provider) => {
+      if (provider.enabled === false) return false
+      const endpoint = provider.config.protocols[protocol]
+      return Boolean(endpoint?.baseUrl)
+    })
+  }
+
+  function providerModels(provider: GatewayProviderPublicPayload): AgentModelOption[] {
+    const ids = [...(provider.config.models ?? [])]
+    if (provider.config.defaultModel && !ids.includes(provider.config.defaultModel)) {
+      ids.unshift(provider.config.defaultModel)
+    }
+    return ids.map((id) => ({ id, name: id, description: provider.name }))
+  }
+
+  function resolveGatewaySelection(
+    agentId: string,
+    conversationProviderId?: string | null,
+    conversationModelId?: string | null
+  ): { providerId: string; modelId: string } | null {
+    const available = getGatewayProvidersForAgent(agentId)
+    const preferredProviderId =
+      conversationProviderId ||
+      selectedProviderByAgent.value[agentId] ||
+      gatewaySettings.value?.defaultProviderId
+    const provider = available.find((item) => item.id === preferredProviderId) ?? available[0]
+    if (!provider) return null
+    const availableModels = providerModels(provider)
+    // Prefer conversation → in-memory user pick → provider default → first model.
+    // Without selectedModelByAgent, cascader changes snap back to provider.defaultModel
+    // whenever there is no conversation model yet (e.g. home empty state).
+    const preferredModelId =
+      conversationModelId ||
+      selectedModelByAgent.value[agentId] ||
+      (activeAgentId.value === agentId ? defaultModelId.value : undefined)
+    const model =
+      availableModels.find((item) => item.id === preferredModelId) ??
+      availableModels.find((item) => item.id === provider.config.defaultModel) ??
+      availableModels[0]
+    if (!model) return null
+    return { providerId: provider.id, modelId: model.id }
+  }
+
+  function applyGatewaySelection(agentId: string, providerId: string, modelId: string): void {
+    const provider = getGatewayProvidersForAgent(agentId).find((item) => item.id === providerId)
+    if (!provider) return
+    const nextModels = providerModels(provider)
+    if (!nextModels.some((item) => item.id === modelId)) return
+    activeAgentId.value = agentId
+    selectedProviderByAgent.value = {
+      ...selectedProviderByAgent.value,
+      [agentId]: providerId
+    }
+    selectedModelByAgent.value = {
+      ...selectedModelByAgent.value,
+      [agentId]: modelId
+    }
+    models.value = nextModels
+    discoveredModels.value = nextModels
+    defaultModelId.value = modelId
+    catalogSource.value = 'app-config'
+    discoveredSource.value = 'app-config'
+  }
+
+  async function refreshGatewayProviders(agentId = activeAgentId.value): Promise<boolean> {
+    const [settings, providers] = await Promise.all([
+      window.agentAPI.gateway.getSettings(),
+      window.agentAPI.providers.list()
+    ])
+    gatewaySettings.value = settings
+    gatewayEnabled.value = settings.enabled
+    gatewayProviders.value = providers
+    if (!settings.enabled) return false
+    const selection = resolveGatewaySelection(agentId)
+    if (selection) {
+      applyGatewaySelection(agentId, selection.providerId, selection.modelId)
+    } else {
+      activeAgentId.value = agentId
+      models.value = []
+      discoveredModels.value = []
+      defaultModelId.value = ''
+    }
+    return true
+  }
 
   function snapshotFromCatalog(catalog: ModelCatalogResult): AgentCatalogSnapshot {
     return {
@@ -84,6 +193,22 @@ export const useModelStore = defineStore('model', () => {
 
   async function fetchCatalog(agentId = 'claude-code', forceRefresh = false): Promise<void> {
     const generation = ++catalogFetchGeneration
+    loading.value = true
+
+    try {
+      const usesGateway = await refreshGatewayProviders(agentId)
+      if (usesGateway) {
+        if (generation === catalogFetchGeneration) {
+          loading.value = false
+        }
+        return
+      }
+    } catch {
+      gatewayEnabled.value = false
+      if (generation !== catalogFetchGeneration) {
+        return
+      }
+    }
 
     const cached = catalogByAgent.get(agentId)
     if (cached && isAgentCatalogContext(agentId)) {
@@ -112,6 +237,18 @@ export const useModelStore = defineStore('model', () => {
       return conversationModelId
     }
     return defaultModelId.value
+  }
+
+  function getEffectiveGatewaySelection(
+    conversationProviderId?: string | null,
+    conversationModelId?: string | null,
+    agentId = activeAgentId.value
+  ): { providerId: string; modelId: string } | null {
+    return resolveGatewaySelection(agentId, conversationProviderId, conversationModelId)
+  }
+
+  function selectGatewayProviderModel(agentId: string, providerId: string, modelId: string): void {
+    applyGatewaySelection(agentId, providerId, modelId)
   }
 
   function getModelName(modelId: string): string {
@@ -210,7 +347,8 @@ export const useModelStore = defineStore('model', () => {
   async function refreshCatalogForConversation(
     conversationId: string,
     agentId: string,
-    conversationModelId?: string | null
+    conversationModelId?: string | null,
+    conversationProviderId?: string | null
   ): Promise<void> {
     if (!MODEL_SELECTOR_AGENTS.includes(agentId as (typeof MODEL_SELECTOR_AGENTS)[number])) {
       return
@@ -219,6 +357,33 @@ export const useModelStore = defineStore('model', () => {
     const generation = ++refreshGeneration
 
     try {
+      if (await refreshGatewayProviders(agentId)) {
+        if (generation !== refreshGeneration) return
+        if (!isConversationRefreshContext(conversationId, agentId)) return
+        const selection = resolveGatewaySelection(
+          agentId,
+          conversationProviderId,
+          conversationModelId
+        )
+        if (!selection) return
+        applyGatewaySelection(agentId, selection.providerId, selection.modelId)
+        const chatStore = useChatStore()
+        const conv = chatStore.conversations.find((item) => item.id === conversationId)
+        if (
+          conv &&
+          (conv.providerId !== selection.providerId || conv.modelId !== selection.modelId)
+        ) {
+          const before = `${conv.providerId ?? ''}/${conv.modelId ?? ''}`
+          await chatStore.setConversationProviderModel(
+            conversationId,
+            selection.providerId,
+            selection.modelId
+          )
+          showSwitchNotice(before, `${selection.providerId}/${selection.modelId}`)
+        }
+        return
+      }
+
       const cachedCatalog = await loadCatalog(agentId, false)
       if (generation !== refreshGeneration) return
       if (!isConversationRefreshContext(conversationId, agentId)) return
@@ -291,12 +456,21 @@ export const useModelStore = defineStore('model', () => {
     catalogSource,
     discoveredSource,
     loading,
+    gatewayEnabled,
+    gatewayProviders,
+    gatewaySettings,
+    selectedProviderByAgent,
+    selectedModelByAgent,
     switchNotice,
     activeAgentId,
     fetchCatalog,
     activateAgentCatalog,
     getEffectiveModelId,
+    getEffectiveGatewaySelection,
+    getGatewayProvidersForAgent,
     getModelName,
+    refreshGatewayProviders,
+    selectGatewayProviderModel,
     selectDefaultModel,
     saveAgentConfig,
     resetToDiscovered,

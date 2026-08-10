@@ -1,61 +1,212 @@
-import { agentRegistry } from '../runtime'
+import { getProviderEndpoint, listEnabledProviders, listProviders, providerSupportsProtocol } from './provider-store'
+import { loadGatewaySettings } from './settings-store'
+import type { GatewayChannel, GatewayProviderRecord, RouteResult, WireAdapter } from './types'
 
-export interface RoutingRule {
-  pattern: string
-  agentId: string
+const CHANNEL_DEFAULT_PROTOCOL: Record<GatewayChannel, WireAdapter> = {
+  claudeCli: 'anthropic',
+  claudeDesktop: 'anthropic',
+  codex: 'openai-chat'
 }
 
-export interface RouterConfig {
-  rules: RoutingRule[]
-  fallback: string[]
-  defaultAgent: string
+function mapModel(provider: GatewayProviderRecord, modelId: string): string {
+  return provider.config.modelMap?.[modelId] || modelId
 }
 
-const defaultConfig: RouterConfig = {
-  rules: [
-    { pattern: 'claude*', agentId: 'claude-code' },
-    { pattern: 'codex*', agentId: 'codex' },
-    // { pattern: 'cursor*', agentId: 'cursor' }, // Cursor Agent disabled
-    { pattern: 'gpt*', agentId: 'openai' },
-    { pattern: 'custom*', agentId: 'custom' }
-  ],
-  fallback: ['claude-code', 'mock'],
-  defaultAgent: 'claude-code'
+function stripNamespace(model: string): { providerId?: string; modelId: string } {
+  const idx = model.indexOf('/')
+  if (idx <= 0) return { modelId: model }
+  return { providerId: model.slice(0, idx), modelId: model.slice(idx + 1) }
 }
 
-let config: RouterConfig = { ...defaultConfig }
-
-export function setRouterConfig(newConfig: Partial<RouterConfig>): void {
-  config = { ...config, ...newConfig }
+function matchPrefix(model: string, prefix: string): boolean {
+  return model === prefix || model.startsWith(`${prefix}-`) || model.startsWith(`${prefix}/`)
 }
 
-export function getRouterConfig(): RouterConfig {
-  return { ...config }
+function providerModels(provider: GatewayProviderRecord): string[] {
+  return provider.config.models ?? []
 }
 
-function matchPattern(model: string, pattern: string): boolean {
-  if (pattern.endsWith('*')) {
-    return model.startsWith(pattern.slice(0, -1))
+function resolveProtocolForChannel(channel?: GatewayChannel): WireAdapter | undefined {
+  if (!channel) return undefined
+  const settings = loadGatewaySettings()
+  const preferred = settings.channelProtocols[channel] || CHANNEL_DEFAULT_PROTOCOL[channel]
+  const providers = listEnabledProviders()
+  const preferredProvider = settings.defaultProviderId
+    ? providers.find((p) => p.id === settings.defaultProviderId)
+    : providers[0]
+  if (preferredProvider && providerSupportsProtocol(preferredProvider, preferred)) {
+    return preferred
   }
-  return model === pattern
+  if (preferredProvider) {
+    const available = (Object.keys(preferredProvider.config.protocols) as WireAdapter[]).filter(
+      (p) => providerSupportsProtocol(preferredProvider, p)
+    )
+    if (available.length) return available[0]
+  }
+  return preferred
 }
 
-export function resolveAgent(model: string): string {
-  for (const rule of config.rules) {
-    if (matchPattern(model, rule.pattern)) {
-      const adapter = agentRegistry.get(rule.agentId)
-      if (adapter && adapter.enabled) {
-        return rule.agentId
+function pickProviderForProtocol(
+  providers: GatewayProviderRecord[],
+  protocol: WireAdapter,
+  preferredId?: string
+): GatewayProviderRecord | undefined {
+  if (preferredId) {
+    const preferred = providers.find((p) => p.id === preferredId)
+    if (preferred && providerSupportsProtocol(preferred, protocol)) return preferred
+  }
+  const settings = loadGatewaySettings()
+  if (settings.defaultProviderId) {
+    const def = providers.find((p) => p.id === settings.defaultProviderId)
+    if (def && providerSupportsProtocol(def, protocol)) return def
+  }
+  return providers.find((p) => providerSupportsProtocol(p, protocol))
+}
+
+function resultFor(
+  provider: GatewayProviderRecord,
+  protocol: WireAdapter,
+  modelId: string
+): RouteResult {
+  const endpoint = getProviderEndpoint(provider, protocol)
+  if (!endpoint?.baseUrl) {
+    throw new Error(`Provider "${provider.id}" has no ${protocol} baseUrl`)
+  }
+  return {
+    provider,
+    protocol,
+    endpoint,
+    upstreamModel: mapModel(provider, modelId)
+  }
+}
+
+/**
+ * Resolve inbound model id to a configured provider + protocol endpoint.
+ * When `channel` is set, prefer that channel's protocol binding.
+ */
+export function routeModel(model: string, channel?: GatewayChannel): RouteResult {
+  const allProviders = listProviders()
+  const providers = listEnabledProviders()
+  if (allProviders.length === 0) {
+    throw new Error('No gateway providers configured. Add a provider in Settings → API Gateway.')
+  }
+  if (providers.length === 0) {
+    throw new Error(
+      'No enabled gateway providers. Enable a provider in Settings → API Gateway → Providers.'
+    )
+  }
+
+  const trimmed = model.trim()
+  if (!trimmed) {
+    throw new Error('model is required')
+  }
+
+  const { providerId, modelId } = stripNamespace(trimmed)
+  const channelProtocol = resolveProtocolForChannel(channel)
+
+  if (providerId) {
+    const provider = allProviders.find((p) => p.id === providerId)
+    if (!provider) {
+      throw new Error(`Unknown provider "${providerId}" for model "${trimmed}"`)
+    }
+    if (!provider.enabled) {
+      throw new Error(`Provider "${providerId}" is disabled`)
+    }
+    const protocol =
+      (channelProtocol && providerSupportsProtocol(provider, channelProtocol)
+        ? channelProtocol
+        : undefined) ||
+      (providerSupportsProtocol(provider, provider.config.adapter)
+        ? provider.config.adapter
+        : undefined) ||
+      (Object.keys(provider.config.protocols)[0] as WireAdapter | undefined)
+    if (!protocol) {
+      throw new Error(`Provider "${providerId}" has no configured protocols`)
+    }
+    return resultFor(provider, protocol, modelId)
+  }
+
+  // Channel protocol binding: pick a provider that supports it
+  if (channelProtocol) {
+    const bound = pickProviderForProtocol(providers, channelProtocol)
+    if (bound) {
+      // Prefer exact model match; still allow unbound ids (upstream may remap)
+      if (
+        bound.config.modelMap?.[modelId] ||
+        providerModels(bound).includes(modelId) ||
+        bound.config.defaultModel === modelId ||
+        !providerModels(bound).length
+      ) {
+        return resultFor(bound, channelProtocol, modelId)
+      }
+      return resultFor(bound, channelProtocol, modelId)
+    }
+  }
+
+  for (const provider of providers) {
+    if (
+      provider.config.modelMap?.[modelId] ||
+      providerModels(provider).includes(modelId) ||
+      provider.config.defaultModel === modelId
+    ) {
+      const protocol =
+        (channelProtocol && providerSupportsProtocol(provider, channelProtocol)
+          ? channelProtocol
+          : undefined) ||
+        (providerSupportsProtocol(provider, provider.config.adapter)
+          ? provider.config.adapter
+          : undefined) ||
+        (Object.keys(provider.config.protocols)[0] as WireAdapter | undefined)
+      if (!protocol) continue
+      return resultFor(provider, protocol, modelId)
+    }
+  }
+
+  if (matchPrefix(modelId, 'claude') || matchPrefix(modelId, 'anthropic')) {
+    const anthropic =
+      pickProviderForProtocol(providers, 'anthropic') || providers.find((p) => p.id === 'anthropic')
+    if (anthropic && providerSupportsProtocol(anthropic, 'anthropic')) {
+      return resultFor(anthropic, 'anthropic', modelId)
+    }
+  }
+
+  if (
+    matchPrefix(modelId, 'gpt') ||
+    matchPrefix(modelId, 'o1') ||
+    matchPrefix(modelId, 'o3') ||
+    matchPrefix(modelId, 'o4')
+  ) {
+    const openai =
+      pickProviderForProtocol(providers, 'openai-chat') || providers.find((p) => p.id === 'openai')
+    if (openai && providerSupportsProtocol(openai, 'openai-chat')) {
+      return resultFor(openai, 'openai-chat', modelId)
+    }
+  }
+
+  const settings = loadGatewaySettings()
+  const fallbackProtocol = channelProtocol || 'openai-chat'
+  const def = pickProviderForProtocol(providers, fallbackProtocol, settings.defaultProviderId)
+  if (def) {
+    return resultFor(def, fallbackProtocol, modelId)
+  }
+
+  // Last resort: any enabled provider with any protocol
+  for (const provider of providers) {
+    for (const protocol of Object.keys(provider.config.protocols) as WireAdapter[]) {
+      if (providerSupportsProtocol(provider, protocol)) {
+        return resultFor(provider, protocol, modelId)
       }
     }
   }
 
-  for (const fallbackId of config.fallback) {
-    const adapter = agentRegistry.get(fallbackId)
-    if (adapter && adapter.enabled) {
-      return fallbackId
-    }
-  }
+  throw new Error('No gateway provider with a usable protocol endpoint configured')
+}
 
-  return config.defaultAgent
+/** Kept for backward compatibility with older imports. */
+export function resolveAgent(model: string): string {
+  try {
+    return routeModel(model).provider.id
+  } catch {
+    return 'unknown'
+  }
 }

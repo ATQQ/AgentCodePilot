@@ -13,6 +13,12 @@ import { useModelStore } from './model.store'
 import { useAgentStore } from './agent.store'
 import { getToolCallFingerprint } from '@renderer/utils/toolCall'
 import { attachmentFromPayload, enrichAttachment } from '@renderer/utils/localFile'
+import {
+  appendTextDelta,
+  appendThinkingDelta,
+  appendToolPart,
+  completeOpenThinking
+} from '../../../shared/message-parts'
 
 function formatAgentErrorMessage(error: string): string {
   if (/maximum number of turns|max_turns|回合上限/i.test(error)) {
@@ -32,6 +38,7 @@ export const useChatStore = defineStore('chat', () => {
       conversationId: string
       content: string
       agentId: string
+      providerId?: string
       modelId?: string
       planMode?: boolean
       planRefs?: PlanReference[]
@@ -204,6 +211,7 @@ export const useChatStore = defineStore('chat', () => {
       msg?.role === 'assistant' &&
       !msg.content.trim() &&
       !msg.toolCalls?.length &&
+      !msg.parts?.length &&
       !msg.stopped &&
       !msg.error
     )
@@ -415,6 +423,7 @@ export const useChatStore = defineStore('chat', () => {
     id: string
     title: string
     agentId: string
+    providerId?: string | null
     modelId?: string | null
     projectId: string | null
     cwd: string | null
@@ -430,6 +439,7 @@ export const useChatStore = defineStore('chat', () => {
       exists.pinned = item.pinned
       exists.archived = item.archived
       exists.approvalLevel = item.approvalLevel ?? 'auto'
+      exists.providerId = item.providerId ?? null
       exists.modelId = item.modelId ?? exists.modelId
       exists.updatedAt = item.updatedAt
     } else {
@@ -437,6 +447,7 @@ export const useChatStore = defineStore('chat', () => {
         id: item.id,
         title: item.title,
         agentId: item.agentId,
+        providerId: item.providerId ?? null,
         modelId: item.modelId ?? null,
         projectId: item.projectId,
         cwd: item.cwd,
@@ -480,6 +491,7 @@ export const useChatStore = defineStore('chat', () => {
       skillRefs: m.skillRefs,
       attachments: m.attachments?.map((att) => enrichAttachment(att as Attachment)),
       toolCalls: m.toolCalls,
+      parts: m.parts,
       usage: m.usage,
       debugInput: m.debugInput,
       debugOutput: m.debugOutput,
@@ -499,7 +511,12 @@ export const useChatStore = defineStore('chat', () => {
         const modelStore = useModelStore()
         agentStore.selectAgent(conv.agentId, { fetchCatalog: false })
         setPendingAgent(id, conv.agentId)
-        void modelStore.refreshCatalogForConversation(id, conv.agentId, conv.modelId)
+        void modelStore.refreshCatalogForConversation(
+          id,
+          conv.agentId,
+          conv.modelId,
+          conv.providerId
+        )
       }
     }
   }
@@ -515,12 +532,21 @@ export const useChatStore = defineStore('chat', () => {
     skillRefs?: SkillReference[]
   ): Promise<string> {
     const modelStore = useModelStore()
-    const resolvedModelId = modelId ?? modelStore.getEffectiveModelId()
+    await modelStore.refreshGatewayProviders(agentId)
+    const gatewaySelection = modelStore.gatewayEnabled
+      ? modelStore.getEffectiveGatewaySelection(undefined, modelId, agentId)
+      : null
+    if (modelStore.gatewayEnabled && !gatewaySelection) {
+      throw new Error('请先在设置 → API Gateway 中配置可用的 Provider 和模型。')
+    }
+    const resolvedProviderId = gatewaySelection?.providerId
+    const resolvedModelId = gatewaySelection?.modelId ?? modelId ?? modelStore.getEffectiveModelId()
     const plainPlanRefs = toPlainPlanRefs(planRefs)
     const plainSkillRefs = toPlainSkillRefs(skillRefs)
     const effectivePlanMode = plainPlanRefs?.length ? false : (planMode ?? false)
     const result = await window.agentAPI.chat.createConversation({
       agentId,
+      providerId: resolvedProviderId,
       modelId: resolvedModelId,
       firstMessage,
       projectId,
@@ -551,6 +577,7 @@ export const useChatStore = defineStore('chat', () => {
       id: result.id,
       title: result.title,
       agentId,
+      providerId: resolvedProviderId ?? null,
       modelId: resolvedModelId,
       projectId: projectId ?? null,
       cwd: result.cwd,
@@ -566,7 +593,12 @@ export const useChatStore = defineStore('chat', () => {
     touchStreamActivity(result.id)
     addWaitingConversation(result.id)
     setPendingAgent(result.id, agentId)
-    void modelStore.refreshCatalogForConversation(result.id, agentId, resolvedModelId)
+    void modelStore.refreshCatalogForConversation(
+      result.id,
+      agentId,
+      resolvedModelId,
+      resolvedProviderId
+    )
     return result.id
   }
 
@@ -624,7 +656,19 @@ export const useChatStore = defineStore('chat', () => {
   ): Promise<void> {
     const conv = conversations.value.find((c) => c.id === conversationId)
     const modelStore = useModelStore()
-    const modelId = modelStore.getEffectiveModelId(conv?.modelId)
+    await modelStore.refreshGatewayProviders(agentId)
+    const gatewaySelection = modelStore.gatewayEnabled
+      ? modelStore.getEffectiveGatewaySelection(conv?.providerId, conv?.modelId, agentId)
+      : null
+    if (modelStore.gatewayEnabled && !gatewaySelection) {
+      reportSendFailure(conversationId, '请先在设置 → API Gateway 中配置可用的 Provider 和模型。')
+      return
+    }
+    const providerId = gatewaySelection?.providerId
+    const modelId = gatewaySelection?.modelId ?? modelStore.getEffectiveModelId(conv?.modelId)
+    if (conv && providerId && (conv.providerId !== providerId || conv.modelId !== modelId)) {
+      await setConversationProviderModel(conversationId, providerId, modelId)
+    }
     const effectivePlanMode = planRefs?.length ? false : (planMode ?? false)
     const plainSkillRefs = toPlainSkillRefs(skillRefs)
     if (isConversationBusy(conversationId)) {
@@ -632,6 +676,7 @@ export const useChatStore = defineStore('chat', () => {
         conversationId,
         content,
         agentId,
+        providerId,
         modelId,
         planMode: effectivePlanMode,
         planRefs: toPlainPlanRefs(planRefs),
@@ -661,6 +706,7 @@ export const useChatStore = defineStore('chat', () => {
         conversationId,
         content,
         agentId,
+        providerId,
         modelId,
         cwd: conv?.cwd || workspaceStore.currentCwd,
         workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
@@ -729,6 +775,7 @@ export const useChatStore = defineStore('chat', () => {
         conversationId: next.conversationId,
         content: next.content,
         agentId: next.agentId,
+        providerId: next.providerId,
         modelId: next.modelId ?? modelStore.getEffectiveModelId(conv?.modelId),
         cwd: conv?.cwd || workspaceStore.currentCwd,
         workspaceFolders: wsFolders && wsFolders.length > 1 ? [...wsFolders] : undefined,
@@ -766,7 +813,22 @@ export const useChatStore = defineStore('chat', () => {
           touchStreamActivity(event.conversationId)
           const msg = ensureAssistantPlaceholder(event.conversationId, event.messageId)
           if (!msg) return
+          if (!msg.parts) msg.parts = []
+          appendTextDelta(msg.parts, event.delta)
           msg.content += event.delta
+          break
+        }
+        case 'message.thinking.delta': {
+          if (!isActiveAssistantMessage(event.conversationId, event.messageId)) return
+          markMessageStreamed(event.messageId)
+          const conv = conversations.value.find((c) => c.id === event.conversationId)
+          if (!conv) return
+          removeWaitingConversation(event.conversationId)
+          touchStreamActivity(event.conversationId)
+          const msg = ensureAssistantPlaceholder(event.conversationId, event.messageId)
+          if (!msg) return
+          if (!msg.parts) msg.parts = []
+          appendThinkingDelta(msg.parts, event.delta)
           break
         }
         case 'message.completed': {
@@ -790,12 +852,17 @@ export const useChatStore = defineStore('chat', () => {
               } else {
                 if (!msg.content.trim()) {
                   msg.content = stoppedText
+                  if (!msg.parts) msg.parts = []
+                  appendTextDelta(msg.parts, stoppedText)
                 }
                 msg.stopped = true
               }
             }
             if (msg) {
               assignAgentToAssistantMessage(event.conversationId, msg)
+              if (msg.parts?.length) {
+                completeOpenThinking(msg.parts)
+              }
               if (event.usage) msg.usage = event.usage
               if (event.debugInput) msg.debugInput = event.debugInput
               if (event.debugOutput) msg.debugOutput = event.debugOutput
@@ -842,6 +909,8 @@ export const useChatStore = defineStore('chat', () => {
               assignAgentToAssistantMessage(event.conversationId, msg)
               conv.messages.push(msg)
             } else {
+              if (!msg.parts) msg.parts = []
+              appendTextDelta(msg.parts, msg.content.trim() ? `\n\n${errorText}` : errorText)
               msg.content = msg.content.trim() ? `${msg.content.trim()}\n\n${errorText}` : errorText
               msg.error = true
               assignAgentToAssistantMessage(event.conversationId, msg)
@@ -870,6 +939,8 @@ export const useChatStore = defineStore('chat', () => {
             assignAgentToAssistantMessage(event.conversationId, msg)
             conv.messages.push(msg)
           }
+          if (!msg.parts) msg.parts = []
+          appendToolPart(msg.parts, event.tool.toolUseId)
           if (!msg.toolCalls) msg.toolCalls = []
           const existing = msg.toolCalls.find((t) => t.toolUseId === event.tool.toolUseId)
           if (!existing) {
@@ -1021,6 +1092,18 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  async function setConversationProviderModel(
+    conversationId: string,
+    providerId: string,
+    modelId: string
+  ): Promise<void> {
+    const conv = conversations.value.find((c) => c.id === conversationId)
+    if (!conv) return
+    conv.providerId = providerId
+    conv.modelId = modelId
+    await window.agentAPI.conversations.update({ id: conversationId, providerId, modelId })
+  }
+
   function initApprovalNavigateListener(): () => void {
     return window.agentAPI.approval.onNavigate((conversationId) => {
       setActive(conversationId)
@@ -1143,6 +1226,7 @@ export const useChatStore = defineStore('chat', () => {
     respondToApproval,
     setConversationApprovalLevel,
     setConversationModelId,
+    setConversationProviderModel,
     initAgentEventListener,
     initApprovalNavigateListener,
     getPendingAgent,

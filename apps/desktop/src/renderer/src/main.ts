@@ -29,8 +29,11 @@ import { useWorkspaceStore } from './stores/workspace.store'
 const workspaceStore = useWorkspaceStore()
 
 settingsStore.fetchSettings()
-agentStore.fetchAgents()
-modelStore.fetchCatalog('claude-code')
+void agentStore.fetchAgents().then(async () => {
+  if (agentStore.selectedAgentId) {
+    await modelStore.fetchCatalog(agentStore.selectedAgentId)
+  }
+})
 workspaceStore.loadProjects().then(() => {
   chatStore.loadConversations()
 })

@@ -10,6 +10,9 @@ import PromptComposer from '@renderer/components/home/PromptComposer.vue'
 import AgentSelector from '@renderer/components/home/AgentSelector.vue'
 import ModelSelector from '@renderer/components/home/ModelSelector.vue'
 import ToolCallsSection from '@renderer/components/chat/ToolCallsSection.vue'
+import ToolCallCard from '@renderer/components/chat/ToolCallCard.vue'
+import ThinkingBlock from '@renderer/components/chat/ThinkingBlock.vue'
+import ProcessFold from '@renderer/components/chat/ProcessFold.vue'
 import ApprovalRequestCard from '@renderer/components/chat/ApprovalRequestCard.vue'
 import MessageAttachmentImage from '@renderer/components/chat/MessageAttachmentImage.vue'
 import CollapsibleUserMessageText from '@renderer/components/chat/CollapsibleUserMessageText.vue'
@@ -19,9 +22,11 @@ import { formatTokenUsageSummary } from '@renderer/utils/formatTokenUsage'
 import type {
   Attachment,
   Message,
+  MessagePart,
   PlanReference,
   ApprovalRequest,
-  SkillReference
+  SkillReference,
+  ToolCall
 } from '@renderer/types'
 import { useLayoutStore, type LayoutStore } from '@renderer/stores/layout.store'
 import { usePlanStore } from '@renderer/stores/plan.store'
@@ -30,6 +35,8 @@ import EnvironmentInfoContent from '@renderer/components/environment/Environment
 import { CODE_BLOCK_PROPS } from '@renderer/constants/codeBlockTheme'
 import { ensureMarkstreamPeers } from '@renderer/markstream-setup'
 import { useAutoScroll } from '@renderer/composables/useAutoScroll'
+import { usePanelContextStore } from '@renderer/stores/panelContext.store'
+import { linkifyBrowserReferences } from '@renderer/utils/linkifyBrowserReferences'
 const { t } = useI18n()
 const router = useRouter()
 const chatStore = useChatStore()
@@ -38,10 +45,12 @@ const settingsStore = useSettingsStore()
 const layoutStore: LayoutStore = useLayoutStore()
 const planStore = usePlanStore()
 const composerStore = useComposerStore()
+const panelContextStore = usePanelContextStore()
 const messageListRef = ref<InstanceType<typeof ChatMessageList> | null>(null)
 const {
   onScroll,
   forceScrollToBottom,
+  releasePin,
   beginLayoutTransition,
   isNearTop,
   scrollToTop,
@@ -50,6 +59,8 @@ const {
 
 const BOTTOM_SCROLL_THRESHOLD = 48
 const TOP_SCROLL_THRESHOLD = 200
+/** Align with MarkstreamVirtualTimeline restoreMaxLoadingMs / bottom settle window. */
+const THREAD_RESTORE_SETTLE_MS = 2000
 const showBackToTop = ref(false)
 /** Ignore content-driven scroll-to-bottom while a thread restore may still be settling. */
 let suppressContentScrollUntil = 0
@@ -57,6 +68,21 @@ let suppressContentScrollUntil = 0
 function handleScroll(): void {
   onScroll()
   showBackToTop.value = !isNearTop(TOP_SCROLL_THRESHOLD)
+}
+
+/** ChatMessageList signals whether the restored thread should stay pinned to bottom. */
+function onThreadRestore(pinBottom: boolean): void {
+  suppressContentScrollUntil = Date.now() + THREAD_RESTORE_SETTLE_MS
+  if (pinBottom) {
+    beginLayoutTransition(THREAD_RESTORE_SETTLE_MS)
+    window.setTimeout(() => {
+      onScroll()
+      showBackToTop.value = !isNearTop(TOP_SCROLL_THRESHOLD)
+    }, THREAD_RESTORE_SETTLE_MS)
+  } else {
+    releasePin()
+    showBackToTop.value = !isNearTop(TOP_SCROLL_THRESHOLD)
+  }
 }
 
 function scrollToLatestOnSend(): void {
@@ -121,12 +147,7 @@ onUnmounted(() => {
 watch(
   () => chatStore.activeConversationId,
   () => {
-    // 滚底/恢复由 ChatMessageList 按保存锚点处理；稍后按真实 scrollTop 同步 pin
-    suppressContentScrollUntil = Date.now() + 600
-    window.setTimeout(() => {
-      onScroll()
-      showBackToTop.value = !isNearTop(TOP_SCROLL_THRESHOLD)
-    }, 550)
+    // Pin/restore settle is driven by ChatMessageList @thread-restore.
     void loadAssistantPlanMap()
   }
 )
@@ -155,9 +176,56 @@ watch(
   }
 )
 
+function hasMessageParts(msg: Message): boolean {
+  return !!msg.parts?.length
+}
+
+function countProcessParts(msg: Message): { thinkingCount: number; toolCount: number } {
+  let thinkingCount = 0
+  let toolCount = 0
+  for (const part of msg.parts ?? []) {
+    if (part.type === 'thinking' && part.content.trim()) thinkingCount += 1
+    else if (part.type === 'tool' && getToolCallForPart(msg, part.toolUseId)) toolCount += 1
+  }
+  return { thinkingCount, toolCount }
+}
+
+function hasProcessParts(msg: Message): boolean {
+  const { thinkingCount, toolCount } = countProcessParts(msg)
+  return thinkingCount > 0 || toolCount > 0
+}
+
+function isProcessBusy(msg: Message): boolean {
+  if (hasRunningTools(msg)) return true
+  return (
+    msg.parts?.some((part) => part.type === 'thinking' && part.content.trim() && !part.completed) ??
+    false
+  )
+}
+
+/** Fold thinking + tools once the answer is readable (stream ended, or text flowing with idle process). */
+function shouldFoldProcess(msg: Message): boolean {
+  if (!hasProcessParts(msg)) return false
+  if (!chatStore.isMessageStreaming(msg.id)) return true
+  const hasText = msg.parts?.some((part) => part.type === 'text' && part.content.trim()) ?? false
+  return hasText && !isProcessBusy(msg)
+}
+
+function hasVisibleAssistantBody(msg: Message): boolean {
+  if (msg.content.trim() || msg.toolCalls?.length) return true
+  return (
+    msg.parts?.some(
+      (part) =>
+        (part.type === 'thinking' && part.content.trim()) ||
+        (part.type === 'text' && part.content.trim()) ||
+        part.type === 'tool'
+    ) ?? false
+  )
+}
+
 function isThinkingMessage(msg: Message): boolean {
   if (msg.role !== 'assistant' || msg.stopped || msg.error) return false
-  if (msg.content.trim() || msg.toolCalls?.length) return false
+  if (hasVisibleAssistantBody(msg)) return false
   const convId = chatStore.activeConversationId
   if (!convId || msg.id !== chatStore.getActiveAssistantMessageId(convId)) return false
   return chatStore.isConversationThinking(convId)
@@ -172,9 +240,40 @@ function showStreamIdleIndicator(msg: Message): boolean {
   if (!convId || msg.role !== 'assistant' || msg.stopped || msg.error) return false
   if (msg.id !== chatStore.getActiveAssistantMessageId(convId)) return false
   if (!chatStore.isConversationBusy(convId)) return false
-  if (!msg.content.trim() && !msg.toolCalls?.length) return false
+  if (!hasVisibleAssistantBody(msg)) return false
   if (hasRunningTools(msg)) return false
+  const lastPart = msg.parts?.[msg.parts.length - 1]
+  if (lastPart?.type === 'thinking' && !lastPart.completed) return false
   return chatStore.getStreamIdleSeconds(convId) >= 2
+}
+
+function getToolCallForPart(msg: Message, toolUseId: string): ToolCall | undefined {
+  return msg.toolCalls?.find((tc) => tc.toolUseId === toolUseId)
+}
+
+function lastStreamingTextPartIndex(msg: Message): number {
+  if (!msg.parts?.length) return -1
+  for (let i = msg.parts.length - 1; i >= 0; i--) {
+    if (msg.parts[i].type === 'text') return i
+  }
+  return -1
+}
+
+function textPartMarkdownProps(
+  markdownProps: Record<string, unknown> | undefined | null,
+  part: Extract<MessagePart, { type: 'text' }>,
+  final: boolean
+): Record<string, unknown> {
+  const htmlBaseDirs = panelContextStore.availableFolders.length
+    ? panelContextStore.availableFolders.map((folder) => folder.path)
+    : panelContextStore.effectivePanelCwd
+      ? [panelContextStore.effectivePanelCwd]
+      : []
+  return {
+    ...(markdownProps ?? {}),
+    content: linkifyBrowserReferences(part.content, htmlBaseDirs),
+    final
+  }
 }
 
 const showStandaloneThinking = computed(() => {
@@ -199,7 +298,7 @@ const needsWaitingTimer = computed(() => {
   const msg = activeId
     ? chatStore.activeConversation?.messages.find((m) => m.id === activeId)
     : undefined
-  if (!msg || (!msg.content.trim() && !msg.toolCalls?.length)) {
+  if (!msg || !hasVisibleAssistantBody(msg)) {
     return isAssistantThinking.value
   }
   if (hasRunningTools(msg)) return false
@@ -216,7 +315,7 @@ function refreshWaitingSeconds(): void {
   const msg = activeId
     ? chatStore.activeConversation?.messages.find((m) => m.id === activeId)
     : undefined
-  const hasStartedReply = Boolean(msg && (msg.content.trim() || msg.toolCalls?.length))
+  const hasStartedReply = Boolean(msg && hasVisibleAssistantBody(msg))
   if (hasStartedReply && !hasRunningTools(msg!) && chatStore.isConversationBusy(convId)) {
     waitingSeconds.value = chatStore.getStreamIdleSeconds(convId)
   } else {
@@ -256,7 +355,7 @@ watch(
       chatStore.pendingApprovalConversationIds.size
     ] as const,
   () => {
-    // 流式输出时由 MarkstreamVirtualTimeline 的 stick-to-bottom="auto" 处理自动滚动
+    // 流式输出时由 MarkstreamVirtualTimeline 的 stick-to-bottom=true（pin 时）处理自动滚动
     if (chatStore.isStreaming || !isPinnedToBottom.value) return
     if (Date.now() < suppressContentScrollUntil) return
     nextTick(() => messageListRef.value?.scrollToBottom())
@@ -530,8 +629,9 @@ function toggleUserMessageExpanded(messageId: string): void {
               :is-message-streaming="chatStore.isMessageStreaming"
               :has-pending-approval="hasPendingApprovalForMessage"
               :is-user-message-expanded="isUserMessageExpanded"
-              :stick-to-bottom="isPinnedToBottom ? 'auto' : false"
+              :stick-to-bottom="isPinnedToBottom"
               @scroll="handleScroll"
+              @thread-restore="onThreadRestore"
             >
               <template #message="{ msg, measureRef, markdownProps }">
                 <div
@@ -569,39 +669,157 @@ function toggleUserMessageExpanded(messageId: string): void {
                             )
                         "
                       />
-                      <ToolCallsSection
-                        v-if="msg.toolCalls?.length"
-                        :tool-calls="msg.toolCalls"
-                        :has-text-content="!!msg.content.trim()"
-                      />
-                      <div
-                        v-if="isThinkingMessage(msg)"
-                        class="thinking-indicator thinking-indicator--inline"
-                      >
-                        <div class="thinking-dots">
-                          <span class="dot"></span>
-                          <span class="dot"></span>
-                          <span class="dot"></span>
-                        </div>
-                        <span class="thinking-text"
-                          >{{ t('chat.thinking') }} {{ waitingSeconds }}s</span
+                      <template v-if="hasMessageParts(msg)">
+                        <template v-if="shouldFoldProcess(msg)">
+                          <ProcessFold
+                            v-if="hasProcessParts(msg)"
+                            :thinking-count="countProcessParts(msg).thinkingCount"
+                            :tool-count="countProcessParts(msg).toolCount"
+                            :completed="true"
+                          >
+                            <template
+                              v-for="(part, partIndex) in msg.parts"
+                              :key="`${msg.id}-process-${partIndex}-${part.type}`"
+                            >
+                              <ThinkingBlock
+                                v-if="part.type === 'thinking' && part.content.trim()"
+                                :content="part.content"
+                                :completed="!!part.completed"
+                                :auto-collapse="false"
+                              />
+                              <div
+                                v-else-if="
+                                  part.type === 'tool' && getToolCallForPart(msg, part.toolUseId)
+                                "
+                                class="message-tool-call"
+                              >
+                                <ToolCallCard
+                                  :tool-call="getToolCallForPart(msg, part.toolUseId)!"
+                                  :auto-collapse="false"
+                                />
+                              </div>
+                            </template>
+                          </ProcessFold>
+                          <template
+                            v-for="(part, partIndex) in msg.parts"
+                            :key="`${msg.id}-text-${partIndex}`"
+                          >
+                            <MarkdownRender
+                              v-if="part.type === 'text' && part.content.trim()"
+                              v-bind="
+                                textPartMarkdownProps(
+                                  markdownProps as unknown as Record<string, unknown> | undefined,
+                                  part,
+                                  true
+                                )
+                              "
+                              custom-id="chat"
+                              :smooth-streaming="false"
+                              :fade="!chatStore.wasMessageStreamed(msg.id)"
+                              :typewriter="false"
+                              :max-live-nodes="280"
+                              :code-block-stream="false"
+                              :is-dark="isDark"
+                              :code-block-props="CODE_BLOCK_PROPS"
+                            />
+                          </template>
+                        </template>
+                        <template v-else>
+                          <template
+                            v-for="(part, partIndex) in msg.parts"
+                            :key="`${msg.id}-part-${partIndex}-${part.type}`"
+                          >
+                            <ThinkingBlock
+                              v-if="part.type === 'thinking' && part.content.trim()"
+                              :content="part.content"
+                              :completed="!!part.completed"
+                            />
+                            <div
+                              v-else-if="
+                                part.type === 'tool' && getToolCallForPart(msg, part.toolUseId)
+                              "
+                              class="message-tool-call"
+                            >
+                              <ToolCallCard :tool-call="getToolCallForPart(msg, part.toolUseId)!" />
+                            </div>
+                            <MarkdownRender
+                              v-else-if="part.type === 'text' && part.content.trim()"
+                              v-bind="
+                                textPartMarkdownProps(
+                                  markdownProps as unknown as Record<string, unknown> | undefined,
+                                  part,
+                                  !(
+                                    chatStore.isMessageStreaming(msg.id) &&
+                                    partIndex === lastStreamingTextPartIndex(msg)
+                                  )
+                                )
+                              "
+                              custom-id="chat"
+                              :smooth-streaming="
+                                chatStore.isMessageStreaming(msg.id) &&
+                                partIndex === lastStreamingTextPartIndex(msg)
+                                  ? 'auto'
+                                  : false
+                              "
+                              :fade="
+                                !chatStore.isMessageStreaming(msg.id) &&
+                                !chatStore.wasMessageStreamed(msg.id)
+                              "
+                              :typewriter="
+                                chatStore.isMessageStreaming(msg.id) &&
+                                partIndex === lastStreamingTextPartIndex(msg)
+                              "
+                              :max-live-nodes="
+                                chatStore.isMessageStreaming(msg.id) &&
+                                partIndex === lastStreamingTextPartIndex(msg)
+                                  ? 120
+                                  : 280
+                              "
+                              :code-block-stream="
+                                chatStore.isMessageStreaming(msg.id) &&
+                                partIndex === lastStreamingTextPartIndex(msg)
+                              "
+                              :is-dark="isDark"
+                              :code-block-props="CODE_BLOCK_PROPS"
+                            />
+                          </template>
+                        </template>
+                      </template>
+                      <template v-else>
+                        <ToolCallsSection
+                          v-if="msg.toolCalls?.length"
+                          :tool-calls="msg.toolCalls"
+                          :has-text-content="!!msg.content.trim()"
+                        />
+                        <div
+                          v-if="isThinkingMessage(msg)"
+                          class="thinking-indicator thinking-indicator--inline"
                         >
-                      </div>
-                      <MarkdownRender
-                        v-if="msg.content.trim() && !isThinkingMessage(msg)"
-                        v-bind="markdownProps"
-                        custom-id="chat"
-                        :smooth-streaming="chatStore.isMessageStreaming(msg.id) ? 'auto' : false"
-                        :fade="
-                          !chatStore.isMessageStreaming(msg.id) &&
-                          !chatStore.wasMessageStreamed(msg.id)
-                        "
-                        :typewriter="chatStore.isMessageStreaming(msg.id)"
-                        :max-live-nodes="chatStore.isMessageStreaming(msg.id) ? 120 : 280"
-                        :code-block-stream="chatStore.isMessageStreaming(msg.id)"
-                        :is-dark="isDark"
-                        :code-block-props="CODE_BLOCK_PROPS"
-                      />
+                          <div class="thinking-dots">
+                            <span class="dot"></span>
+                            <span class="dot"></span>
+                            <span class="dot"></span>
+                          </div>
+                          <span class="thinking-text"
+                            >{{ t('chat.thinking') }} {{ waitingSeconds }}s</span
+                          >
+                        </div>
+                        <MarkdownRender
+                          v-if="msg.content.trim() && !isThinkingMessage(msg)"
+                          v-bind="markdownProps"
+                          custom-id="chat"
+                          :smooth-streaming="chatStore.isMessageStreaming(msg.id) ? 'auto' : false"
+                          :fade="
+                            !chatStore.isMessageStreaming(msg.id) &&
+                            !chatStore.wasMessageStreamed(msg.id)
+                          "
+                          :typewriter="chatStore.isMessageStreaming(msg.id)"
+                          :max-live-nodes="chatStore.isMessageStreaming(msg.id) ? 120 : 280"
+                          :code-block-stream="chatStore.isMessageStreaming(msg.id)"
+                          :is-dark="isDark"
+                          :code-block-props="CODE_BLOCK_PROPS"
+                        />
+                      </template>
                       <div
                         v-if="showStreamIdleIndicator(msg)"
                         class="thinking-indicator thinking-indicator--inline thinking-indicator--trailing"
@@ -1164,6 +1382,14 @@ html.dark .agent-avatar[data-agent='codex'] {
   color: var(--content-text);
   width: 100%;
   min-width: 0;
+}
+
+.message-tool-call {
+  margin: 6px 0 10px;
+  padding: 6px 8px;
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--radius-md);
+  background: var(--sidebar-bg);
 }
 
 .message.assistant .message-content :deep(.markstream-vue) {

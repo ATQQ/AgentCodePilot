@@ -33,9 +33,18 @@ export const IPC_CHANNELS = {
   PROVIDERS_LIST: 'providers:list',
   PROVIDERS_SAVE: 'providers:save',
   PROVIDERS_DELETE: 'providers:delete',
+  PROVIDERS_PRESETS: 'providers:presets',
+  PROVIDERS_TEST: 'providers:test',
+  PROVIDERS_FETCH_MODELS: 'providers:fetchModels',
   GATEWAY_STATUS: 'gateway:status',
   GATEWAY_START: 'gateway:start',
   GATEWAY_STOP: 'gateway:stop',
+  GATEWAY_GET_SETTINGS: 'gateway:getSettings',
+  GATEWAY_UPDATE_SETTINGS: 'gateway:updateSettings',
+  GATEWAY_TAKEOVER_GET: 'gateway:takeoverGet',
+  GATEWAY_TAKEOVER_SET: 'gateway:takeoverSet',
+  GATEWAY_LOG_VIEWER_STATUS: 'gateway:logViewerStatus',
+  GATEWAY_LOG_VIEWER_OPEN: 'gateway:logViewerOpen',
   GIT_STATUS: 'git:status',
   GIT_CHANGED_FILES: 'git:changedFiles',
   GIT_DIFF: 'git:diff',
@@ -102,6 +111,7 @@ export interface SendMessagePayload {
   conversationId: string
   content: string
   agentId: string
+  providerId?: string
   modelId?: string
   cwd?: string
   workspaceFolders?: string[]
@@ -118,6 +128,7 @@ export interface SendMessageResult {
 
 export interface CreateConversationPayload {
   agentId: string
+  providerId?: string
   modelId?: string
   firstMessage: string
   projectId?: string | null
@@ -208,6 +219,7 @@ export interface ConversationUpdatePayload {
   pinned?: boolean
   archived?: boolean
   approvalLevel?: 'request' | 'auto' | 'full'
+  providerId?: string | null
   modelId?: string
 }
 
@@ -230,11 +242,136 @@ export interface ProviderConfigPayload {
   config: Record<string, unknown>
 }
 
+export interface GatewayProviderPublicPayload {
+  id: string
+  name: string
+  type: string
+  /** When false, provider is unavailable for selection/routing. Missing → treat as true. */
+  enabled: boolean
+  config: {
+    adapter: 'openai-chat' | 'anthropic' | 'openai-responses'
+    baseUrl: string
+    apiKey: string
+    models?: string[]
+    defaultModel?: string
+    modelMap?: Record<string, string>
+    hasApiKey: boolean
+    protocols: Partial<
+      Record<
+        'openai-chat' | 'anthropic' | 'openai-responses',
+        {
+          baseUrl: string
+          apiKey: string
+          hasApiKey?: boolean
+          headers?: Record<string, string>
+          bodyDefaults?: Record<string, unknown>
+        }
+      >
+    >
+  }
+}
+
+export interface ProviderTestDraftPayload {
+  models?: string[]
+  defaultModel?: string
+  protocols: Partial<
+    Record<
+      'openai-chat' | 'anthropic' | 'openai-responses',
+      {
+        baseUrl: string
+        apiKey?: string
+        headers?: Record<string, string>
+        bodyDefaults?: Record<string, unknown>
+      }
+    >
+  >
+}
+
+export interface ProviderTestInputPayload {
+  providerId?: string
+  draft?: ProviderTestDraftPayload
+  protocol?: 'openai-chat' | 'anthropic' | 'openai-responses'
+}
+
+export interface ProviderTestProtocolResultPayload {
+  protocol: 'openai-chat' | 'anthropic' | 'openai-responses'
+  ok: boolean
+  status?: number
+  latencyMs: number
+  url?: string
+  error?: string
+  message?: string
+}
+
+export interface ProviderTestResultPayload {
+  ok: boolean
+  results: ProviderTestProtocolResultPayload[]
+}
+
+export interface ProviderRemoteModelPayload {
+  id: string
+  name?: string
+  protocol: 'openai-chat' | 'anthropic' | 'openai-responses'
+}
+
+export interface ProviderFetchModelsErrorPayload {
+  protocol: 'openai-chat' | 'anthropic' | 'openai-responses'
+  error: string
+}
+
+export interface ProviderFetchModelsResultPayload {
+  ok: boolean
+  models: ProviderRemoteModelPayload[]
+  errors: ProviderFetchModelsErrorPayload[]
+}
+
 export interface GatewayStatus {
   running: boolean
   host: string
   port: number
   token: string
+  enabled?: boolean
+}
+
+export interface GatewaySettingsPayload {
+  enabled: boolean
+  host: string
+  port: number
+  token: string
+  defaultProviderId?: string
+  channelProtocols: {
+    claudeCli?: 'openai-chat' | 'anthropic' | 'openai-responses'
+    claudeDesktop?: 'openai-chat' | 'anthropic' | 'openai-responses'
+    codex?: 'openai-chat' | 'anthropic' | 'openai-responses'
+  }
+  takeover: {
+    claudeCli: boolean
+    claudeDesktop: boolean
+    codex: boolean
+  }
+  logging: {
+    enabled: boolean
+    viewerPort: number
+    openBrowser: boolean
+  }
+}
+
+export interface GatewayLogViewerStatus {
+  running: boolean
+  url: string
+  port: number
+  logsDir: string
+}
+
+export type GatewayTakeoverApp = 'claudeCli' | 'claudeDesktop' | 'codex'
+
+export interface GatewayTakeoverStatus {
+  claudeCli: boolean
+  claudeDesktop: boolean
+  codex: boolean
+  backedUpAt: Partial<Record<'claude' | 'claude-desktop' | 'codex', string>>
+  proxyBaseUrl: string
+  claudeDesktopSupported: boolean
 }
 
 export type GitChangeType = 'modified' | 'added' | 'untracked' | 'deleted' | 'renamed' | 'conflict'
@@ -298,6 +435,8 @@ export interface AgentInfo {
   id: string
   name: string
   enabled: boolean
+  disabledReason?: string
+  installSource?: 'global' | 'bundled' | 'none'
 }
 
 export interface AgentModelOption {
@@ -374,6 +513,7 @@ export interface ConversationListItem {
   id: string
   title: string
   agentId: string
+  providerId: string | null
   modelId: string | null
   projectId: string | null
   cwd: string | null
@@ -383,6 +523,11 @@ export interface ConversationListItem {
   createdAt: string
   updatedAt: string
 }
+
+export type MessagePart =
+  | { type: 'thinking'; content: string; completed?: boolean }
+  | { type: 'text'; content: string }
+  | { type: 'tool'; toolUseId: string }
 
 export interface MessageInfo {
   id: string
@@ -395,6 +540,8 @@ export interface MessageInfo {
   skillRefs?: SkillReference[]
   attachments?: AttachmentPayload[]
   toolCalls?: ToolUseInfo[]
+  /** Chronological content parts for interleaved thinking / text / tools. */
+  parts?: MessagePart[]
   usage?: TokenUsage
   debugInput?: string
   debugOutput?: string
@@ -446,7 +593,11 @@ export interface TokenUsage {
   cacheReadTokens: number
   cacheCreationTokens: number
   costUSD: number
-  /** Sum of input + output + cache read + cache write when reported by runtime. */
+  /**
+   * Explicit total for hover「共 N」.
+   * Anthropic/Claude: input + output + cache (additive).
+   * OpenAI/Codex: input + output (cache is a subset of input).
+   */
   totalTokens?: number
   /** Subset of output tokens when reported separately by runtime. */
   reasoningTokens?: number
@@ -484,6 +635,12 @@ export interface ApprovalRespondPayload {
 export type AgentEvent =
   | { type: 'message.started'; conversationId: string; messageId: string }
   | { type: 'message.delta'; conversationId: string; messageId: string; delta: string }
+  | {
+      type: 'message.thinking.delta'
+      conversationId: string
+      messageId: string
+      delta: string
+    }
   | {
       type: 'message.completed'
       conversationId: string
@@ -531,7 +688,7 @@ export type AgentEvent =
 
 export interface AgentAPI {
   agents: {
-    list: () => Promise<AgentInfo[]>
+    list: (forceRefresh?: boolean) => Promise<AgentInfo[]>
     listModels: (agentId: string, forceRefresh?: boolean) => Promise<ModelCatalogResult>
     getConfig: (agentId: string) => Promise<AgentConfigSettings>
     updateConfig: (agentId: string, config: AgentConfigUpdatePayload) => Promise<ModelCatalogResult>
@@ -567,9 +724,12 @@ export interface AgentAPI {
     delete: (id: string) => Promise<void>
   }
   providers: {
-    list: () => Promise<ProviderConfigPayload[]>
-    save: (payload: ProviderConfigPayload) => Promise<void>
+    list: () => Promise<GatewayProviderPublicPayload[]>
+    save: (payload: ProviderConfigPayload) => Promise<GatewayProviderPublicPayload>
     delete: (id: string) => Promise<void>
+    presets: () => Promise<ProviderConfigPayload[]>
+    test: (payload: ProviderTestInputPayload) => Promise<ProviderTestResultPayload>
+    fetchModels: (payload: ProviderTestInputPayload) => Promise<ProviderFetchModelsResultPayload>
   }
   settings: {
     get: () => Promise<SettingsInfo>
@@ -579,6 +739,12 @@ export interface AgentAPI {
     status: () => Promise<GatewayStatus>
     start: () => Promise<GatewayStatus>
     stop: () => Promise<void>
+    getSettings: () => Promise<GatewaySettingsPayload>
+    updateSettings: (payload: Partial<GatewaySettingsPayload>) => Promise<GatewaySettingsPayload>
+    takeoverGet: () => Promise<GatewayTakeoverStatus>
+    takeoverSet: (app: GatewayTakeoverApp, enabled: boolean) => Promise<GatewayTakeoverStatus>
+    logViewerStatus: () => Promise<GatewayLogViewerStatus>
+    logViewerOpen: () => Promise<GatewayLogViewerStatus>
   }
   dialog: {
     selectFolder: () => Promise<string | null>

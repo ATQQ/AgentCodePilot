@@ -12,10 +12,12 @@ import {
   Cpu,
   MagicStick,
   FolderOpened,
-  Files
+  Files,
+  Connection
 } from '@element-plus/icons-vue'
 import ArchivedConversationsSection from '@renderer/components/settings/ArchivedConversationsSection.vue'
 import AgentSettingsSection from '@renderer/components/settings/AgentSettingsSection.vue'
+import GatewaySettingsSection from '@renderer/components/settings/GatewaySettingsSection.vue'
 import AiPromptsSettingsSection from '@renderer/components/settings/AiPromptsSettingsSection.vue'
 import FilePreviewSettingsSection from '@renderer/components/settings/FilePreviewSettingsSection.vue'
 import ExternalAppsSettingsSection from '@renderer/components/settings/ExternalAppsSettingsSection.vue'
@@ -50,6 +52,7 @@ watch(
         section === 'notifications' ||
         section === 'archived' ||
         section === 'agents' ||
+        section === 'gateway' ||
         section === 'aiFeatures' ||
         section === 'filePreview' ||
         section === 'externalApps')
@@ -88,6 +91,7 @@ const navGroups: NavGroup[] = [
     titleKey: 'settings.integration',
     items: [
       { key: 'agents', labelKey: 'settings.agentConfig.title', icon: Cpu },
+      { key: 'gateway', labelKey: 'settings.gateway.title', icon: Connection },
       { key: 'aiFeatures', labelKey: 'settings.aiFeatures.title', icon: MagicStick },
       { key: 'filePreview', labelKey: 'settings.filePreview.title', icon: Files },
       { key: 'externalApps', labelKey: 'settings.externalApps.title', icon: FolderOpened }
@@ -194,7 +198,7 @@ function togglePermissionNotifications(): void {
             :key="item.key"
             class="nav-item"
             :class="{ active: activeSection === item.key }"
-            @click="selectSection(item.key)"
+            @click="() => selectSection(item.key)"
           >
             <el-icon :size="14"><component :is="item.icon" /></el-icon>
             <span>{{ t(item.labelKey) }}</span>
@@ -221,7 +225,7 @@ function togglePermissionNotifications(): void {
                   :key="opt.value"
                   class="theme-btn"
                   :class="{ active: settingsStore.theme === opt.value }"
-                  @click="settingsStore.setTheme(opt.value)"
+                  @click="() => settingsStore.setTheme(opt.value)"
                 >
                   <span class="theme-icon">{{ opt.icon }}</span>
                   <span>{{ t(opt.labelKey) }}</span>
@@ -329,6 +333,8 @@ function togglePermissionNotifications(): void {
         <div v-else-if="activeSection === 'agents'" class="content-section">
           <AgentSettingsSection />
         </div>
+
+        <GatewaySettingsSection v-else-if="activeSection === 'gateway'" />
 
         <AiPromptsSettingsSection v-else-if="activeSection === 'aiFeatures'" />
 
@@ -499,8 +505,9 @@ function togglePermissionNotifications(): void {
 }
 
 .settings-content-inner {
-  max-width: 680px;
+  max-width: 720px;
   margin: 0 auto;
+  width: 100%;
 }
 
 .page-title {

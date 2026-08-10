@@ -2,6 +2,7 @@ import { computed, toValue, type ComputedRef, type MaybeRefOrGetter } from 'vue'
 import type { Message } from '@renderer/types'
 import { usePanelContextStore } from '@renderer/stores/panelContext.store'
 import { linkifyBrowserReferences } from '@renderer/utils/linkifyBrowserReferences'
+import { partsRevisionKey } from '../../../shared/message-parts'
 
 export type ChatTimelineKind = 'assistant-markdown' | 'assistant-empty' | 'user'
 
@@ -26,8 +27,32 @@ export interface ChatTimelineItem {
   message: Message
 }
 
+function assistantDisplayContent(msg: Message): string {
+  if (msg.content.trim()) return msg.content
+  if (!msg.parts?.length) return ''
+  const thinkingTexts: string[] = []
+  for (const part of msg.parts) {
+    if (part.type === 'thinking' && part.content.trim()) {
+      thinkingTexts.push(part.content)
+    }
+  }
+  return thinkingTexts.join('\n')
+}
+
+function hasAssistantTimelineBody(msg: Message): boolean {
+  if (msg.content.trim() || msg.toolCalls?.length) return true
+  return (
+    msg.parts?.some(
+      (part) =>
+        (part.type === 'thinking' && part.content.trim()) ||
+        (part.type === 'text' && part.content.trim()) ||
+        part.type === 'tool'
+    ) ?? false
+  )
+}
+
 export function buildMessageRevision(msg: Message, hasPendingApproval: boolean): string {
-  return `${msg.content.length}:${msg.toolCalls?.length ?? 0}:${hasPendingApproval ? 1 : 0}:${msg.stopped ? 1 : 0}:${msg.error ? 1 : 0}`
+  return `${msg.content.length}:${msg.toolCalls?.length ?? 0}:${partsRevisionKey(msg.parts)}:${hasPendingApproval ? 1 : 0}:${msg.stopped ? 1 : 0}:${msg.error ? 1 : 0}`
 }
 
 export function mapMessageToTimelineItem(
@@ -51,12 +76,13 @@ export function mapMessageToTimelineItem(
   const pending = hasPendingApproval(msg.id)
   const revision = buildMessageRevision(msg, pending)
   const final = !isMessageStreaming(msg.id)
+  const displayContent = assistantDisplayContent(msg)
 
-  if (msg.content.trim()) {
+  if (displayContent.trim() || hasAssistantTimelineBody(msg)) {
     return {
       id: msg.id,
       kind: 'assistant-markdown',
-      content: linkifyBrowserReferences(msg.content, htmlBaseDirs),
+      content: linkifyBrowserReferences(displayContent || msg.content || ' ', htmlBaseDirs),
       final,
       revision,
       message: msg
@@ -88,7 +114,37 @@ export function estimateTimelineItemHeight(item: ChatTimelineItem, expanded = fa
     return Math.min(1200, height + lines * 20)
   }
 
-  const lines = Math.max(1, msg.content.split('\n').length)
+  if (msg.parts?.length) {
+    let height = 96
+    const hasProcess = msg.parts.some(
+      (part) => (part.type === 'thinking' && part.content.trim()) || part.type === 'tool'
+    )
+    // After stream ends, process collapses into one fold row.
+    if (hasProcess && item.final !== false) {
+      height += 32
+      for (const part of msg.parts) {
+        if (part.type === 'text') {
+          height += Math.min(800, Math.max(1, part.content.split('\n').length) * 18)
+        }
+      }
+    } else {
+      for (const part of msg.parts) {
+        if (part.type === 'thinking') {
+          height += part.completed ? 28 : Math.min(240, 24 + part.content.split('\n').length * 16)
+        } else if (part.type === 'tool') {
+          height += 48
+        } else if (part.type === 'text') {
+          height += Math.min(800, Math.max(1, part.content.split('\n').length) * 18)
+        }
+      }
+    }
+    if (msg.stopped) height += 28
+    if (msg.error) height += 28
+    return Math.min(2400, height)
+  }
+
+  const displayContent = assistantDisplayContent(msg)
+  const lines = Math.max(1, displayContent.split('\n').length || msg.content.split('\n').length)
   let height = Math.min(2400, 96 + lines * 18)
   if (msg.toolCalls?.length) {
     height += 48 * msg.toolCalls.length

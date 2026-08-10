@@ -1,3 +1,7 @@
 export { agentRegistry } from './registry'
 export type { AgentAdapter, AgentRunInput } from './types'
-export { ensureAgentRegistry, initializeAgentRegistry } from './agent-registry-init'
+export {
+  ensureAgentRegistry,
+  initializeAgentRegistry,
+  refreshCliAgentRegistry
+} from './agent-registry-init'

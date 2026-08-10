@@ -192,6 +192,7 @@ function hideTooltip(): void {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 4px 0 6px;
 }
 

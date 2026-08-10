@@ -8,6 +8,7 @@ const MOCK_USAGE: TokenUsage = {
   outputTokens: 1240,
   cacheReadTokens: 512,
   cacheCreationTokens: 0,
+  totalTokens: 186 + 1240,
   costUSD: 0.0038
 }
 
@@ -125,6 +126,26 @@ async function simulateToolCalls(
   }
 }
 
+async function streamThinking(
+  input: AgentRunInput,
+  emit: (event: AgentEvent) => void,
+  signal: AbortSignal
+): Promise<void> {
+  const text = '先看一下相关类型定义和现有调用，再确认是否需要跑类型检查与搜索引用。'
+  const chunkSize = 2 + Math.floor(Math.random() * 3)
+
+  for (let i = 0; i < text.length; i += chunkSize) {
+    if (signal.aborted) break
+    await delay(25 + Math.floor(Math.random() * 35))
+    emit({
+      type: 'message.thinking.delta',
+      conversationId: input.conversationId,
+      messageId: input.messageId,
+      delta: text.slice(i, i + chunkSize)
+    })
+  }
+}
+
 async function streamMarkdown(
   input: AgentRunInput,
   emit: (event: AgentEvent) => void,
@@ -179,6 +200,12 @@ export class MockAgentAdapter implements AgentAdapter {
         emitStoppedCompleted(input, emit)
         return
       }
+    }
+
+    await streamThinking(input, emit, controller.signal)
+    if (controller.signal.aborted) {
+      emitStoppedCompleted(input, emit)
+      return
     }
 
     await simulateToolCalls(input, emit, controller.signal)
