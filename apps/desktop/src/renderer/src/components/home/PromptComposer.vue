@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Plus, Top, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 import type {
@@ -21,6 +22,7 @@ import SkillPicker from '@renderer/components/skills/SkillPicker.vue'
 import ComposerInlineInput from './ComposerInlineInput.vue'
 
 const { t } = useI18n()
+const router = useRouter()
 const { openImagePreview } = useImagePreview()
 const composerStore = useComposerStore()
 const modelStore = useModelStore()
@@ -150,10 +152,16 @@ const hasUsableGatewayModel = computed(
       )
     )
 )
-const canSubmit = computed(() => hasComposerContent.value && hasUsableGatewayModel.value)
+
+function openGatewayProviderSettings(): void {
+  void router.push({ path: '/settings', query: { section: 'gateway', tab: 'providers' } })
+}
 
 function handleSubmit(): void {
-  if (!hasUsableGatewayModel.value) return
+  if (!hasUsableGatewayModel.value) {
+    openGatewayProviderSettings()
+    return
+  }
   const text = inlineInputRef.value?.getContent() ?? ''
   const skillRefs = inlineInputRef.value?.getSkillRefs() ?? []
   if (
@@ -657,8 +665,11 @@ defineExpose({
         <button
           v-else
           class="send-btn"
-          :disabled="!canSubmit"
-          :title="hasUsableGatewayModel ? '' : '请先在 API Gateway 设置中配置 Provider 和模型'"
+          :class="{ 'send-btn--needs-config': !hasUsableGatewayModel }"
+          :disabled="hasUsableGatewayModel && !hasComposerContent"
+          :title="
+            hasUsableGatewayModel ? '' : '点击前往 API Gateway 配置 Provider 和模型'
+          "
           @click="handleSubmit"
         >
           <el-icon :size="14"><Top /></el-icon>
@@ -1132,6 +1143,15 @@ defineExpose({
 .send-btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
+}
+
+.send-btn--needs-config {
+  opacity: 0.45;
+  cursor: pointer;
+}
+
+.send-btn--needs-config:hover {
+  opacity: 0.7;
 }
 
 .send-btn:not(:disabled):hover {

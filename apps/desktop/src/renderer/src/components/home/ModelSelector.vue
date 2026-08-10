@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useModelStore } from '@renderer/stores/model.store'
 import { useAgentStore } from '@renderer/stores/agent.store'
 import { useChatStore } from '@renderer/stores/chat.store'
 
+const router = useRouter()
 const modelStore = useModelStore()
 const agentStore = useAgentStore()
 const chatStore = useChatStore()
@@ -74,6 +76,14 @@ function handleSelect(modelId: string): void {
   }
   void modelStore.selectDefaultModel(modelId, activeAgentId.value)
 }
+
+const needsGatewayConfig = computed(
+  () => modelStore.gatewayEnabled && gatewayOptions.value.length === 0
+)
+
+function openGatewayProviderSettings(): void {
+  void router.push({ path: '/settings', query: { section: 'gateway', tab: 'providers' } })
+}
 </script>
 
 <template>
@@ -89,12 +99,20 @@ function handleSelect(modelId: string): void {
         </span>
       </div>
     </Transition>
+    <button
+      v-if="needsGatewayConfig"
+      type="button"
+      class="model-config-link"
+      title="点击前往 API Gateway 配置 Provider 和模型"
+      @click="openGatewayProviderSettings"
+    >
+      请配置 Provider 和模型
+    </button>
     <el-cascader
-      v-if="modelStore.gatewayEnabled"
+      v-else-if="modelStore.gatewayEnabled"
       class="provider-model-cascader"
       :model-value="currentGatewayPath"
       :options="gatewayOptions"
-      :disabled="gatewayOptions.length === 0"
       :props="{ expandTrigger: 'hover' }"
       :show-all-levels="true"
       separator=" / "
@@ -129,6 +147,28 @@ function handleSelect(modelId: string): void {
 <style scoped>
 .model-selector {
   position: relative;
+}
+
+.model-config-link {
+  display: flex;
+  align-items: center;
+  max-width: 250px;
+  padding: 4px 10px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--composer-border-focus);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.model-config-link:hover {
+  background: var(--btn-ghost-hover);
 }
 
 .provider-model-cascader {

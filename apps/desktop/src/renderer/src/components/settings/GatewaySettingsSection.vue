@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { CopyDocument, Delete, Plus } from '@element-plus/icons-vue'
@@ -17,11 +18,21 @@ import type {
 type GatewayTab = 'service' | 'providers' | 'localAccess'
 type ChannelKey = 'claudeCli' | 'claudeDesktop' | 'codex'
 
+const GATEWAY_TABS: readonly GatewayTab[] = ['service', 'providers', 'localAccess']
+
+function isGatewayTab(value: unknown): value is GatewayTab {
+  return typeof value === 'string' && (GATEWAY_TABS as readonly string[]).includes(value)
+}
+
 const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
 
 const loading = ref(true)
 const saving = ref(false)
-const activeTab = ref<GatewayTab>('service')
+const activeTab = ref<GatewayTab>(
+  isGatewayTab(route.query.tab) ? route.query.tab : 'service'
+)
 const activeChannel = ref<ChannelKey>('claudeCli')
 const settings = ref<GatewaySettingsPayload | null>(null)
 const status = reactive({ running: false, host: '127.0.0.1', port: 3456, token: '' })
@@ -29,6 +40,25 @@ const takeover = ref<GatewayTakeoverStatus | null>(null)
 const providers = ref<GatewayProviderPublicPayload[]>([])
 const presets = ref<ProviderConfigPayload[]>([])
 const logViewer = ref<GatewayLogViewerStatus | null>(null)
+
+watch(
+  () => route.query.tab,
+  (tab) => {
+    if (isGatewayTab(tab) && tab !== activeTab.value) {
+      activeTab.value = tab
+    }
+  }
+)
+
+watch(activeTab, (tab) => {
+  if (route.query.section !== 'gateway' && route.query.section !== undefined) return
+  const currentTab = typeof route.query.tab === 'string' ? route.query.tab : undefined
+  const nextTabQuery = tab === 'service' ? undefined : tab
+  if (currentTab === nextTabQuery) return
+  const query: Record<string, string> = { section: 'gateway' }
+  if (nextTabQuery) query.tab = nextTabQuery
+  void router.replace({ path: '/settings', query })
+})
 
 const editing = ref(false)
 const formMode = ref<'create' | 'edit'>('create')
