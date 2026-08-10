@@ -246,6 +246,8 @@ export interface GatewayProviderPublicPayload {
   id: string
   name: string
   type: string
+  /** When false, provider is unavailable for selection/routing. Missing → treat as true. */
+  enabled: boolean
   config: {
     adapter: 'openai-chat' | 'anthropic' | 'openai-responses'
     baseUrl: string

@@ -1,4 +1,4 @@
-import { getProviderEndpoint, listProviders, providerSupportsProtocol } from './provider-store'
+import { getProviderEndpoint, listEnabledProviders, listProviders, providerSupportsProtocol } from './provider-store'
 import { loadGatewaySettings } from './settings-store'
 import type { GatewayChannel, GatewayProviderRecord, RouteResult, WireAdapter } from './types'
 
@@ -30,7 +30,7 @@ function resolveProtocolForChannel(channel?: GatewayChannel): WireAdapter | unde
   if (!channel) return undefined
   const settings = loadGatewaySettings()
   const preferred = settings.channelProtocols[channel] || CHANNEL_DEFAULT_PROTOCOL[channel]
-  const providers = listProviders()
+  const providers = listEnabledProviders()
   const preferredProvider = settings.defaultProviderId
     ? providers.find((p) => p.id === settings.defaultProviderId)
     : providers[0]
@@ -85,9 +85,15 @@ function resultFor(
  * When `channel` is set, prefer that channel's protocol binding.
  */
 export function routeModel(model: string, channel?: GatewayChannel): RouteResult {
-  const providers = listProviders()
-  if (providers.length === 0) {
+  const allProviders = listProviders()
+  const providers = listEnabledProviders()
+  if (allProviders.length === 0) {
     throw new Error('No gateway providers configured. Add a provider in Settings → API Gateway.')
+  }
+  if (providers.length === 0) {
+    throw new Error(
+      'No enabled gateway providers. Enable a provider in Settings → API Gateway → Providers.'
+    )
   }
 
   const trimmed = model.trim()
@@ -99,9 +105,12 @@ export function routeModel(model: string, channel?: GatewayChannel): RouteResult
   const channelProtocol = resolveProtocolForChannel(channel)
 
   if (providerId) {
-    const provider = providers.find((p) => p.id === providerId)
+    const provider = allProviders.find((p) => p.id === providerId)
     if (!provider) {
       throw new Error(`Unknown provider "${providerId}" for model "${trimmed}"`)
+    }
+    if (!provider.enabled) {
+      throw new Error(`Provider "${providerId}" is disabled`)
     }
     const protocol =
       (channelProtocol && providerSupportsProtocol(provider, channelProtocol)
@@ -181,7 +190,7 @@ export function routeModel(model: string, channel?: GatewayChannel): RouteResult
     return resultFor(def, fallbackProtocol, modelId)
   }
 
-  // Last resort: any provider with any protocol
+  // Last resort: any enabled provider with any protocol
   for (const provider of providers) {
     for (const protocol of Object.keys(provider.config.protocols) as WireAdapter[]) {
       if (providerSupportsProtocol(provider, protocol)) {

@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { CopyDocument, Delete, Plus } from '@element-plus/icons-vue'
+import { useAgentStore } from '@renderer/stores/agent.store'
+import { useModelStore } from '@renderer/stores/model.store'
 import type {
   GatewayLogViewerStatus,
   GatewayProviderPublicPayload,
@@ -27,6 +29,8 @@ function isGatewayTab(value: unknown): value is GatewayTab {
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
+const modelStore = useModelStore()
+const agentStore = useAgentStore()
 
 const loading = ref(true)
 const saving = ref(false)
@@ -79,6 +83,7 @@ type ProtocolOverrides = {
 const form = reactive({
   id: '',
   name: '',
+  enabled: true,
   modelsText: '',
   defaultModel: '',
   openaiEnabled: true,
@@ -453,6 +458,7 @@ function openCreate(preset?: ProviderConfigPayload): void {
   clearFetchState()
   form.id = preset?.id || `provider-${Date.now().toString(36)}`
   form.name = preset?.name || ''
+  form.enabled = true
   const protocols =
     (preset?.config.protocols as GatewayProviderPublicPayload['config']['protocols'] | undefined) ||
     undefined
@@ -499,6 +505,7 @@ function openEdit(provider: GatewayProviderPublicPayload): void {
   clearFetchState()
   form.id = provider.id
   form.name = provider.name
+  form.enabled = provider.enabled !== false
   form.modelsText = (provider.config.models || []).join(', ')
   form.defaultModel = provider.config.defaultModel || ''
   syncDefaultModel()
@@ -615,6 +622,7 @@ async function saveProvider(): Promise<void> {
       name: form.name.trim(),
       type: adapter,
       config: {
+        enabled: form.enabled,
         adapter,
         models,
         defaultModel: defaultModel || undefined,
@@ -624,7 +632,36 @@ async function saveProvider(): Promise<void> {
     editing.value = false
     clearFetchState()
     providers.value = await window.agentAPI.providers.list()
+    await syncModelCatalog()
     ElMessage.success(t('common.saveSuccess'))
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : String(e))
+  } finally {
+    saving.value = false
+  }
+}
+
+async function syncModelCatalog(): Promise<void> {
+  await modelStore.refreshGatewayProviders(agentStore.selectedAgentId || 'claude-code')
+}
+
+async function toggleProviderEnabled(provider: GatewayProviderPublicPayload): Promise<void> {
+  const nextEnabled = provider.enabled === false
+  saving.value = true
+  try {
+    await window.agentAPI.providers.save({
+      id: provider.id,
+      name: provider.name,
+      type: provider.type,
+      config: { enabled: nextEnabled }
+    })
+    providers.value = await window.agentAPI.providers.list()
+    await syncModelCatalog()
+    ElMessage.success(
+      nextEnabled
+        ? t('settings.gateway.providerEnableSuccess', { name: provider.name })
+        : t('settings.gateway.providerDisableSuccess', { name: provider.name })
+    )
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : String(e))
   } finally {
@@ -644,6 +681,7 @@ async function deleteProvider(id: string): Promise<void> {
   try {
     await window.agentAPI.providers.delete(id)
     providers.value = await window.agentAPI.providers.list()
+    await syncModelCatalog()
     ElMessage.success(t('common.saveSuccess'))
   } finally {
     saving.value = false
@@ -1079,12 +1117,20 @@ async function fetchDraftModels(): Promise<void> {
         <div v-if="providers.length === 0" class="empty">
           {{ t('settings.gateway.noProviders') }}
         </div>
-        <div v-for="provider in providers" :key="provider.id" class="provider-card">
+        <div
+          v-for="provider in providers"
+          :key="provider.id"
+          class="provider-card"
+          :class="{ 'is-disabled': provider.enabled === false }"
+        >
           <div class="provider-main">
             <div class="provider-title-row">
               <div class="setting-label">{{ provider.name }}</div>
               <span v-if="settings?.defaultProviderId === provider.id" class="default-badge">
                 {{ t('settings.gateway.isDefault') }}
+              </span>
+              <span v-if="provider.enabled === false" class="disabled-badge">
+                {{ t('settings.gateway.disabled') }}
               </span>
             </div>
             <div class="setting-desc mono">{{ primaryBaseUrl(provider) }}</div>
@@ -1095,6 +1141,20 @@ async function fetchDraftModels(): Promise<void> {
             </div>
           </div>
           <div class="provider-actions">
+            <button
+              type="button"
+              class="toggle-switch"
+              :class="{ active: provider.enabled !== false }"
+              role="switch"
+              :aria-checked="provider.enabled !== false"
+              :title="
+                provider.enabled === false
+                  ? t('settings.gateway.enableProvider')
+                  : t('settings.gateway.disableProvider')
+              "
+              :disabled="saving"
+              @click="() => toggleProviderEnabled(provider)"
+            />
             <el-button size="small" @click="() => openDetail(provider)">
               {{ t('settings.gateway.viewMore') }}
             </el-button>
@@ -1122,6 +1182,21 @@ async function fetchDraftModels(): Promise<void> {
             <div class="form-grid">
               <div class="field-label">{{ t('settings.gateway.providerName') }}</div>
               <el-input v-model="form.name" :placeholder="t('settings.gateway.providerName')" />
+            </div>
+
+            <div class="setting-row drawer-enable-row">
+              <div>
+                <div class="setting-label">{{ t('settings.gateway.providerEnabled') }}</div>
+                <div class="setting-desc">{{ t('settings.gateway.providerEnabledDesc') }}</div>
+              </div>
+              <button
+                type="button"
+                class="toggle-switch"
+                :class="{ active: form.enabled }"
+                role="switch"
+                :aria-checked="form.enabled"
+                @click="form.enabled = !form.enabled"
+              />
             </div>
 
             <div class="protocol-block">
@@ -1832,6 +1907,10 @@ async function fetchDraftModels(): Promise<void> {
   border-radius: 10px;
   background: var(--el-fill-color-blank);
 }
+.provider-card.is-disabled {
+  opacity: 0.65;
+  background: var(--el-fill-color-light);
+}
 .provider-main {
   min-width: 0;
   flex: 1;
@@ -1851,6 +1930,20 @@ async function fetchDraftModels(): Promise<void> {
   color: var(--el-color-primary);
   background: var(--el-color-primary-light-9);
   border: 1px solid var(--el-color-primary-light-5);
+}
+.disabled-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--el-border-color);
+}
+.drawer-enable-row {
+  margin: 4px 0 12px;
+  padding-top: 8px;
 }
 .protocol-tags {
   display: flex;
@@ -1886,7 +1979,7 @@ async function fetchDraftModels(): Promise<void> {
   display: flex;
   gap: 6px;
   flex-shrink: 0;
-  align-items: flex-start;
+  align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
 }

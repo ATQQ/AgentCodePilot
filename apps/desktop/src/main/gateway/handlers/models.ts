@@ -1,4 +1,4 @@
-import { listProviders } from '../provider-store'
+import { listEnabledProviders, listProviders } from '../provider-store'
 import type { WireAdapter } from '../types'
 
 export function listGatewayModels(): Array<{
@@ -17,7 +17,7 @@ export function listGatewayModels(): Array<{
     models.push({ id, object: 'model', created, owned_by: ownedBy })
   }
 
-  for (const provider of listProviders()) {
+  for (const provider of listEnabledProviders()) {
     const ownedBy = provider.id
     if (provider.config.defaultModel) {
       push(provider.config.defaultModel, ownedBy)
@@ -39,8 +39,8 @@ export function listGatewayModels(): Array<{
 
 export function listProtocolsForProvider(providerId: string): WireAdapter[] {
   const provider = listProviders().find((p) => p.id === providerId)
-  if (!provider) return []
-  return (Object.keys(provider.config.protocols) as WireAdapter[]).filter(
-    (p) => provider.config.protocols[p]?.baseUrl
+  if (!provider || !provider.enabled) return []
+  return (Object.keys(provider.config.protocols) as WireAdapter[]).filter((protocol) =>
+    Boolean(provider.config.protocols[protocol]?.baseUrl)
   )
 }

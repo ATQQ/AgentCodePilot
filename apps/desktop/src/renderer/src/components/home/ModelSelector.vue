@@ -106,7 +106,8 @@ function openGatewayProviderSettings(): void {
       title="点击前往 API Gateway 配置 Provider 和模型"
       @click="openGatewayProviderSettings"
     >
-      请配置 Provider 和模型
+      <span class="model-config-label">请配置 Provider 和模型</span>
+      <span class="model-config-action">去设置</span>
     </button>
     <el-cascader
       v-else-if="modelStore.gatewayEnabled"
@@ -150,25 +151,50 @@ function openGatewayProviderSettings(): void {
 }
 
 .model-config-link {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  max-width: 250px;
-  padding: 4px 10px;
-  border: none;
+  gap: 8px;
+  max-width: 280px;
+  min-height: 28px;
+  padding: 3px 6px 3px 10px;
+  border: 1px solid color-mix(in srgb, var(--content-text-secondary) 22%, transparent);
   border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--composer-border-focus);
+  background: color-mix(in srgb, var(--content-text-secondary) 6%, transparent);
+  color: var(--content-text-secondary);
   font-size: var(--font-size-sm);
-  line-height: 1.4;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  line-height: 1.3;
   cursor: pointer;
   white-space: nowrap;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+
+.model-config-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.model-config-action {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: calc(var(--radius-md) - 2px);
+  background: color-mix(in srgb, var(--composer-border-focus) 14%, transparent);
+  color: var(--composer-border-focus);
+  font-size: 11px;
+  font-weight: 500;
   transition: background 0.15s;
 }
 
 .model-config-link:hover {
-  background: var(--btn-ghost-hover);
+  border-color: color-mix(in srgb, var(--composer-border-focus) 40%, transparent);
+  background: color-mix(in srgb, var(--composer-border-focus) 8%, transparent);
+  color: var(--content-text);
+}
+
+.model-config-link:hover .model-config-action {
+  background: color-mix(in srgb, var(--composer-border-focus) 22%, transparent);
 }
 
 .provider-model-cascader {

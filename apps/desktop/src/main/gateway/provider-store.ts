@@ -173,24 +173,41 @@ export function parseProviderConfig(raw: unknown): GatewayProviderConfig {
   })
 }
 
-export function listProviders(): GatewayProviderRecord[] {
-  return getAllProviderConfigs().map((row) => ({
+/** Missing / legacy configs default to enabled. */
+export function parseProviderEnabled(raw: unknown): boolean {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return true
+  const enabled = (raw as Record<string, unknown>).enabled
+  return enabled !== false
+}
+
+function recordFromRow(row: {
+  id: string
+  name: string
+  type: string
+  config: string
+}): GatewayProviderRecord {
+  const raw = JSON.parse(row.config || '{}') as unknown
+  return {
     id: row.id,
     name: row.name,
     type: row.type,
-    config: parseProviderConfig(JSON.parse(row.config || '{}'))
-  }))
+    enabled: parseProviderEnabled(raw),
+    config: parseProviderConfig(raw)
+  }
+}
+
+export function listProviders(): GatewayProviderRecord[] {
+  return getAllProviderConfigs().map(recordFromRow)
+}
+
+export function listEnabledProviders(): GatewayProviderRecord[] {
+  return listProviders().filter((provider) => provider.enabled)
 }
 
 export function getProvider(id: string): GatewayProviderRecord | undefined {
   const row = getProviderConfig(id)
   if (!row) return undefined
-  return {
-    id: row.id,
-    name: row.name,
-    type: row.type,
-    config: parseProviderConfig(JSON.parse(row.config || '{}'))
-  }
+  return recordFromRow(row)
 }
 
 function toPublicEndpoint(endpoint: ProtocolEndpointConfig): ProtocolEndpointPublic {
@@ -216,6 +233,7 @@ export function toPublicProvider(record: GatewayProviderRecord): GatewayProvider
     id: record.id,
     name: record.name,
     type: record.type,
+    enabled: record.enabled,
     config: {
       adapter: record.config.adapter,
       baseUrl: record.config.baseUrl,
@@ -290,6 +308,14 @@ export function saveProvider(input: {
     )
   }
 
+  // Partial updates (e.g. toggle enabled) keep existing protocol endpoints.
+  if (Object.keys(protocols).length === 0 && existing) {
+    for (const adapter of WIRE_ADAPTERS) {
+      const prev = existing.config.protocols[adapter]
+      if (prev) protocols[adapter] = prev
+    }
+  }
+
   const sharedModels = parseStringList(raw.models) ?? incoming.models ?? existing?.config.models
   const sharedDefault =
     typeof raw.defaultModel === 'string'
@@ -297,9 +323,12 @@ export function saveProvider(input: {
       : (incoming.defaultModel ?? existing?.config.defaultModel)
   const sharedMap = parseModelMap(raw.modelMap) ?? incoming.modelMap ?? existing?.config.modelMap
 
+  const enabled =
+    typeof raw.enabled === 'boolean' ? raw.enabled : (existing?.enabled ?? true)
+
   const config = flattenPrimary(
     protocols,
-    isWireAdapter(raw.adapter) ? raw.adapter : incoming.adapter,
+    isWireAdapter(raw.adapter) ? raw.adapter : existing?.config.adapter || incoming.adapter,
     {
       models: sharedModels,
       defaultModel: sharedDefault,
@@ -311,7 +340,7 @@ export function saveProvider(input: {
     id: input.id,
     name: input.name,
     type: input.type || config.adapter,
-    config: JSON.stringify(config)
+    config: JSON.stringify({ ...config, enabled })
   })
 
   const saved = getProvider(input.id)

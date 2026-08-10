@@ -56,6 +56,7 @@ export const useModelStore = defineStore('model', () => {
   ): GatewayProviderPublicPayload[] {
     const protocol = gatewayProtocolForAgent(agentId)
     return gatewayProviders.value.filter((provider) => {
+      if (provider.enabled === false) return false
       const endpoint = provider.config.protocols[protocol]
       return Boolean(endpoint?.baseUrl)
     })

@@ -505,8 +505,9 @@ function togglePermissionNotifications(): void {
 }
 
 .settings-content-inner {
-  max-width: 680px;
-  margin: 0 auto;
+  max-width: 720px;
+  margin: 0;
+  width: 100%;
 }
 
 .page-title {

@@ -81,6 +81,8 @@ export interface GatewayProviderRecord {
   id: string
   name: string
   type: string
+  /** When false, provider is hidden from selection and routing. Missing → true. */
+  enabled: boolean
   config: GatewayProviderConfig
 }
 
@@ -88,6 +90,7 @@ export interface GatewayProviderPublic {
   id: string
   name: string
   type: string
+  enabled: boolean
   config: {
     adapter: WireAdapter
     baseUrl: string

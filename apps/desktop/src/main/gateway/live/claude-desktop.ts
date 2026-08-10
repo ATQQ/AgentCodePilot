@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { dirname, join } from 'path'
 import { homedir } from 'os'
 import { CLAUDE_DESKTOP_PROFILE_ID, buildClaudeDesktopGatewayUrl } from './constants'
-import { listProviders } from '../provider-store'
+import { listEnabledProviders } from '../provider-store'
 
 export interface ClaudeDesktopPaths {
   normalConfig: string
@@ -83,7 +83,7 @@ function buildInferenceModels(): Array<{
 }> {
   const models: Array<{ name: string; labelOverride?: string; supports1m?: boolean }> = []
   const seen = new Set<string>()
-  for (const provider of listProviders()) {
+  for (const provider of listEnabledProviders()) {
     for (const model of [
       provider.config.defaultModel,
       ...(provider.config.models ?? []),

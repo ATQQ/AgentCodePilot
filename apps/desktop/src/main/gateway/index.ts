@@ -606,6 +606,7 @@ export {
   saveProvider,
   removeProvider,
   listProviders,
+  listEnabledProviders,
   PROVIDER_PRESETS
 } from './provider-store'
 export {
