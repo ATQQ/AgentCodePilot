@@ -58,8 +58,8 @@ onMounted(() => {
 onUnmounted(() => {
   compactObserver?.disconnect()
   cancelMenuClose()
-  window.removeEventListener('resize', updateSkillSubmenuPosition)
-  window.removeEventListener('scroll', updateSkillSubmenuPosition, true)
+  window.removeEventListener('resize', onSkillSubmenuReposition)
+  window.removeEventListener('scroll', onSkillSubmenuReposition, true)
 })
 
 watch(
@@ -216,6 +216,14 @@ function scheduleMenuClose(): void {
   }, 160)
 }
 
+/** 离开 Skill 入口时只收起子菜单，不要连带关掉整个 + 菜单 */
+function scheduleSkillSubmenuClose(): void {
+  cancelMenuClose()
+  menuCloseTimer = setTimeout(() => {
+    showSkillSubmenu.value = false
+  }, 160)
+}
+
 function openSkillSubmenu(): void {
   cancelMenuClose()
   showSkillSubmenu.value = true
@@ -236,21 +244,40 @@ function updateSkillSubmenuPosition(): void {
   const margin = 8
   const gap = 4
 
+  // 顶部对齐触发项：内容变高时向下扩展，避免整块面板上下跳动
   let left = rect.right + gap
-  let top = rect.bottom - panelHeight
+  let top = rect.top
 
-  if (top < margin) top = margin
   if (top + panelHeight > window.innerHeight - margin) {
     top = Math.max(margin, window.innerHeight - panelHeight - margin)
   }
+  if (top < margin) top = margin
+
   if (left + panelWidth > window.innerWidth - margin) {
     left = Math.max(margin, rect.left - panelWidth - gap)
   }
 
-  skillSubmenuStyle.value = {
-    top: `${top}px`,
-    left: `${left}px`
+  const nextTop = `${top}px`
+  const nextLeft = `${left}px`
+  if (skillSubmenuStyle.value.top === nextTop && skillSubmenuStyle.value.left === nextLeft) {
+    return
   }
+
+  skillSubmenuStyle.value = {
+    top: nextTop,
+    left: nextLeft
+  }
+}
+
+/** 忽略技能面板内部滚动，避免列表滑动时反复重算定位导致跳动/误关闭 */
+function onSkillSubmenuReposition(event?: Event): void {
+  if (event?.type === 'scroll') {
+    const target = event.target
+    if (target instanceof Node && skillSubmenuPanelRef.value?.contains(target)) {
+      return
+    }
+  }
+  updateSkillSubmenuPosition()
 }
 
 function handleAddMenuLeave(): void {
@@ -259,11 +286,11 @@ function handleAddMenuLeave(): void {
 
 watch(showSkillSubmenu, (open) => {
   if (open) {
-    window.addEventListener('resize', updateSkillSubmenuPosition)
-    window.addEventListener('scroll', updateSkillSubmenuPosition, true)
+    window.addEventListener('resize', onSkillSubmenuReposition)
+    window.addEventListener('scroll', onSkillSubmenuReposition, true)
   } else {
-    window.removeEventListener('resize', updateSkillSubmenuPosition)
-    window.removeEventListener('scroll', updateSkillSubmenuPosition, true)
+    window.removeEventListener('resize', onSkillSubmenuReposition)
+    window.removeEventListener('scroll', onSkillSubmenuReposition, true)
   }
 })
 
@@ -548,7 +575,7 @@ defineExpose({
                 ref="skillSubmenuTriggerRef"
                 class="menu-submenu-wrapper"
                 @mouseenter="openSkillSubmenu"
-                @mouseleave="scheduleMenuClose"
+                @mouseleave="scheduleSkillSubmenuClose"
               >
                 <button
                   type="button"
@@ -691,6 +718,7 @@ defineExpose({
         :style="skillSubmenuStyle"
         @mouseenter="cancelMenuClose"
         @mouseleave="scheduleMenuClose"
+        @wheel.stop
       >
         <SkillPicker
           :active="showSkillSubmenu"
